@@ -82,6 +82,27 @@ label { display: block; margin: 12px 0 6px; font-size: 12px; font-weight: 600; }
 .legend-dot { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid #fff; border-radius: 50%; }
 .legend-dot.registered { background: #28694f; }
 .legend-dot.selected { background: #d69a32; }
+.legend-dot.current { background: #2476cf; }
+.legend-dot.destination { background: #c44938; }
+.destination-map-icon { background: url("../images/地図マーカーのアイコン素材4.png") center / contain no-repeat; border: 0; box-shadow: none; }
+.location-controls { position: absolute; right: 12px; bottom: 32px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: min(280px, calc(100% - 24px)); max-height: calc(100% - 160px); overflow-y: auto; overscroll-behavior: contain; }
+.location-controls > * { flex-shrink: 0; }
+.location-controls .status { margin: 0; padding: 8px 10px; background: #fffefa; color: #000; overflow-wrap: anywhere; }
+#location-button, #open-destination-search { background: #fffefa; color: #000; }
+.destination-panel { width: 100%; padding: 10px; background: #fffefa; color: #000; overflow-wrap: anywhere; }
+.destination-heading { margin: 0 0 6px; font-size: 12px; }
+#destination-name { margin: 0; font-size: 14px; font-weight: 600; }
+#destination-address { margin: 6px 0 0; }
+.destination-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#clear-destination, #route-button, #clear-route { padding: 6px 9px; font-size: 12px; }
+.route-panel { width: 100%; max-height: min(300px, 40dvh); overflow-y: auto; padding: 10px; background: #fffefa; color: #000; overflow-wrap: anywhere; }
+#route-heading { margin: 0 0 6px; font-size: 14px; }
+#route-summary { margin: 0 0 8px; font-size: 13px; line-height: 1.6; }
+.route-panel summary { cursor: pointer; font-size: 13px; -webkit-tap-highlight-color: transparent; }
+#route-steps { margin: 8px 0 0; padding-left: 24px; font-size: 13px; line-height: 1.6; }
+#route-steps li { margin-bottom: 8px; }
+.route-step-distance { display: block; margin-top: 2px; font-size: 11px; color: #000; }
+#clear-route { margin-top: 10px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 #map {

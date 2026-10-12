@@ -112,6 +112,7 @@ map.getContainer().addEventListener("wheel", (event) => {
 // text is sent to Photon. Keep the endpoint here so it can be replaced easily.
 const SEARCH_ENDPOINT = "https://photon.komoot.io/api/";
 const SEARCH_LIMIT = 15;
+const ROUTE_ENDPOINT = "https://routing.openstreetmap.de/routed-foot/route/v1/foot/";
 const countryNames = new Intl.DisplayNames(["ja"], { type: "region", fallback: "none" });
 const VISITS_KEY = "walking.visits.v1";
 const ui = Object.fromEntries([
@@ -119,6 +120,13 @@ const ui = Object.fromEntries([
   "place-editor", "selected-address", "visit-form", "visit-name", "visit-date",
   "visit-note", "save-button", "cancel-selection", "visit-status", "undo-delete",
   "visits-list", "visits-empty", "visit-count",
+  "location-button", "location-status", "location-legend",
+  "set-destination", "destination-panel", "destination-name", "destination-address",
+  "clear-destination", "destination-legend",
+  "open-destination-search", "destination-search-form", "destination-search-input",
+  "destination-search-button", "destination-search-status", "destination-search-results",
+  "route-button", "route-status", "route-panel", "route-summary", "route-directions",
+  "route-steps", "clear-route",
 ].map((id) => [id, document.getElementById(id)]));
 const savedMarkers = L.layerGroup().addTo(map);
 const searchCache = new Map();
@@ -126,11 +134,29 @@ let selectedPlace = null;
 let selectedVisitId = null;
 let selectionMarker = null;
 let lastDeleted = null;
-let searchTimer = null;
-let activeSearch = null;
-let searchComposing = false;
 let lastSearchAt = -Infinity;
 let storageReadable = true;
+let locating = false;
+let currentLocationMarker = null;
+let currentPosition = null;
+let locationAccuracyCircle = null;
+let destination = null;
+let destinationMarker = null;
+let destinationIconMarker = null;
+let routeEnabled = false;
+let routeAwaitingLocation = false;
+let routeLayer = null;
+let routeRequest = null;
+let routeTimer = null;
+let routeVersion = 0;
+let lastRouteAt = -Infinity;
+let routeAttributionAdded = false;
+const destinationMapIcon = L.divIcon({
+  className: "destination-map-icon",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  html: "",
+});
 const appShell = document.querySelector(".app-shell");
 const searchPanel = document.getElementById("search-panel");
 const panelToggle = document.getElementById("panel-toggle");
@@ -312,11 +338,11 @@ function placeButton(place, detail, className) {
   return button;
 }
 
-function focusPlace(place) {
+function focusPlace(place, { keepZoom = false } = {}) {
   clearTimeout(zoomEndTimer);
   finishZoom();
   pendingX = pendingY = 0;
-  const zoom = Math.max(map.getZoom(), 16);
+  const zoom = keepZoom ? map.getZoom() : Math.max(map.getZoom(), 16);
   const zoomChanged = zoom !== map.getZoom();
   // Reuse the pinch path to move immediately without clearing loaded tiles.
   if (map._animatingZoom) map._onZoomTransitionEnd();
@@ -326,6 +352,372 @@ function focusPlace(place) {
   map.fire("viewreset");
   map._moveEnd(zoomChanged);
 }
+
+function setLocationBusy(busy) {
+  locating = busy;
+  ui["location-button"].disabled = busy;
+  ui["location-button"].textContent = busy ? "取得中…" : "現在地を取得";
+  if (busy) ui["location-button"].setAttribute("aria-busy", "true");
+  else ui["location-button"].removeAttribute("aria-busy");
+}
+
+function showCurrentLocation(position, { center = true } = {}) {
+  setLocationBusy(false);
+  const { latitude: lat, longitude: lng, accuracy } = position.coords;
+  if (!validCoordinates(lat, lng)) {
+    message(ui["location-status"], "位置情報を読み取れませんでした。もう一度お試しください。", true);
+    routeLocationFailed();
+    return;
+  }
+  currentPosition = { lat, lng };
+  const point = [lat, lng];
+  if (Number.isFinite(accuracy) && accuracy >= 0) {
+    if (locationAccuracyCircle) {
+      locationAccuracyCircle.setLatLng(point).setRadius(accuracy);
+    } else {
+      locationAccuracyCircle = L.circle(point, {
+        radius: accuracy, color: "#2476cf", weight: 1,
+        fillColor: "#2476cf", fillOpacity: 0.1, interactive: false,
+      }).addTo(map);
+    }
+  } else if (locationAccuracyCircle) {
+    locationAccuracyCircle.remove();
+    locationAccuracyCircle = null;
+  }
+  if (currentLocationMarker) {
+    currentLocationMarker.setLatLng(point);
+  } else {
+    currentLocationMarker = L.circleMarker(point, {
+      radius: 8, color: "#fff", weight: 2,
+      fillColor: "#2476cf", fillOpacity: 1, bubblingMouseEvents: false,
+    }).addTo(map);
+  }
+  currentLocationMarker.bringToFront();
+  ui["location-legend"].hidden = false;
+  if (center) focusPlace({ lat, lng }, { keepZoom: routeEnabled });
+  message(ui["location-status"], "現在地を表示しました。");
+  routeAwaitingLocation = false;
+  routePointsChanged();
+}
+
+function locationFailed(error) {
+  setLocationBusy(false);
+  const reasons = {
+    1: "位置情報が許可されていません。ブラウザと端末の設定で位置情報を許可して、もう一度お試しください。",
+    2: "現在地を取得できませんでした。端末の位置情報と通信環境を確認して、もう一度お試しください。",
+    3: "現在地の取得に時間がかかっています。場所を変えるか、少し待ってからもう一度お試しください。",
+  };
+  message(ui["location-status"], reasons[error.code]
+    || "現在地を取得できませんでした。もう一度お試しください。", true);
+  routeLocationFailed();
+}
+
+function requestCurrentLocation() {
+  if (locating) return;
+  if (window.isSecureContext === false) {
+    message(ui["location-status"], "現在地を取得するには、HTTPS または localhost・127.0.0.1 の Live Server で開いてください。", true);
+    routeLocationFailed();
+    return;
+  }
+  if (!navigator.geolocation) {
+    message(ui["location-status"], "このブラウザは現在地の取得に対応していません。対応したブラウザで開いてください。", true);
+    routeLocationFailed();
+    return;
+  }
+  setLocationBusy(true);
+  message(ui["location-status"], "現在地を取得しています…");
+  const forRoute = routeAwaitingLocation;
+  try {
+    navigator.geolocation.getCurrentPosition((position) => showCurrentLocation(position, { center: !forRoute }), locationFailed, {
+      enableHighAccuracy: true, timeout: 15000, maximumAge: 0,
+    });
+  } catch (error) {
+    locationFailed(error);
+  }
+}
+ui["location-button"].addEventListener("click", requestCurrentLocation);
+
+function setDestination(place) {
+  if (!place || !validCoordinates(place.lat, place.lng)) return;
+  destination = {
+    name: typeof place.name === "string" ? place.name.trim().slice(0, 120) : "",
+    address: typeof place.address === "string" ? place.address.trim() : "",
+    lat: place.lat, lng: place.lng,
+  };
+  if (destinationMarker) {
+    destinationMarker.setLatLng([destination.lat, destination.lng]);
+  } else {
+    destinationMarker = L.circleMarker([destination.lat, destination.lng], {
+      radius: 9, color: "#fff", weight: 2,
+      fillColor: "#c44938", fillOpacity: 1, bubblingMouseEvents: false,
+    }).addTo(map);
+  }
+  destinationMarker.bringToFront();
+  if (destinationIconMarker) {
+    destinationIconMarker.setLatLng([destination.lat, destination.lng]);
+  } else {
+    destinationIconMarker = L.marker([destination.lat, destination.lng], {
+      icon: destinationMapIcon, keyboard: false, bubblingMouseEvents: false,
+    }).addTo(map);
+  }
+  ui["destination-name"].textContent = destination.name;
+  ui["destination-name"].hidden = !destination.name;
+  ui["destination-address"].textContent = destination.address;
+  ui["destination-address"].hidden = !destination.address;
+  ui["destination-panel"].hidden = false;
+  ui["destination-legend"].hidden = false;
+  map.closePopup();
+  focusPlace(destination, { keepZoom: true });
+  setPanelOpen(false, false);
+  routePointsChanged();
+}
+
+function clearDestination() {
+  const focusWasInside = ui["destination-panel"].contains(document.activeElement);
+  stopWalkingRoute();
+  if (destinationMarker) destinationMarker.remove();
+  if (destinationIconMarker) destinationIconMarker.remove();
+  destinationMarker = null;
+  destinationIconMarker = null;
+  destination = null;
+  ui["destination-panel"].hidden = true;
+  ui["destination-legend"].hidden = true;
+  ui["destination-name"].textContent = "";
+  ui["destination-address"].textContent = "";
+  if (focusWasInside) ui["location-button"].focus({ preventScroll: true });
+}
+
+function destinationButton(place) {
+  const button = textElement("button", "目的地に指定", "secondary destination-button");
+  button.type = "button";
+  button.setAttribute("aria-label", `${place.name || "この場所"}を目的地に指定`);
+  button.addEventListener("click", () => setDestination(place));
+  return button;
+}
+
+function setRouteBusy(busy) {
+  ui["route-button"].disabled = busy;
+  ui["route-button"].textContent = busy ? "取得中…" : routeLayer ? "ルートを更新" : "徒歩ルートを表示";
+  if (busy) ui["route-button"].setAttribute("aria-busy", "true");
+  else ui["route-button"].removeAttribute("aria-busy");
+}
+
+function cancelRouteRequest() {
+  routeVersion += 1;
+  clearTimeout(routeTimer);
+  routeTimer = null;
+  const previous = routeRequest;
+  routeRequest = null;
+  if (previous) {
+    clearTimeout(previous.timeout);
+    previous.controller.abort();
+  }
+}
+
+function clearRouteDisplay() {
+  if (routeLayer) routeLayer.remove();
+  routeLayer = null;
+  ui["route-summary"].textContent = "";
+  ui["route-steps"].replaceChildren();
+  ui["route-directions"].hidden = true;
+  ui["route-panel"].hidden = true;
+}
+
+function stopWalkingRoute() {
+  const focusWasInside = ui["route-panel"].contains(document.activeElement);
+  routeEnabled = false;
+  routeAwaitingLocation = false;
+  cancelRouteRequest();
+  clearRouteDisplay();
+  ui["route-directions"].open = false;
+  message(ui["route-status"], "");
+  setRouteBusy(false);
+  if (focusWasInside) ui[destination ? "route-button" : "location-button"].focus({ preventScroll: true });
+}
+
+function routeLocationFailed() {
+  if (!routeAwaitingLocation) return;
+  routeAwaitingLocation = false;
+  routeEnabled = false;
+  cancelRouteRequest();
+  setRouteBusy(false);
+  message(ui["route-status"], "現在地を取得できませんでした。位置情報の設定を確認して、もう一度ルートを表示してください。", true);
+}
+
+function routePointsChanged() {
+  if (!routeEnabled) return;
+  if (routeAwaitingLocation) {
+    cancelRouteRequest();
+    clearRouteDisplay();
+    ui["route-panel"].hidden = false;
+    setRouteBusy(true);
+    message(ui["route-status"], "現在地を取得しています…");
+    return;
+  }
+  requestWalkingRoute();
+}
+
+function routeDistance(meters) {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+}
+
+function routeDuration(seconds) {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  if (minutes < 60) return `${minutes}分`;
+  const remainder = minutes % 60;
+  return `${Math.floor(minutes / 60)}時間${remainder ? `${remainder}分` : ""}`;
+}
+
+function walkingInstruction(step) {
+  const maneuver = step.maneuver;
+  if (maneuver.type === "arrive") return "目的地に到着";
+  const directions = {
+    uturn: "折り返す", "sharp right": "鋭く右折", right: "右折",
+    "slight right": "右斜めに進む", straight: "直進", "slight left": "左斜めに進む",
+    left: "左折", "sharp left": "鋭く左折",
+  };
+  const direction = directions[maneuver.modifier] || "直進";
+  let instruction = direction;
+  switch (maneuver.type) {
+    case "depart": instruction = "出発地点から歩き始める"; break;
+    case "end of road": instruction = `突き当たりで${direction}`; break;
+    case "fork": instruction = `分岐で${direction}`; break;
+    case "on ramp": instruction = "連絡路に入る"; break;
+    case "off ramp": instruction = "連絡路から出る"; break;
+    case "roundabout":
+    case "rotary":
+      instruction = Number.isInteger(maneuver.exit) && maneuver.exit > 0
+        ? `環状交差点を${maneuver.exit}番目の出口で出る` : "環状交差点を進む";
+      break;
+    case "roundabout turn": instruction = `環状交差点で${direction}`; break;
+    case "exit roundabout":
+    case "exit rotary": instruction = "環状交差点を出る"; break;
+    case "merge": instruction = `合流して${direction}`; break;
+  }
+  if (step.mode === "ferry") instruction = "フェリーで進む";
+  const name = typeof step.name === "string" ? step.name.trim() : "";
+  return `${instruction}${name ? `（${name}）` : ""}`;
+}
+
+function parseWalkingRoute(data) {
+  const route = data.routes && data.routes[0];
+  if (!route || !Number.isFinite(route.distance) || route.distance < 0
+    || !Number.isFinite(route.duration) || route.duration < 0
+    || !route.geometry || route.geometry.type !== "LineString"
+    || !Array.isArray(route.geometry.coordinates) || route.geometry.coordinates.length < 2
+    || !Array.isArray(route.legs) || !route.legs.length) throw new Error("Invalid route response");
+  const points = route.geometry.coordinates.map((point) => {
+    if (!Array.isArray(point) || !validCoordinates(point[1], point[0])) throw new Error("Invalid route point");
+    return [point[1], point[0]];
+  });
+  const steps = route.legs.flatMap((leg) => {
+    if (!Array.isArray(leg.steps) || !leg.steps.length) throw new Error("Missing route steps");
+    return leg.steps;
+  });
+  for (const step of steps) {
+    if (!step || !step.maneuver || typeof step.maneuver.type !== "string"
+      || !Number.isFinite(step.distance) || step.distance < 0
+      || !["walking", "ferry"].includes(step.mode)) throw new Error("Invalid walking step");
+  }
+  return { points, steps, distance: route.distance, duration: route.duration };
+}
+
+function displayWalkingRoute(route) {
+  routeLayer = L.polyline(route.points, {
+    color: "#2476cf", weight: 5, opacity: 0.85, interactive: false,
+  }).addTo(map).bringToBack();
+  ui["route-summary"].textContent = `距離 ${routeDistance(route.distance)} ／ 徒歩 約${routeDuration(route.duration)}`;
+  for (const step of route.steps) {
+    const item = textElement("li", walkingInstruction(step));
+    // Step distance is the distance travelled after this maneuver, up to the next one.
+    if (step.maneuver.type !== "arrive" && step.distance > 0) {
+      item.append(textElement("span", `${routeDistance(step.distance)}進む`, "route-step-distance"));
+    }
+    ui["route-steps"].append(item);
+  }
+  ui["route-directions"].hidden = false;
+  ui["route-panel"].hidden = false;
+  message(ui["route-status"], "");
+}
+
+function requestWalkingRoute() {
+  cancelRouteRequest();
+  clearRouteDisplay();
+  if (!routeEnabled || !destination || !currentPosition) { setRouteBusy(false); return; }
+  const start = { ...currentPosition };
+  const end = { ...destination };
+  const version = routeVersion;
+  setRouteBusy(true);
+  ui["route-panel"].hidden = false;
+  message(ui["route-status"], "徒歩ルートを検索しています…");
+  const wait = Math.max(0, 1000 - (Date.now() - lastRouteAt));
+  routeTimer = setTimeout(() => fetchWalkingRoute(start, end, version), wait);
+}
+
+async function fetchWalkingRoute(start, end, version) {
+  routeTimer = null;
+  if (!routeEnabled || version !== routeVersion) return;
+  const controller = new AbortController();
+  const request = { controller, timeout: setTimeout(() => controller.abort(), 18000) };
+  routeRequest = request;
+  const isCurrent = () => routeEnabled && routeRequest === request && version === routeVersion;
+  lastRouteAt = Date.now();
+  if (!routeAttributionAdded) {
+    map.attributionControl.addAttribution('ルート: <a href="https://routing.openstreetmap.de/about.html">OSRM / FOSSGIS</a> | <a href="https://www.openstreetmap.org/fixthemap">地図の修正</a>');
+    routeAttributionAdded = true;
+  }
+  try {
+    const url = new URL(`${start.lng},${start.lat};${end.lng},${end.lat}`, ROUTE_ENDPOINT);
+    url.search = new URLSearchParams({
+      steps: "true", geometries: "geojson", overview: "full", alternatives: "false", radiuses: "100;100",
+    }).toString();
+    const response = await fetch(url, { signal: controller.signal });
+    const data = await response.json();
+    if (!response.ok || data.code !== "Ok") {
+      const error = new Error("Route request failed");
+      error.routeCode = data.code;
+      throw error;
+    }
+    const route = parseWalkingRoute(data);
+    if (!isCurrent()) return;
+    displayWalkingRoute(route);
+  } catch (error) {
+    if (isCurrent()) {
+      const reasons = {
+        NoRoute: "徒歩で通れるルートが見つかりませんでした。別の目的地を指定してください。",
+        NoSegment: "現在地または目的地の近くに歩ける道が見つかりませんでした。道路の近くの場所を指定してお試しください。",
+        TooBig: "この区間のルートを取得できませんでした。近い目的地でお試しください。",
+      };
+      message(ui["route-status"], error.name === "AbortError"
+        ? "ルートの取得に時間がかかっています。少し待ってからもう一度お試しください。"
+        : reasons[error.routeCode] || "ルートを取得できませんでした。通信を確認して、もう一度お試しください。", true);
+    }
+  } finally {
+    clearTimeout(request.timeout);
+    if (routeRequest === request) {
+      routeRequest = null;
+      setRouteBusy(false);
+    }
+  }
+}
+
+ui["route-button"].addEventListener("click", () => {
+  if (!destination || ui["route-button"].disabled) return;
+  routeEnabled = true;
+  routeAwaitingLocation = true;
+  cancelRouteRequest();
+  clearRouteDisplay();
+  ui["route-panel"].hidden = false;
+  setRouteBusy(true);
+  message(ui["route-status"], "現在地を取得しています…");
+  requestCurrentLocation();
+});
+ui["clear-route"].addEventListener("click", stopWalkingRoute);
+
+ui["set-destination"].addEventListener("click", () => {
+  if (selectedPlace) setDestination({ ...selectedPlace, name: ui["visit-name"].value.trim() });
+});
+ui["clear-destination"].addEventListener("click", clearDestination);
 
 function clearSelection() {
   if (selectionMarker) selectionMarker.remove();
@@ -367,6 +759,7 @@ function renderVisits() {
     const popup = document.createElement("div");
     popup.append(textElement("strong", visit.name), textElement("p", `訪問日：${visit.date}`));
     if (visit.note) popup.append(textElement("p", visit.note, "popup-note"));
+    popup.append(destinationButton(visit));
     const marker = L.circleMarker([visit.lat, visit.lng], {
       radius: 8, color: "#fff", weight: 2, fillColor: "#28694f",
       fillOpacity: 1, bubblingMouseEvents: false,
@@ -404,7 +797,7 @@ function renderVisits() {
       if (selectedVisitId === visit.id) clearSelection();
       message(ui["visit-status"], `「${visit.name}」の記録を削除しました。`);
     });
-    actions.append(edit, remove);
+    actions.append(edit, remove, destinationButton(visit));
     item.append(actions);
     ui["visits-list"].append(item);
   }
@@ -438,66 +831,85 @@ function photonPlaces(data) {
   }).slice(0, SEARCH_LIMIT);
 }
 
-function renderSearch(places) {
-  ui["search-results"].replaceChildren();
+function createSearchContext(prefix, onSelect) {
+  const context = { timer: null, active: null, composing: false, onSelect };
+  for (const key of ["form", "input", "button", "status", "results"]) {
+    context[key] = ui[`${prefix}-${key}`];
+  }
+  context.label = context.button.getAttribute("aria-label");
+  return context;
+}
+
+const placeSearch = createSearchContext("search", (place) => selectPlace(place));
+const destinationSearch = createSearchContext("destination-search", (place) => setDestination(place));
+
+function renderSearch(places, context = placeSearch) {
+  context.results.replaceChildren();
   for (const place of places) {
     const item = document.createElement("li");
     const button = placeButton(place, place.address, "result-button");
-    button.addEventListener("click", () => selectPlace(place));
+    button.addEventListener("click", () => context.onSelect(place));
     item.append(button);
-    ui["search-results"].append(item);
+    context.results.append(item);
   }
-  message(ui["search-status"], places.length
+  message(context.status, places.length
     ? `${places.length}件`
     : "見つかりませんでした。市区町村も入れて検索するか、地図をクリックして選んでください。");
 }
 
-function clearSearchDisplay() {
-  ui["search-results"].replaceChildren();
-  message(ui["search-status"], "");
+function clearSearchDisplay(context = placeSearch) {
+  context.results.replaceChildren();
+  message(context.status, "");
 }
 
-function setSearchBusy(busy) {
-  ui["search-button"].disabled = busy;
-  ui["search-button"].setAttribute("aria-label", busy ? "検索中" : "検索");
-  if (busy) ui["search-form"].setAttribute("aria-busy", "true");
-  else ui["search-form"].removeAttribute("aria-busy");
+function setSearchBusy(busy, context = placeSearch) {
+  context.button.disabled = busy;
+  context.button.setAttribute("aria-label", busy ? "検索中" : context.label);
+  if (busy) context.form.setAttribute("aria-busy", "true");
+  else context.form.removeAttribute("aria-busy");
 }
 
-function cancelSearch() {
-  clearTimeout(searchTimer);
-  searchTimer = null;
-  const previous = activeSearch;
-  activeSearch = null;
+function cancelSearch(context = placeSearch) {
+  clearTimeout(context.timer);
+  context.timer = null;
+  const previous = context.active;
+  context.active = null;
   if (previous) {
     clearTimeout(previous.timeout);
     previous.controller.abort();
   }
-  setSearchBusy(false);
+  setSearchBusy(false, context);
 }
 
-function scheduleSearch(delay = 350) {
-  cancelSearch();
-  clearSearchDisplay();
-  const query = ui["search-input"].value.trim();
+function scheduleSearch(delay = 350, context = placeSearch) {
+  cancelSearch(context);
+  clearSearchDisplay(context);
+  const query = context.input.value.trim();
   if (!query) return;
-  if (searchCache.has(query)) { renderSearch(searchCache.get(query)); return; }
+  if (searchCache.has(query)) { renderSearch(searchCache.get(query), context); return; }
   // Wait briefly for typing to pause, and keep requests at least one second apart.
   const wait = Math.max(delay, 1000 - (Date.now() - lastSearchAt));
-  searchTimer = setTimeout(() => searchPlaces(query), wait);
+  context.timer = setTimeout(() => searchPlaces(query, context), wait);
 }
 
-async function searchPlaces(query) {
-  searchTimer = null;
-  if (ui["search-input"].value.trim() !== query) return;
+async function searchPlaces(query, context = placeSearch) {
+  context.timer = null;
+  if (context.input.value.trim() !== query) return;
+  if (searchCache.has(query)) { renderSearch(searchCache.get(query), context); return; }
+  // Both search fields share the request interval, even when their timers overlap.
+  const wait = 1000 - (Date.now() - lastSearchAt);
+  if (wait > 0) {
+    context.timer = setTimeout(() => searchPlaces(query, context), wait);
+    return;
+  }
   const controller = new AbortController();
   const request = { controller, timeout: setTimeout(() => controller.abort(), 12000) };
-  activeSearch = request;
-  const isCurrent = () => activeSearch === request
-    && ui["search-input"].value.trim() === query;
+  context.active = request;
+  const isCurrent = () => context.active === request
+    && context.input.value.trim() === query;
   lastSearchAt = Date.now();
-  setSearchBusy(true);
-  message(ui["search-status"], "場所を検索しています…");
+  setSearchBusy(true, context);
+  message(context.status, "場所を検索しています…");
   try {
     const url = new URL(SEARCH_ENDPOINT);
     // The public server supports "default", de, en and fr, but rejects "ja".
@@ -508,35 +920,48 @@ async function searchPlaces(query) {
     const places = photonPlaces(await response.json());
     if (!isCurrent()) return;
     searchCache.set(query, places);
-    renderSearch(places);
+    renderSearch(places, context);
   } catch (error) {
     if (isCurrent()) {
-      message(ui["search-status"], error.name === "AbortError"
+      message(context.status, error.name === "AbortError"
         ? "検索に時間がかかっています。少し待ってから再検索してください。"
         : "検索できませんでした。通信を確認して再検索するか、地図をクリックして場所を選んでください。", true);
     }
   } finally {
     clearTimeout(request.timeout);
-    if (activeSearch === request) {
-      activeSearch = null;
-      setSearchBusy(false);
+    if (context.active === request) {
+      context.active = null;
+      setSearchBusy(false, context);
     }
   }
 }
 
-ui["search-input"].addEventListener("compositionstart", () => {
-  searchComposing = true;
-  cancelSearch();
-  clearSearchDisplay();
-});
-ui["search-input"].addEventListener("compositionend", () => {
-  searchComposing = false;
-  scheduleSearch();
-});
-ui["search-input"].addEventListener("input", () => scheduleSearch());
-ui["search-form"].addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!searchComposing) scheduleSearch(0);
+function connectSearch(context) {
+  context.input.addEventListener("compositionstart", () => {
+    context.composing = true;
+    cancelSearch(context);
+    clearSearchDisplay(context);
+  });
+  context.input.addEventListener("compositionend", () => {
+    context.composing = false;
+    scheduleSearch(350, context);
+  });
+  context.input.addEventListener("input", () => scheduleSearch(350, context));
+  context.form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!context.composing) scheduleSearch(0, context);
+  });
+}
+connectSearch(placeSearch);
+connectSearch(destinationSearch);
+
+ui["open-destination-search"].addEventListener("click", () => {
+  setPanelOpen(true, false);
+  requestAnimationFrame(() => {
+    if (!panelIsOpen()) return;
+    destinationSearch.form.scrollIntoView({ behavior: "instant", block: "nearest" });
+    destinationSearch.input.focus({ preventScroll: true });
+  });
 });
 
 ui["visit-form"].addEventListener("submit", (event) => {
