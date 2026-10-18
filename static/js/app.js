@@ -235,6 +235,22 @@ ui["custom-walking-speed"].addEventListener("input", () => {
   message(ui["settings-status"], "");
 });
 
+ui["setup-screen"].addEventListener("keydown", (event) => {
+  if (ui["setup-screen"].hidden || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+  const increase = event.key === "ArrowRight" || event.key === "ArrowUp";
+  const decrease = event.key === "ArrowLeft" || event.key === "ArrowDown";
+  if (!increase && !decrease) return;
+  // Keep arrows on the slider, including when a preset or Save has focus.
+  event.preventDefault();
+  event.stopPropagation();
+  const slider = ui["custom-walking-speed"];
+  const previous = slider.value;
+  if (increase) slider.stepUp();
+  else slider.stepDown();
+  if (slider.value !== previous) slider.dispatchEvent(new Event("input", { bubbles: true }));
+  slider.focus({ preventScroll: true });
+}, true);
+
 ui["walking-settings-form"].addEventListener("submit", (event) => {
   event.preventDefault();
   const choice = ui["walking-settings-form"].querySelector('input[name="walking-speed"]:checked');
@@ -275,7 +291,7 @@ function openWalkingSettings() {
   appShell.inert = true;
   map.invalidateSize({ animate: false });
   ui["setup-screen"].hidden = false;
-  ui["walking-settings-form"].querySelector('input:checked').focus({ preventScroll: true });
+  ui["custom-walking-speed"].focus({ preventScroll: true });
 }
 
 ui["edit-walking-settings"].addEventListener("click", openWalkingSettings);
@@ -1178,6 +1194,8 @@ function clearSelection() {
 
 function selectPlace(place, visit = null, moveMap = true) {
   setPanelOpen(true, false);
+  cancelSearch(placeSearch);
+  clearSearchDisplay(placeSearch);
   clearSelection();
   selectedPlace = place;
   selectedVisitId = visit ? visit.id : null;

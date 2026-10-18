@@ -15,25 +15,22 @@
   <body>
     <div id="setup-screen" class="setup-screen" role="dialog" aria-modal="true" aria-labelledby="setup-heading" hidden>
       <form id="walking-settings-form" class="walking-settings">
-        <h1 id="setup-heading">散歩の設定</h1>
+        <h1 id="setup-heading">歩く速さ</h1>
         <fieldset class="speed-options">
-          <legend>歩く速さ</legend>
-          <p class="settings-help">ルートの所要時間の目安に使います。</p>
-          <label class="speed-option"><input type="radio" name="walking-speed" value="slow" required /><span>ゆっくり<small>時速3 km</small></span></label>
-          <label class="speed-option"><input type="radio" name="walking-speed" value="normal" checked /><span>ふつう<small>時速4 km</small></span></label>
-          <label class="speed-option"><input type="radio" name="walking-speed" value="fast" /><span>はやめ<small>時速5.5 km</small></span></label>
-          <label class="speed-option"><input type="radio" name="walking-speed" value="custom" /><span>数値で指定</span></label>
+          <legend class="sr-only">速さを選ぶ</legend>
+          <label class="speed-option"><input type="radio" name="walking-speed" value="slow" required /><span>ゆっくり</span><small>3.0 km/h</small></label>
+          <label class="speed-option"><input type="radio" name="walking-speed" value="normal" checked /><span>ふつう</span><small>4.0 km/h</small></label>
+          <label class="speed-option"><input type="radio" name="walking-speed" value="fast" /><span>はやめ</span><small>5.5 km/h</small></label>
+          <div class="custom-speed-row"><label class="speed-option"><input type="radio" name="walking-speed" value="custom" /><span>数値で指定</span></label><span class="speed-value"><output id="custom-speed-value" for="custom-walking-speed">4.0</output><small>km/h</small></span></div>
           <div class="custom-speed-field">
             <label class="sr-only" for="custom-walking-speed">歩く速さ（時速）</label>
-            <span aria-hidden="true">時速</span>
             <input id="custom-walking-speed" type="range" min="2.5" max="6.5" step="0.1" value="4" aria-describedby="custom-speed-help" />
-            <output id="custom-speed-value" for="custom-walking-speed">4.0</output>
-            <span aria-hidden="true">km</span>
           </div>
-          <p id="custom-speed-help" class="custom-speed-help">バーで時速2.5〜6.5 kmを0.1刻みで調整できます。</p>
+          <div class="speed-scale" aria-hidden="true"><span>2.5</span><span>6.5 km/h</span></div>
+          <p id="custom-speed-help" class="sr-only">時速2.5〜6.5 kmを0.1刻みで調整できます。</p>
         </fieldset>
         <p id="settings-status" class="status" role="status" aria-live="polite"></p>
-        <button id="open-map" class="open-map-button" type="submit">地図を開く</button>
+        <div class="settings-actions"><button id="open-map" class="open-map-button" type="submit">保存</button></div>
       </form>
     </div>
     <div class="app-shell" hidden inert>
@@ -52,15 +49,17 @@
           <p id="selected-address" class="address"></p>
           <form id="visit-form">
             <label for="visit-name">場所の名前</label>
-            <input id="visit-name" placeholder="場所の名前を入力" maxlength="120" required />
+            <input id="visit-name" maxlength="120" required />
             <label for="visit-date">訪問日</label>
             <input id="visit-date" type="date" required />
             <label for="visit-note">メモ <span class="optional">（任意）</span></label>
             <textarea id="visit-note" rows="3" maxlength="1000"></textarea>
             <div class="actions">
-              <button id="save-button" type="submit">保存</button>
               <button id="set-destination" type="button" class="secondary">目的地に指定</button>
-              <button id="cancel-selection" type="button" class="secondary">キャンセル</button>
+              <div class="record-save-actions">
+                <button id="cancel-selection" type="button" class="secondary">キャンセル</button>
+                <button id="save-button" type="submit">保存</button>
+              </div>
             </div>
           </form>
         </section>
