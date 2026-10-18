@@ -13,23 +13,37 @@
     <link rel="stylesheet" href="../static/css/style.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div id="setup-screen" class="setup-screen" role="dialog" aria-modal="true" aria-labelledby="setup-heading" hidden>
+      <form id="walking-settings-form" class="walking-settings">
+        <h1 id="setup-heading">散歩の設定</h1>
+        <fieldset class="speed-options">
+          <legend>歩く速さ</legend>
+          <p class="settings-help">ルートの所要時間の目安に使います。</p>
+          <label class="speed-option"><input type="radio" name="walking-speed" value="slow" required /><span>ゆっくり<small>時速3 km</small></span></label>
+          <label class="speed-option"><input type="radio" name="walking-speed" value="normal" checked /><span>ふつう<small>時速4 km</small></span></label>
+          <label class="speed-option"><input type="radio" name="walking-speed" value="fast" /><span>はやめ<small>時速5.5 km</small></span></label>
+          <label class="speed-option"><input type="radio" name="walking-speed" value="custom" /><span>数値で指定</span></label>
+          <div class="custom-speed-field">
+            <label class="sr-only" for="custom-walking-speed">歩く速さ（時速）</label>
+            <span aria-hidden="true">時速</span>
+            <input id="custom-walking-speed" type="range" min="2.5" max="6.5" step="0.1" value="4" aria-describedby="custom-speed-help" />
+            <output id="custom-speed-value" for="custom-walking-speed">4.0</output>
+            <span aria-hidden="true">km</span>
+          </div>
+          <p id="custom-speed-help" class="custom-speed-help">バーで時速2.5〜6.5 kmを0.1刻みで調整できます。</p>
+        </fieldset>
+        <p id="settings-status" class="status" role="status" aria-live="polite"></p>
+        <button id="open-map" class="open-map-button" type="submit">地図を開く</button>
+      </form>
+    </div>
+    <div class="app-shell" hidden inert>
       <button id="panel-toggle" class="panel-toggle" type="button" aria-controls="search-panel" aria-expanded="false" aria-label="場所を登録：開く" title="右に引っ張ると開きます"><span class="panel-label">場所を登録</span><span class="panel-chevron" aria-hidden="true">›</span></button>
       <aside id="search-panel" class="sidebar" aria-label="場所の検索と散歩の記録" aria-hidden="true" inert>
-        <section aria-label="目的地の検索">
-          <label class="search-label" for="destination-search-input">目的地を検索</label>
-          <form id="destination-search-form" class="search-form" role="search">
-            <input id="destination-search-input" type="search" placeholder="目的地の名前・住所" maxlength="200" />
-            <button id="destination-search-button" type="submit" aria-label="目的地を検索" title="検索"></button>
-          </form>
-          <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
-          <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
-        </section>
         <section aria-label="場所の検索">
           <label class="search-label" for="search-input">場所を検索</label>
           <form id="search-form" class="search-form" role="search">
             <input id="search-input" type="search" placeholder="場所の名前・住所" maxlength="200" />
-            <button id="search-button" type="submit" aria-label="検索" title="検索"></button>
+            <button id="search-button" type="button" aria-label="検索" title="検索"></button>
           </form>
           <p id="search-status" class="status" role="status" aria-live="polite"></p>
           <ul id="search-results" class="place-list" aria-label="検索結果"></ul>
@@ -59,6 +73,19 @@
         </section>
       </aside>
       <main id="map" aria-label="散歩用の地図"></main>
+      <div class="map-utility-actions" role="group" aria-label="地図の操作">
+        <button id="location-button" type="button">現在地</button>
+        <button id="edit-walking-settings" type="button" class="secondary">歩く速さ</button>
+      </div>
+      <section class="map-destination-search" aria-label="目的地の検索">
+        <label class="sr-only" for="destination-search-input">目的地を検索</label>
+        <form id="destination-search-form" class="search-form" role="search">
+          <input id="destination-search-input" type="search" placeholder="目的地の名前・住所" maxlength="200" />
+          <button id="destination-search-button" type="button" aria-label="目的地を検索" title="検索"></button>
+        </form>
+        <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
+        <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
+      </section>
       <div class="map-legend" role="note" aria-label="地点の凡例">
         <span class="legend-item"><span class="legend-dot registered" aria-hidden="true"></span>登録地点</span>
         <span class="legend-item"><span class="legend-dot selected" aria-hidden="true"></span>選択地点</span>
@@ -78,6 +105,8 @@
         <p id="route-status" class="status" role="status" aria-live="polite"></p>
         <div id="route-panel" class="route-panel" role="region" aria-labelledby="route-heading" hidden>
           <h2 id="route-heading">徒歩ルート</h2>
+          <ul id="route-options" class="route-options" aria-label="見つかったルート候補" hidden></ul>
+          <p id="route-choice-note" class="route-choice-note"></p>
           <p id="route-summary"></p>
           <details id="route-directions">
             <summary>道順</summary>
@@ -86,8 +115,6 @@
           <button id="clear-route" type="button" class="secondary">案内を終了</button>
         </div>
         <p id="location-status" class="status" role="status" aria-live="polite"></p>
-        <button id="open-destination-search" type="button" aria-controls="search-panel">目的地を検索</button>
-        <button id="location-button" type="button" aria-describedby="location-status">現在地を取得</button>
       </div>
     </div>
     <script
