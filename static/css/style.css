@@ -40,6 +40,31 @@ button:disabled { opacity: .6; cursor: wait; }
 .speed-scale { display: flex; justify-content: space-between; font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
 .settings-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
 .open-map-button { min-width: 72px; padding: 7px 18px; border: 1px solid #b8b8b8; border-radius: 2px; background: #fff; color: #000; font-size: 13px; font-weight: 400; line-height: 20px; }
+.discovery-toggle { display: block; margin-top: 6px; padding: 2px 0; border-radius: 0; background: transparent; color: #000; font-size: 12px; font-weight: 400; line-height: 20px; text-decoration: underline; text-underline-offset: 2px; }
+.discovery-panel { width: min(100%, 380px); max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); padding: 18px 20px; overflow-y: auto; overscroll-behavior: contain; scroll-padding-top: 60px; scroll-padding-bottom: 12px; border: 1px solid #c4c4c4; background: #fff; color: #000; }
+.discovery-heading { position: sticky; top: -18px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -18px -20px 12px; padding: 18px 20px 12px; border-bottom: 1px solid #ededed; background: #fff; }
+.discovery-heading h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.discovery-heading button { padding: 0; border-radius: 0; background: transparent; color: #000; font-size: 12px; font-weight: 400; text-decoration: underline; text-underline-offset: 2px; }
+.discovery-panel label { margin: 12px 0 5px; font-weight: 400; }
+.discovery-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.discovery-fields > div { min-width: 0; }
+.discovery-panel select, .discovery-panel input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid #c4c4c4; border-radius: 2px; background: #fff; color: #000; font: inherit; font-size: 13px; line-height: 20px; }
+.discovery-panel input::placeholder { color: #000; opacity: 1; }
+.discovery-time { display: flex; gap: 12px; margin: 14px 0 0; padding: 0; border: 0; }
+.discovery-time legend { margin-bottom: 5px; padding: 0; font-size: 12px; }
+.discovery-panel .discovery-time label { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; }
+.discovery-panel .discovery-time input { width: 64px; }
+.discovery-conditions { display: flex; flex-wrap: wrap; gap: 10px 12px; margin: 14px 0 0; padding: 0; border: 0; }
+.discovery-conditions legend { margin-bottom: 8px; padding: 0; font-size: 12px; }
+.discovery-conditions label { display: flex; align-items: center; gap: 5px; margin: 0; font-size: 12px; }
+.discovery-conditions input { width: 14px; height: 14px; margin: 0; padding: 0; accent-color: #000; cursor: pointer; }
+.discovery-help { margin: 10px 0 0; font-size: 11px; line-height: 1.6; }
+.discovery-panel #discovery-submit { padding: 6px 12px; border: 1px solid #b8b8b8; border-radius: 2px; background: #fff; color: #000; font-size: 13px; font-weight: 400; line-height: 20px; }
+.discovery-panel .status { margin: 12px 0 0; font-size: 12px; }
+#discovery-results > li { margin: 0; border-bottom: 1px solid #ededed; }
+.discovery-result { display: block; width: 100%; padding: 12px 0; border-radius: 0; background: transparent; color: #000; text-align: left; font-weight: 400; }
+.discovery-result .place-title { font-weight: 500; }
+.discovery-result-action { display: block; margin-top: 6px; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
 .map-utility-actions { position: absolute; right: 12px; bottom: 32px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
 .map-utility-actions button { padding: 7px 10px; font-size: 12px; line-height: 18px; }
 .panel-toggle { position: absolute; top: 50%; left: 0; z-index: 1100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 36px; height: 132px; padding: 0; border: 1px solid #c4c4c4; border-left: 0; border-radius: 0 2px 2px 0; background: #fff; color: #000; transform: translate(var(--drawer-offset), -50%); touch-action: none; user-select: none; cursor: pointer; }

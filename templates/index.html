@@ -33,6 +33,25 @@
         <div class="settings-actions"><button id="open-map" class="open-map-button" type="submit">保存</button></div>
       </form>
     </div>
+    <div id="discovery-screen" class="setup-screen" role="dialog" aria-modal="true" aria-labelledby="discovery-heading" hidden>
+      <div class="discovery-panel">
+        <div class="discovery-heading"><h2 id="discovery-heading">条件で探す</h2><button id="close-discovery" type="button">閉じる</button></div>
+        <form id="discovery-form">
+          <div class="discovery-fields">
+            <div><label for="discovery-kind">場所の種類</label><select id="discovery-kind"><option value="any">こだわらない</option><option value="park">公園・緑地</option><option value="cafe">カフェ</option><option value="restaurant">食事</option><option value="sightseeing">景色・観光</option><option value="culture">美術館・博物館</option><option value="shrine">神社・寺院</option><option value="shopping">買い物</option><option value="convenience">コンビニ</option></select></div>
+            <div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div>
+          </div>
+          <fieldset class="discovery-time"><legend>歩ける時間（片道）</legend><label><input id="discovery-hours" type="number" min="0" step="1" value="0" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" required />分</label></fieldset>
+          <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
+          <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 カフェ" />
+          <fieldset class="discovery-conditions"><legend>あるとうれしい <span class="optional">（任意）</span></legend><label><input id="discovery-free" type="checkbox" />無料</label><label><input id="discovery-toilets" type="checkbox" />近くにトイレ</label><label><input id="discovery-benches" type="checkbox" />近くにベンチ</label></fieldset>
+          <p class="discovery-help">5分以上で指定できます。希望に近い場所を優先します。雰囲気は周辺情報からの目安です。</p>
+          <div class="settings-actions"><button id="discovery-submit" type="submit">候補を探す</button></div>
+        </form>
+        <p id="discovery-status" class="status" role="status" aria-live="polite"></p>
+        <ul id="discovery-results" class="place-list" aria-label="希望に近い目的地"></ul>
+      </div>
+    </div>
     <div class="app-shell" hidden inert>
       <button id="panel-toggle" class="panel-toggle" type="button" aria-controls="search-panel" aria-expanded="false" aria-label="場所を登録：開く" title="右に引っ張ると開きます"><span class="panel-label">場所を登録</span><span class="panel-chevron" aria-hidden="true">›</span></button>
       <aside id="search-panel" class="sidebar" aria-label="場所の検索と散歩の記録" aria-hidden="true" inert>
@@ -84,6 +103,7 @@
         </form>
         <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
         <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
+        <button id="open-discovery" class="discovery-toggle" type="button" aria-haspopup="dialog" aria-controls="discovery-screen">条件で探す</button>
       </section>
       <div class="map-legend" role="note" aria-label="地点の凡例">
         <span class="legend-item"><span class="legend-dot registered" aria-hidden="true"></span>登録地点</span>
