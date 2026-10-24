@@ -35,18 +35,27 @@
     </div>
     <div id="discovery-screen" class="setup-screen" role="dialog" aria-modal="true" aria-labelledby="discovery-heading" hidden>
       <div class="discovery-panel">
-        <div class="discovery-heading"><h2 id="discovery-heading">条件で探す</h2><button id="close-discovery" type="button">閉じる</button></div>
+        <div class="discovery-heading"><h2 id="discovery-heading">条件で探す</h2><button id="close-discovery" type="button">閉じる</button><p class="discovery-elapsed"><span id="discovery-elapsed-label">経過時間</span> <span id="discovery-elapsed" role="timer" aria-live="off">0秒</span></p></div>
+        <details id="discovery-history" class="discovery-history" hidden><summary>検索履歴</summary><ul id="discovery-history-list" class="place-list" aria-label="過去の条件検索"></ul></details>
         <form id="discovery-form">
           <div class="discovery-fields">
-            <div><label for="discovery-kind">場所の種類</label><select id="discovery-kind"><option value="any">こだわらない</option><option value="park">公園・緑地</option><option value="cafe">カフェ</option><option value="restaurant">食事</option><option value="sightseeing">景色・観光</option><option value="culture">美術館・博物館</option><option value="shrine">神社・寺院</option><option value="shopping">買い物</option><option value="convenience">コンビニ</option></select></div>
+            <div><label for="discovery-kind">場所の種類</label><select id="discovery-kind">
+              <option value="places">散歩先</option><option value="any">すべて</option>
+              <optgroup label="自然"><option value="mountain">山</option><option value="forest">森・林</option><option value="waterside">川辺・湖畔</option><option value="coast">海辺・浜辺</option><option value="park">公園・緑地</option></optgroup>
+              <optgroup label="街歩き・観光"><option value="neighborhood">街並み・集落</option><option value="sightseeing">景色・観光</option><option value="shrine">神社・寺院</option><option value="culture">美術館・博物館</option></optgroup>
+              <optgroup label="飲食"><option value="cafe">カフェ</option><option value="restaurant">食事</option></optgroup>
+              <optgroup label="買い物"><option value="convenience">コンビニ</option><option value="shopping">買い物</option></optgroup>
+            </select></div>
             <div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div>
           </div>
-          <fieldset class="discovery-time"><legend>歩ける時間（片道）</legend><label><input id="discovery-hours" type="number" min="0" step="1" value="0" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" required />分</label></fieldset>
+          <fieldset class="discovery-time">
+            <legend>歩ける時間（片道）</legend>
+            <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
+          </fieldset>
+          <p id="discovery-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
           <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
-          <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 カフェ" />
-          <fieldset class="discovery-conditions"><legend>あるとうれしい <span class="optional">（任意）</span></legend><label><input id="discovery-free" type="checkbox" />無料</label><label><input id="discovery-toilets" type="checkbox" />近くにトイレ</label><label><input id="discovery-benches" type="checkbox" />近くにベンチ</label></fieldset>
-          <p class="discovery-help">5分以上で指定できます。希望に近い場所を優先します。雰囲気は周辺情報からの目安です。</p>
-          <div class="settings-actions"><button id="discovery-submit" type="submit">候補を探す</button></div>
+          <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 森" />
+          <div class="settings-actions"><button id="discovery-cancel" type="button" hidden>中止</button><button id="discovery-submit" type="submit">候補を探す</button></div>
         </form>
         <p id="discovery-status" class="status" role="status" aria-live="polite"></p>
         <ul id="discovery-results" class="place-list" aria-label="希望に近い目的地"></ul>
@@ -55,40 +64,42 @@
     <div class="app-shell" hidden inert>
       <button id="panel-toggle" class="panel-toggle" type="button" aria-controls="search-panel" aria-expanded="false" aria-label="場所を登録：開く" title="右に引っ張ると開きます"><span class="panel-label">場所を登録</span><span class="panel-chevron" aria-hidden="true">›</span></button>
       <aside id="search-panel" class="sidebar" aria-label="場所の検索と散歩の記録" aria-hidden="true" inert>
-        <section aria-label="場所の検索">
-          <label class="search-label" for="search-input">場所を検索</label>
-          <form id="search-form" class="search-form" role="search">
-            <input id="search-input" type="search" placeholder="場所の名前・住所" maxlength="200" />
-            <button id="search-button" type="button" aria-label="検索" title="検索"></button>
-          </form>
-          <p id="search-status" class="status" role="status" aria-live="polite"></p>
-          <ul id="search-results" class="place-list" aria-label="検索結果"></ul>
-        </section>
-        <section id="place-editor" class="editor" aria-label="場所の記録" hidden>
-          <p id="selected-address" class="address"></p>
-          <form id="visit-form">
-            <label for="visit-name">場所の名前</label>
-            <input id="visit-name" maxlength="120" required />
-            <label for="visit-date">訪問日</label>
-            <input id="visit-date" type="date" required />
-            <label for="visit-note">メモ <span class="optional">（任意）</span></label>
-            <textarea id="visit-note" rows="3" maxlength="1000"></textarea>
-            <div class="actions">
-              <button id="set-destination" type="button" class="secondary">目的地に指定</button>
-              <div class="record-save-actions">
-                <button id="cancel-selection" type="button" class="secondary">キャンセル</button>
-                <button id="save-button" type="submit">保存</button>
+        <div class="sidebar-content">
+          <section aria-label="場所の検索">
+            <label class="search-label" for="search-input">場所を検索</label>
+            <form id="search-form" class="search-form" role="search">
+              <input id="search-input" type="search" placeholder="場所の名前・住所" maxlength="200" />
+              <button id="search-button" type="button" aria-label="検索" title="検索"></button>
+            </form>
+            <p id="search-status" class="status" role="status" aria-live="polite"></p>
+            <ul id="search-results" class="place-list" aria-label="検索結果"></ul>
+          </section>
+          <section id="place-editor" class="editor" aria-label="場所の記録" hidden>
+            <p id="selected-address" class="address"></p>
+            <form id="visit-form">
+              <label for="visit-name">場所の名前</label>
+              <input id="visit-name" maxlength="120" required />
+              <label for="visit-date">訪問日</label>
+              <input id="visit-date" type="date" required />
+              <label for="visit-note">メモ <span class="optional">（任意）</span></label>
+              <textarea id="visit-note" rows="3" maxlength="1000"></textarea>
+              <div class="actions">
+                <button id="set-destination" type="button" class="secondary">目的地に指定</button>
+                <div class="record-save-actions">
+                  <button id="cancel-selection" type="button" class="secondary">キャンセル</button>
+                  <button id="save-button" type="submit">保存</button>
+                </div>
               </div>
-            </div>
-          </form>
-        </section>
-        <p id="visit-status" class="status" role="status" aria-live="polite"></p>
-        <button id="undo-delete" type="button" class="secondary" hidden>削除を取り消す</button>
-        <section aria-label="保存した場所">
-          <span id="visit-count" class="count">0件</span>
-          <p id="visits-empty" class="sr-only">記録なし</p>
-          <ul id="visits-list" class="place-list" aria-label="保存した場所"></ul>
-        </section>
+            </form>
+          </section>
+          <p id="visit-status" class="status" role="status" aria-live="polite"></p>
+          <button id="undo-delete" type="button" class="secondary" hidden>削除を取り消す</button>
+          <section aria-label="保存した場所">
+            <span id="visit-count" class="count">0件</span>
+            <p id="visits-empty" class="sr-only">記録なし</p>
+            <ul id="visits-list" class="place-list" aria-label="保存した場所"></ul>
+          </section>
+        </div>
       </aside>
       <main id="map" aria-label="散歩用の地図"></main>
       <div class="map-utility-actions" role="group" aria-label="地図の操作">
@@ -103,8 +114,8 @@
         </form>
         <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
         <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
-        <button id="open-discovery" class="discovery-toggle" type="button" aria-haspopup="dialog" aria-controls="discovery-screen">条件で探す</button>
       </section>
+      <button id="open-discovery" class="discovery-toggle" type="button" aria-haspopup="dialog" aria-controls="discovery-screen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 3v6M16 9v6M10 15v6" stroke-width="3"/></svg>条件で探す</button>
       <div class="map-legend" role="note" aria-label="地点の凡例">
         <span class="legend-item"><span class="legend-dot registered" aria-hidden="true"></span>登録地点</span>
         <span class="legend-item"><span class="legend-dot selected" aria-hidden="true"></span>選択地点</span>

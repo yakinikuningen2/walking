@@ -115,8 +115,26 @@ const SEARCH_LIMIT = 15;
 const ROUTE_ENDPOINT = "https://valhalla1.openstreetmap.de/route";
 const MAP_DATA_ENDPOINT = "https://overpass.private.coffee/api/interpreter";
 const DISCOVERY_MAP_ENDPOINTS = [MAP_DATA_ENDPOINT, "https://overpass-api.de/api/interpreter"];
+const DISCOVERY_MAP_TIMEOUT_MS = 60000;
+const DISCOVERY_PROVIDER_DELAY_MS = 4000;
+const discoveryMapProviders = DISCOVERY_MAP_ENDPOINTS.map(() => ({ retryAt: 0 }));
+let preferredDiscoveryMapProvider = 0;
+let lastDiscoveryMapError = null;
+const configuredMapApi = document.querySelector('meta[name="walking-map-api"]')?.content;
+const MAP_PROXY_ENDPOINT = configuredMapApi ? new URL(configuredMapApi, window.location.href).href
+  : window.location.protocol === "http:" && ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? "http://127.0.0.1:8000/api/overpass" : null;
+let mapProxyRetryAt = 0;
+// Allow for ordinary detours when estimating walks without a route request.
+const DISCOVERY_DISTANCE_FACTOR = 1.3;
 const DISCOVERY_KINDS = {
-  any: { label: "こだわらない", tags: null },
+  places: { label: "散歩先", kinds: ["mountain", "forest", "waterside", "coast", "neighborhood", "park", "sightseeing"] },
+  any: { label: "すべて", tags: null },
+  mountain: { label: "山", tags: { natural: ["peak"] } },
+  forest: { label: "森・林", tags: { natural: ["wood"] }, alternatives: [{ landuse: ["forest"] }, { boundary: ["forest"] }], geometry: true },
+  waterside: { label: "川辺・湖畔", tags: { natural: ["water", "spring"] }, alternatives: [{ waterway: ["riverbank", "waterfall"] }], geometry: true },
+  coast: { label: "海辺・浜辺", tags: { natural: ["beach", "coastline"] }, geometry: true },
+  neighborhood: { label: "街並み・集落", tags: { place: ["neighbourhood", "quarter", "suburb", "village", "hamlet"] } },
   park: { label: "公園・緑地", tags: { leisure: ["park", "garden", "nature_reserve"] } },
   cafe: { label: "カフェ", tags: { amenity: ["cafe"] } },
   restaurant: { label: "食事", tags: { amenity: ["restaurant", "fast_food"] } },
@@ -127,7 +145,7 @@ const DISCOVERY_KINDS = {
   convenience: { label: "コンビニ", tags: { shop: ["convenience"] } },
 };
 const DISCOVERY_MOOD_WORDS = { urban: ["都会", "都会寄り", "街中", "まちなか", "都市"], rural: ["田舎", "田舎寄り", "田園", "里山"], nature: ["自然", "自然が多い", "緑", "緑が多い"] };
-const DISCOVERY_KIND_WORDS = { park: ["公園", "緑地"], cafe: ["カフェ", "喫茶店", "コーヒー"], restaurant: ["食事", "ご飯", "ランチ"], sightseeing: ["観光", "景色", "絶景"], culture: ["美術館", "博物館"], shrine: ["神社", "寺院", "お寺"], shopping: ["買い物", "ショッピング"], convenience: ["コンビニ"] };
+const DISCOVERY_KIND_WORDS = { mountain: ["山", "山頂", "低山", "登山"], forest: ["森", "林", "森林"], waterside: ["川", "川辺", "川沿い", "河川敷", "水辺", "湖", "湖畔", "池", "滝"], coast: ["海", "海辺", "海岸", "浜辺", "砂浜"], neighborhood: ["街", "街並み", "住宅街", "集落"], park: ["公園", "緑地"], cafe: ["カフェ", "喫茶店", "コーヒー"], restaurant: ["食事", "ご飯", "ランチ"], sightseeing: ["観光", "景色", "絶景"], culture: ["美術館", "博物館"], shrine: ["神社", "寺院", "お寺"], shopping: ["買い物", "ショッピング"], convenience: ["コンビニ"] };
 const WALKING_SETTINGS_KEY = "walking.preferences.v1";
 const MIN_WALKING_SPEED = 2.5;
 const MAX_WALKING_SPEED = 6.5;
@@ -144,6 +162,8 @@ const ROUTE_KINDS = [
 ];
 const countryNames = new Intl.DisplayNames(["ja"], { type: "region", fallback: "none" });
 const VISITS_KEY = "walking.visits.v1";
+const DISCOVERY_HISTORY_KEY = "walking.discovery-history.v1";
+const DISCOVERY_HISTORY_LIMIT = 10;
 const ui = Object.fromEntries([
   "search-form", "search-input", "search-button", "search-status", "search-results",
   "place-editor", "selected-address", "visit-form", "visit-name", "visit-date",
@@ -158,8 +178,9 @@ const ui = Object.fromEntries([
   "route-button", "route-status", "route-panel", "route-summary", "route-directions",
   "route-steps", "clear-route", "route-options", "route-choice-note",
   "discovery-screen", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
-  "discovery-hours", "discovery-minutes", "discovery-ambience", "discovery-keyword", "discovery-free", "discovery-toilets", "discovery-benches",
-  "discovery-submit", "discovery-status", "discovery-results",
+  "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
+  "discovery-submit", "discovery-cancel", "discovery-status", "discovery-elapsed-label", "discovery-elapsed", "discovery-results",
+  "discovery-history", "discovery-history-list",
 ].map((id) => [id, document.getElementById(id)]));
 const savedMarkers = L.layerGroup().addTo(map);
 const searchCache = new Map();
@@ -193,10 +214,15 @@ let activeRouteKind = null;
 const natureCache = new Map();
 const convenienceCache = new Map();
 const discoveryMapCache = new Map();
+const discoveryGeometryCache = new Map();
 const discoveryContextCache = new Map();
-const discoveryRouteCache = new Map();
 let discoveryRequest = null;
 let discoveryComposing = false;
+let discoveryStartedAt = null;
+let discoveryElapsedTimer = null;
+let discoveryHistory = loadDiscoveryHistory();
+let discoveryHasOpened = false;
+let discoveryScrollTop = 0;
 const destinationMapIcon = L.divIcon({
   className: "destination-map-icon",
   iconSize: [32, 32],
@@ -938,6 +964,24 @@ function abortableRouteDelay(ms, signal) {
   });
 }
 
+async function fetchMapProxy(url, signal, timeoutMs) {
+  const provider = DISCOVERY_MAP_ENDPOINTS.findIndex((endpoint) => url.origin + url.pathname === endpoint);
+  if (provider < 0 || !MAP_PROXY_ENDPOINT || Date.now() < mapProxyRetryAt) return null;
+  try {
+    const response = await fetch(MAP_PROXY_ENDPOINT, {
+      method: "POST", signal, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: url.searchParams.get("data"), provider, timeout_ms: timeoutMs }),
+    });
+    // An unrelated service on port 8000 must not be mistaken for this relay.
+    if (response.headers.get("X-Walking-Map") === "1") return response;
+  } catch (error) {
+    if (signal.aborted) throw error;
+  }
+  // Live Server still works directly when the Python process is not running.
+  mapProxyRetryAt = Date.now() + 15000;
+  return null;
+}
+
 async function fetchRouteJson(url, request, timeoutMs = 18000) {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -945,11 +989,19 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
   request.controller.signal.addEventListener("abort", abort, { once: true });
   const timer = setTimeout(abort, timeoutMs);
   try {
-    const response = await fetch(url, { signal: controller.signal });
-    const data = await response.json();
+    // Live Server also sends long map queries in the body when the Python relay is offline.
+    const mapQuery = DISCOVERY_MAP_ENDPOINTS.includes(url.origin + url.pathname) && url.searchParams.get("data");
+    const response = await fetchMapProxy(url, controller.signal, timeoutMs)
+      || await fetch(mapQuery ? new URL(url.origin + url.pathname) : url, mapQuery
+        ? { method: "POST", body: new URLSearchParams({ data: mapQuery }), signal: controller.signal }
+        : { signal: controller.signal });
+    let data;
+    try { data = await response.json(); }
+    catch (error) { error.httpStatus = response.status; throw error; }
     if (!response.ok || data.error || data.remark || (data.code && data.code !== "Ok")) {
       const error = new Error("Route data unavailable");
       error.routeCode = data.error_code || data.code;
+      error.httpStatus = response.status;
       throw error;
     }
     return data;
@@ -960,7 +1012,7 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
 }
 
 async function calculateWalkingRoute(start, end, kind, speed, request, via = null) {
-  // All route users share the same request interval, including destination discovery.
+  // Keep requests for the different walking routes spaced apart.
   const turn = routeTurn.then(async () => {
     await abortableRouteDelay(Math.max(0, 1000 - (Date.now() - lastRouteAt)), request.controller.signal);
     lastRouteAt = Date.now();
@@ -1348,30 +1400,170 @@ function createSearchContext(prefix, onSelect) {
 const placeSearch = createSearchContext("search", (place) => selectPlace(place));
 const destinationSearch = createSearchContext("destination-search", (place) => setDestination(place));
 
+function loadDiscoveryHistory() {
+  try {
+    const data = JSON.parse(localStorage.getItem(DISCOVERY_HISTORY_KEY));
+    if (data?.version !== 1 || !Array.isArray(data.searches)) return [];
+    const ids = new Set();
+    return data.searches.filter((entry) => {
+      const criteria = entry?.criteria;
+      if (!entry || typeof entry.id !== "string" || ids.has(entry.id)
+        || !Number.isFinite(entry.at) || !Number.isFinite(new Date(entry.at).getTime())
+        || !validCoordinates(entry.start?.lat, entry.start?.lng)
+        || !criteria || !Object.hasOwn(DISCOVERY_KINDS, criteria.kind)
+        || !["any", "urban", "rural", "nature"].includes(criteria.ambience)
+        || typeof criteria.keyword !== "string" || criteria.keyword.length > 80
+        || !validWalkingSpeed(criteria.speed)
+        || !Number.isInteger(criteria.minutes) || criteria.minutes < 35
+        || criteria.minMinutes !== Math.max(0, criteria.minutes - 60)
+        || !Number.isFinite(entry.elapsedSeconds) || entry.elapsedSeconds < 0
+        || !Array.isArray(entry.places) || !entry.places.length || entry.places.length > 5
+        || !entry.places.every((place) => place && validCoordinates(place.lat, place.lng)
+          && typeof place.key === "string" && typeof place.name === "string" && place.name.length <= 120
+          && typeof place.address === "string" && typeof place.ambienceNote === "string"
+          && Object.hasOwn(DISCOVERY_KINDS, place.kindId) && DISCOVERY_KINDS[place.kindId].tags
+          && Number.isFinite(place.duration) && place.duration >= 0
+          && Number.isFinite(place.distance) && place.distance >= 0
+          && Number.isFinite(place.preferenceScore))) return false;
+      ids.add(entry.id);
+      return true;
+    }).slice(0, DISCOVERY_HISTORY_LIMIT);
+  } catch { return []; }
+}
+
+function rememberDiscoverySearch(request) {
+  if (!request || request.historical || !request.places) return;
+  if (!request.historyId && !request.places.length) return;
+  request.historyId ||= crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  discoveryHistory = discoveryHistory.filter((entry) => entry.id !== request.historyId);
+  if (request.places.length) {
+    discoveryHistory.unshift({ id: request.historyId, at: request.startedAt,
+      start: { ...request.start }, criteria: { ...request.criteria },
+      elapsedSeconds: request.elapsedSeconds || 0, places: request.places.map((place) => ({ ...place })) });
+  }
+  discoveryHistory = discoveryHistory.slice(0, DISCOVERY_HISTORY_LIMIT);
+  try {
+    localStorage.setItem(DISCOVERY_HISTORY_KEY, JSON.stringify({ version: 1, searches: discoveryHistory }));
+  } catch { /* History remains available in this page when browser storage is unavailable. */ }
+  renderDiscoveryHistory();
+}
+
+function renderDiscoveryHistory() {
+  ui["discovery-history"].hidden = !discoveryHistory.length;
+  ui["discovery-history-list"].replaceChildren();
+  const moods = { any: "こだわらない", urban: "都会寄り", rural: "田舎寄り", nature: "自然が多い" };
+  for (const entry of discoveryHistory) {
+    const criteria = entry.criteria;
+    const title = `${routeDuration((criteria.minutes - 30) * 60)} / ${DISCOVERY_KINDS[criteria.kind].label} / ${moods[criteria.ambience]}`;
+    const date = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(entry.at);
+    const button = textElement("button", title, "discovery-history-button");
+    button.type = "button";
+    button.append(textElement("span", `${date}・${entry.places.length}件${criteria.keyword ? `・${criteria.keyword}` : ""}`, "place-detail"));
+    button.addEventListener("click", () => restoreDiscoverySearch(entry));
+    const item = document.createElement("li");
+    item.append(button);
+    ui["discovery-history-list"].append(item);
+  }
+}
+
+function restoreDiscoverySearch(entry, focus = true) {
+  if (discoveryRequest) stopDiscovery();
+  const minutes = entry.criteria.minutes - 30;
+  ui["discovery-kind"].value = entry.criteria.kind;
+  ui["discovery-hours"].value = Math.floor(minutes / 60);
+  ui["discovery-minutes"].value = minutes % 60;
+  ui["discovery-ambience"].value = entry.criteria.ambience;
+  ui["discovery-keyword"].value = entry.criteria.keyword;
+  ui["discovery-history"].open = false;
+  updateDiscoveryTimeRange();
+  renderDiscoveryResults(entry.places, { historical: true, criteria: entry.criteria, start: entry.start });
+  message(ui["discovery-status"], `候補 ${entry.places.length}件`);
+  ui["discovery-elapsed-label"].textContent = "かかった時間：";
+  ui["discovery-elapsed"].textContent = `${entry.elapsedSeconds.toFixed(1)}秒`;
+  if (focus) ui["discovery-results"].querySelector("button")?.focus();
+}
+
+function finishDiscoverySearch(request) {
+  if (!request) return;
+  request.elapsedSeconds = Math.max(0, Date.now() - request.startedAt) / 1000;
+  rememberDiscoverySearch(request);
+}
+
+function updateDiscoveryElapsed() {
+  if (discoveryStartedAt === null) return;
+  const seconds = Math.max(0, Math.floor((Date.now() - discoveryStartedAt) / 1000));
+  ui["discovery-elapsed"].textContent = `${seconds}秒`;
+  if (ui["discovery-submit"].disabled) ui["discovery-submit"].textContent = `検索中… ${seconds}秒`;
+}
+
 function setDiscoveryBusy(busy) {
   ui["discovery-submit"].disabled = busy;
-  ui["discovery-submit"].textContent = busy ? "検索中…" : "候補を探す";
+  ui["discovery-submit"].textContent = busy ? "検索中… 0秒" : "候補を探す";
+  ui["discovery-cancel"].hidden = !busy;
   if (busy) ui["discovery-form"].setAttribute("aria-busy", "true");
   else ui["discovery-form"].removeAttribute("aria-busy");
+  clearTimeout(discoveryElapsedTimer);
+  discoveryElapsedTimer = null;
+  if (busy) {
+    discoveryStartedAt = Date.now();
+    ui["discovery-elapsed-label"].textContent = "経過時間";
+    const tick = () => {
+      updateDiscoveryElapsed();
+      discoveryElapsedTimer = setTimeout(tick, 1000);
+    };
+    tick();
+  } else {
+    updateDiscoveryElapsed();
+    if (discoveryStartedAt !== null) {
+      ui["discovery-elapsed-label"].textContent = "かかった時間：";
+      ui["discovery-elapsed"].textContent = `${(Math.max(0, Date.now() - discoveryStartedAt) / 1000).toFixed(1)}秒`;
+    }
+    discoveryStartedAt = null;
+  }
 }
 
 function cancelDiscovery() {
   const previous = discoveryRequest;
   discoveryRequest = null;
   if (previous) {
-    clearTimeout(previous.timeout);
     previous.controller.abort();
+    finishDiscoverySearch(previous);
   }
   setDiscoveryBusy(false);
   ui["discovery-results"].replaceChildren();
   message(ui["discovery-status"], "");
 }
 
+function stopDiscovery() {
+  if (!discoveryRequest) return;
+  const previous = discoveryRequest;
+  const restoreFocus = document.activeElement === ui["discovery-cancel"];
+  discoveryRequest = null;
+  previous.controller.abort();
+  finishDiscoverySearch(previous);
+  setDiscoveryBusy(false);
+  const count = ui["discovery-results"].children.length;
+  message(ui["discovery-status"], count ? `${count}件の候補を表示しています。` : "検索を中止しました。");
+  if (restoreFocus) ui["discovery-submit"].focus({ preventScroll: true });
+}
+
 function setDiscoveryOpen(open, focus = true) {
-  cancelDiscovery();
+  const panel = ui["discovery-screen"].querySelector(".discovery-panel");
+  if (!open) {
+    discoveryScrollTop = panel.scrollTop;
+    if (discoveryRequest) stopDiscovery();
+  }
   ui["discovery-screen"].hidden = !open;
   appShell.inert = open || !ui["setup-screen"].hidden;
-  if (open) ui["discovery-screen"].querySelector(".discovery-panel").scrollTop = 0;
+  if (open) {
+    if (!discoveryHasOpened) {
+      discoveryHasOpened = true;
+      if (discoveryHistory[0]) restoreDiscoverySearch(discoveryHistory[0], false);
+    }
+    renderDiscoveryHistory();
+    panel.scrollTop = discoveryScrollTop;
+    updateDiscoveryTimeRange();
+  }
   if (focus) ui[open ? "discovery-kind" : "open-discovery"].focus({ preventScroll: true });
 }
 
@@ -1393,6 +1585,37 @@ function discoveryPoint(element) {
   return validCoordinates(lat, lng) ? { lat, lng } : null;
 }
 
+function discoveryDestinationPoint(element, kind, start) {
+  if (!DISCOVERY_KINDS[kind].geometry) return discoveryPoint(element);
+  const lines = Array.isArray(element.geometry) ? [element.geometry]
+    : (Array.isArray(element.members) ? element.members : [])
+      .filter((member) => member && member.role !== "inner" && Array.isArray(member.geometry)).map((member) => member.geometry);
+  const origin = L.CRS.EPSG3857.project(L.latLng(start.lat, start.lng));
+  const worldWidth = 2 * Math.PI * L.CRS.EPSG3857.projection.R;
+  let nearest = null, distance = Infinity;
+  for (const line of lines) {
+    let previous = null;
+    for (const node of line) {
+      // Clipped geometry can contain gaps: never connect across a missing node.
+      if (!node || !validCoordinates(node.lat, node.lon)) { previous = null; continue; }
+      const point = L.CRS.EPSG3857.project(L.latLng(node.lat, node.lon));
+      point.x += Math.round((origin.x - point.x) / worldWidth) * worldWidth;
+      const closest = previous ? L.LineUtil.closestPointOnSegment(origin, previous, point) : point;
+      const gap = origin.distanceTo(closest);
+      if (gap < distance) { distance = gap; nearest = closest; }
+      previous = point;
+    }
+  }
+  if (nearest) {
+    const point = L.CRS.EPSG3857.unproject(nearest).wrap();
+    return { lat: point.lat, lng: point.lng };
+  }
+  const tags = element.tags || {};
+  // A water-area centre is in the water, not a destination on its shore.
+  if (tags.natural === "water" || tags.natural === "coastline" || tags.waterway === "riverbank") return null;
+  return element.type === "node" ? discoveryPoint(element) : null;
+}
+
 function discoveryPreferences(criteria) {
   const words = [];
   const kinds = new Set();
@@ -1407,14 +1630,33 @@ function discoveryPreferences(criteria) {
   return { ambience, kinds, words };
 }
 
-function discoveryKindMatches(tags, kind) {
-  return Object.entries(DISCOVERY_KINDS[kind].tags || {}).every(([key, values]) => values.includes(tags[key]));
+function discoveryKinds(kind) {
+  return kind === "any" ? Object.keys(DISCOVERY_KINDS).filter((key) => DISCOVERY_KINDS[key].tags)
+    : DISCOVERY_KINDS[kind].kinds || [kind];
 }
 
-function discoverySurroundings(elements) {
+function discoverySearchKinds(criteria, preferences) {
+  const kinds = discoveryKinds(criteria.kind);
+  // A broad place search can also honor an explicitly requested cafe, shrine, etc.
+  return criteria.kind === "places" ? [...new Set([...kinds, ...preferences.kinds])] : kinds;
+}
+
+function discoveryTagFilters(kind) {
+  return [DISCOVERY_KINDS[kind].tags, ...(DISCOVERY_KINDS[kind].alternatives || [])].filter(Boolean);
+}
+
+function discoveryKindMatches(tags, kind) {
+  return discoveryTagFilters(kind).some((filters) => Object.entries(filters).every(([key, values]) => values.includes(tags[key])));
+}
+
+function discoverySurroundings(elements, start) {
   const seen = new Set();
   return elements.flatMap((element) => {
-    const point = discoveryPoint(element);
+    if (!element || typeof element !== "object") return [];
+    const hasOutline = Array.isArray(element.geometry) || element.members?.some((member) => Array.isArray(member?.geometry));
+    const kind = start && (!discoveryPoint(element) || hasOutline) && discoveryKinds("places")
+      .find((key) => DISCOVERY_KINDS[key].geometry && discoveryKindMatches(element.tags || {}, key));
+    const point = kind ? discoveryDestinationPoint(element, kind, start) : discoveryPoint(element);
     if (!point) return [];
     const key = element.id ? `${element.type}/${element.id}` : `${point.lat},${point.lng},${element.tags?.name || ""}`;
     if (seen.has(key)) return [];
@@ -1425,140 +1667,311 @@ function discoverySurroundings(elements) {
 
 function discoveryAmbience(point, surroundings, ambience) {
   if (ambience === "any") return { score: 0, note: "" };
-  let shops = 0, urbanLand = 0, farms = 0, forests = 0, villages = 0, green = 0, water = 0;
+  const rural = ambience === "rural";
+  let shops = 0, urbanLand = 0, farms = 0, forests = 0, villages = 0, peaks = 0, green = 0, water = 0;
+  let commercial = false, residential = false, cityCentre = false, largeCommercial = false;
   for (const other of surroundings) {
-    if (map.distance([point.lat, point.lng], [other.lat, other.lng]) > 400) continue;
+    const distance = map.distance([point.lat, point.lng], [other.lat, other.lng]);
+    if (distance > (rural ? 2000 : 400)) continue;
     const t = other.tags;
-    if (discoveryPublic(t) && ((t.shop && !["no", "vacant"].includes(t.shop))
+    if (distance <= 400) {
+      if (discoveryPublic(t) && ((t.shop && !["no", "vacant"].includes(t.shop))
       || ["cafe", "restaurant", "fast_food", "bank", "library", "post_office", "cinema"].includes(t.amenity))) shops++;
-    if (["retail", "commercial"].includes(t.landuse)) urbanLand = Math.max(urbanLand, 1.5);
-    else if (t.landuse === "residential") urbanLand = Math.max(urbanLand, 0.5);
-    if (["farmland", "farmyard", "orchard", "vineyard"].includes(t.landuse)) farms++;
+      if (["retail", "commercial"].includes(t.landuse)) urbanLand = Math.max(urbanLand, 1.5);
+      else if (t.landuse === "residential") urbanLand = Math.max(urbanLand, 0.5);
+      if (["retail", "commercial", "industrial"].includes(t.landuse) || ["mall", "department_store"].includes(t.shop)) commercial = true;
+      if (t.landuse === "industrial" || ["mall", "department_store"].includes(t.shop)) largeCommercial = true;
+      if (t.landuse === "residential") residential = true;
+      if (t.place === "city") cityCentre = true;
+    }
+    if (distance <= (rural ? 800 : 400) && ["farmland", "farmyard", "orchard", "vineyard"].includes(t.landuse)) farms++;
     if (t.landuse === "forest" || t.natural === "wood") forests++;
-    if (["village", "hamlet", "isolated_dwelling"].includes(t.place)) villages++;
+    if (distance <= (rural ? 800 : 400) && ["village", "hamlet", "isolated_dwelling"].includes(t.place)) villages++;
+    if (t.natural === "peak") peaks++;
     if (["park", "garden", "nature_reserve"].includes(t.leisure)
       || ["forest", "meadow", "orchard"].includes(t.landuse) || ["wood", "grassland", "scrub", "wetland"].includes(t.natural)) green++;
-    if (t.natural === "water") water++;
+    if (["water", "spring", "beach", "coastline"].includes(t.natural) || ["river", "riverbank", "waterfall"].includes(t.waterway)) water++;
   }
-  // Only positive mapped evidence contributes: missing shops alone never means countryside.
   const urban = Math.min(4, shops / 2) + urbanLand;
   if (ambience === "urban") return { score: urban, note: urban > 0 ? shops >= 3 ? "店・施設が多め（目安）" : urbanLand ? "市街地の近く（目安）" : "店・施設の近く（目安）" : "" };
   if (ambience === "rural") {
-    const rural = Math.max(0, Math.min(5, farms * 3 + forests + villages * 1.5) - urban * 0.6);
-    return { score: rural, note: rural > 0 ? farms ? "田畑の近く（目安）" : forests ? "林の近く（目安）" : "集落の近く（目安）" : "" };
+    // A quiet area can qualify without farmland; nearby hills and woods improve its ranking.
+    // Dense urban centres remain excluded even when mountains or woods are within reach.
+    const rejected = largeCommercial || cityCentre || shops >= 6 || (commercial && residential && shops >= 3);
+    const score = rejected ? 0 : Math.max(0.5, 2 - urban * 0.5 + Math.min(4, (farms + forests + villages + peaks) * 2));
+    return { score, matches: !rejected, rejected, note: rejected ? "" : farms ? "田畑の近く（目安）" : forests ? "山林の近く（目安）" : villages ? "小さな集落の近く（目安）" : peaks ? "山の周辺（目安）" : "" };
   }
   return { score: Math.min(5, green + water * 1.5), note: water ? "水辺の近く（目安）" : green ? "緑地の近く（目安）" : "" };
 }
 
 function discoveryCandidates(elements, criteria, start, limit = 8) {
-  const radius = criteria.minutes * criteria.speed * 1000 / 60;
   const preferences = discoveryPreferences(criteria);
-  const surroundings = discoverySurroundings(elements);
-  const facilities = elements.flatMap((element) => {
-    const tags = element?.tags || {};
-    const point = discoveryPoint(element);
-    return point && ["toilets", "bench"].includes(tags.amenity) && discoveryPublic(tags, true)
-      ? [{ ...point, amenity: tags.amenity }] : [];
-  });
+  const kinds = discoverySearchKinds(criteria, preferences);
+  const surroundings = discoverySurroundings(elements, start);
   const places = [];
   for (const element of elements) {
     const tags = element?.tags || {};
-    const point = discoveryPoint(element);
-    if (!point || !discoveryPublic(tags)) continue;
-    const kindId = criteria.kind === "any"
-      ? Object.keys(DISCOVERY_KINDS).find((key) => key !== "any" && discoveryKindMatches(tags, key))
-      : discoveryKindMatches(tags, criteria.kind) ? criteria.kind : null;
+    if (!element || !discoveryPublic(tags)) continue;
+    const kindId = kinds.find((key) => discoveryKindMatches(tags, key));
     if (!kindId) continue;
+    const point = discoveryDestinationPoint(element, kindId, start);
+    if (!point) continue;
+    const directDistance = map.distance([start.lat, start.lng], [point.lat, point.lng]);
+    const distance = directDistance * DISCOVERY_DISTANCE_FACTOR;
+    const duration = distance / (criteria.speed / 3.6);
+    if (duration < (criteria.minMinutes || 0) * 60 || duration > criteria.minutes * 60) continue;
     const kind = DISCOVERY_KINDS[kindId];
     const name = String(tags["name:ja"] || tags.name || tags.brand || kind.label).slice(0, 120);
     const searchable = discoveryText([name, tags.brand, tags.description, tags["description:ja"], tags.cuisine].filter(Boolean).join(" "));
-    const nearby = (amenity) => facilities.some((item) => item.amenity === amenity
-      && map.distance([point.lat, point.lng], [item.lat, item.lng]) <= 100);
     const free = tags.fee === "no" && !tags["fee:conditional"];
-    const toilets = (tags.toilets === "yes" && !["private", "no", "customers"].includes(tags["toilets:access"])) || nearby("toilets");
-    const benches = tags.bench === "yes" || nearby("bench");
+    const toilets = tags.toilets === "yes" && !["private", "no", "customers"].includes(tags["toilets:access"]);
+    const benches = tags.bench === "yes";
     const mood = discoveryAmbience(point, surroundings, preferences.ambience);
     const keywordScore = preferences.words.length ? 4 * preferences.words.filter((word) => searchable.includes(word)).length / preferences.words.length : 0;
-    const preferenceScore = mood.score * 3 + keywordScore + (preferences.kinds.has(kindId) ? 4 : 0)
-      + (criteria.free && free ? 2 : 0) + (criteria.toilets && toilets ? 2 : 0) + (criteria.benches && benches ? 2 : 0);
-    const directDistance = map.distance([start.lat, start.lng], [point.lat, point.lng]);
-    if (directDistance > radius) continue;
-    if (places.some((other) => discoveryText(other.name).replace(/\s/g, "") === discoveryText(name).replace(/\s/g, "")
-      && map.distance([point.lat, point.lng], [other.lat, other.lng]) < 30)) continue;
+    const preferenceScore = mood.score * 3 + keywordScore + (preferences.kinds.has(kindId) ? 20 : 0);
+    if (places.some((other) => (element.id && other.osmType === element.type && other.osmId === element.id)
+      || (discoveryText(other.name).replace(/\s/g, "") === discoveryText(name).replace(/\s/g, "")
+      && map.distance([point.lat, point.lng], [other.lat, other.lng]) < 30))) continue;
     const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"], tags["addr:quarter"],
       tags["addr:neighbourhood"], tags["addr:street"], tags["addr:housenumber"]].filter((value) => typeof value === "string" && value))].join("、");
-    places.push({ ...point, name, address, free, toilets, benches, directDistance, preferenceScore,
-      ambienceNote: mood.note, kindLabel: kind.label, osmType: element.type, osmId: element.id });
+    places.push({ ...point, name, address, free, toilets, benches, directDistance, distance, duration, preferenceScore,
+      key: `${element.type}/${element.id ?? `${point.lat},${point.lng},${kindId}`}`,
+      ambienceNote: mood.note, ruralMatch: !!mood.matches, ruralRejected: !!mood.rejected,
+      kindId, kindLabel: kind.label, osmType: element.type, osmId: element.id });
   }
   return places.sort((a, b) => b.preferenceScore - a.preferenceScore || a.directDistance - b.directDistance).slice(0, limit);
 }
 
-async function fetchDiscoveryMapData(query, request, timeoutMs = 12000) {
-  let lastError;
-  for (const endpoint of DISCOVERY_MAP_ENDPOINTS) {
+async function fetchDiscoveryMapData(query, request, timeoutMs = DISCOVERY_MAP_TIMEOUT_MS, retry = true) {
+  let retries = 0;
+  while (true) {
+    const order = [preferredDiscoveryMapProvider, ...DISCOVERY_MAP_ENDPOINTS.map((_, index) => index)
+      .filter((index) => index !== preferredDiscoveryMapProvider)]
+      .filter((index) => Date.now() >= discoveryMapProviders[index].retryAt);
+    let lastError = lastDiscoveryMapError;
     if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
-    try {
-      const url = new URL(endpoint);
-      url.searchParams.set("data", query);
-      const data = await fetchRouteJson(url, request, timeoutMs);
-      if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
-      if (!Array.isArray(data.elements)) throw new Error("Invalid destination data");
-      return data.elements;
-    } catch (error) { lastError = error; }
+    if (order.length) {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      request.controller.signal.addEventListener("abort", abort, { once: true });
+      let releaseFallback;
+      const firstFailed = new Promise((resolve) => { releaseFallback = resolve; });
+      let fatalError = null;
+      const attempts = order.map(async (index, offset) => {
+        try {
+          if (offset) await Promise.race([firstFailed, abortableRouteDelay(DISCOVERY_PROVIDER_DELAY_MS, controller.signal)]);
+          if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+          const url = new URL(DISCOVERY_MAP_ENDPOINTS[index]);
+          url.searchParams.set("data", query);
+          const data = await fetchRouteJson(url, { ...request, controller }, timeoutMs);
+          if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+          if (!Array.isArray(data.elements)) throw new Error("Invalid destination data");
+          return { elements: data.elements, index };
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            if (error.routeCode === "MapQuery" || [400, 422].includes(error.httpStatus)) {
+              fatalError = error;
+              controller.abort();
+            } else {
+              discoveryMapProviders[index].retryAt = Date.now() + 30000;
+              lastDiscoveryMapError = lastError = error;
+              releaseFallback();
+            }
+          }
+          throw error;
+        }
+      });
+      try {
+        const result = await Promise.any(attempts);
+        preferredDiscoveryMapProvider = result.index;
+        discoveryMapProviders[result.index].retryAt = 0;
+        return result.elements;
+      } catch {
+        if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+        if (fatalError) throw fatalError;
+      } finally {
+        controller.abort();
+        request.controller.signal.removeEventListener("abort", abort);
+      }
+    }
+    if (!retry) throw lastError || new Error("Map services are unavailable");
+    const cooldown = Math.max(0, Math.min(...discoveryMapProviders.map((provider) => provider.retryAt)) - Date.now());
+    const delay = Math.max(cooldown, Math.min(60000, 10000 * 2 ** Math.min(retries++, 3)));
+    message(ui["discovery-status"], "検索中…");
+    await abortableRouteDelay(delay, request.controller.signal);
   }
-  throw lastError;
 }
 
-async function findDiscoveryPlaces(criteria, start, request) {
-  const radius = Math.ceil(criteria.minutes * criteria.speed * 1000 / 60);
-  const key = `${start.lat.toFixed(5)},${start.lng.toFixed(5)},${radius},${criteria.kind},${criteria.toilets},${criteria.benches}`;
-  let cached = discoveryMapCache.get(key);
-  if (!cached || Date.now() - cached.at >= 600000) {
-    const around = `(around:${radius},${start.lat.toFixed(6)},${start.lng.toFixed(6)})`;
-    const kinds = criteria.kind === "any" ? Object.keys(DISCOVERY_KINDS).filter((kind) => kind !== "any") : [criteria.kind];
-    const access = '[access!~"^(private|no|permit|military)$"][foot!~"^(no|private)$"][opening_hours!="closed"]';
-    const queries = kinds.map((kind) => {
-      const filters = Object.entries(DISCOVERY_KINDS[kind].tags).map(([tag, values]) => `[${tag}~"^(${values.join("|")})$"]`).join("");
-      return `nwr${around}${filters}${access};`;
-    }).join("");
-    let query = `[out:json][timeout:10];(${queries})->.destinations;.destinations out body center 250;`;
-    if (criteria.toilets || criteria.benches) {
-      const amenities = [criteria.toilets ? "toilets" : "", criteria.benches ? "bench" : ""].filter(Boolean).join("|");
-      query += `nwr(around.destinations:100)[amenity~"^(${amenities})$"]${access}[access!="customers"];out body center 500;`;
-    }
-    const elements = await fetchDiscoveryMapData(query, request);
-    if (discoveryMapCache.size >= 20) discoveryMapCache.delete(discoveryMapCache.keys().next().value);
-    cached = { at: Date.now(), elements };
-    discoveryMapCache.set(key, cached);
+function mergeDiscoveryElements(...groups) {
+  const merged = new Map();
+  for (const element of groups.flat()) {
+    if (!element) continue;
+    const key = `${element.type}/${element.id}`;
+    const previous = merged.get(key);
+    const combined = { ...previous, ...element };
+    if (previous?.members?.some((member) => Array.isArray(member?.geometry))
+      && !element.members?.some((member) => Array.isArray(member?.geometry))) combined.members = previous.members;
+    merged.set(key, combined);
   }
-  let elements = cached.elements;
-  if (discoveryPreferences(criteria).ambience !== "any") {
-    const pool = discoveryCandidates(elements, criteria, start, 24);
-    const seeds = pool.filter((place) => ["node", "way", "relation"].includes(place.osmType) && Number.isSafeInteger(place.osmId) && place.osmId > 0)
-      .map((place) => `${place.osmType}(id:${place.osmId});`).sort().join("");
-    if (seeds) {
-      let context = discoveryContextCache.get(seeds);
-      if (!context || Date.now() - context.at >= 600000) {
-        const around = "(around.neighborhood:400)";
-        const query = `[out:json][timeout:5];(${seeds})->.neighborhood;(`
-          + `nwr${around}[landuse~"^(residential|retail|commercial|farmland|farmyard|orchard|vineyard|forest|meadow)$"];`
-          + `nwr${around}[natural~"^(wood|grassland|scrub|wetland|water)$"];`
-          + `nwr${around}[place~"^(village|hamlet|isolated_dwelling)$"];nwr${around}[shop];`
-          + `nwr${around}[amenity~"^(cafe|restaurant|fast_food|bank|library|post_office|cinema)$"];);out body center 600;`;
-        try {
-          message(ui["discovery-status"], "周辺の雰囲気を確認しています…");
-          context = { at: Date.now(), elements: await fetchDiscoveryMapData(query, request, 6000) };
-          if (discoveryContextCache.size >= 20) discoveryContextCache.delete(discoveryContextCache.keys().next().value);
-          discoveryContextCache.set(seeds, context);
-        } catch (error) {
-          if (request.controller.signal.aborted) throw error;
-          request.ambienceUnavailable = true;
-        }
+  return [...merged.values()];
+}
+
+function discoveryBounds(point, radius) {
+  const latSpan = radius / 110000;
+  const lngSpan = Math.min(180, latSpan / Math.max(0.001, Math.cos(point.lat * Math.PI / 180)));
+  const wrap = (lng) => ((lng + 180) % 360 + 360) % 360 - 180;
+  return [Math.max(-90, point.lat - latSpan), lngSpan === 180 ? -180 : wrap(point.lng - lngSpan),
+    Math.min(90, point.lat + latSpan), lngSpan === 180 ? 180 : wrap(point.lng + lngSpan)]
+    .map((value) => value.toFixed(6)).join(",");
+}
+
+function discoveryDistanceFilter(start, minRadius, maxRadius) {
+  // Leave a margin for the local projection; exact spherical distances are checked in the browser.
+  if (Math.abs(start.lat) > 75 || maxRadius > 100000 || Math.abs(start.lng) > 178) return "";
+  const dy = `((lat()-(${start.lat.toFixed(6)}))*111195)`;
+  const dx = `((lon()-(${start.lng.toFixed(6)}))*${(111195 * Math.cos(start.lat * Math.PI / 180)).toFixed(3)})`;
+  const squared = `(${dy}*${dy}+${dx}*${dx})`;
+  const margin = Math.ceil(150 + maxRadius ** 2 / 6371000 * Math.abs(Math.tan(start.lat * Math.PI / 180)));
+  return `(if:${squared}>=${Math.max(0, minRadius - margin) ** 2}&&${squared}<=${(maxRadius + margin) ** 2})`;
+}
+
+async function fetchDiscoveryContext(places, request) {
+  const rural = discoveryPreferences(request.criteria).ambience === "rural";
+  const points = places.slice(0, rural ? 4 : 8).map((place) => ({ lat: place.lat, lng: place.lng,
+    radius: rural ? 800 : 400 }))
+    .sort((a, b) => a.lat - b.lat || a.lng - b.lng);
+  const key = `bbox:${rural ? "rural-2000:" : ""}${points.map((point) => `${point.radius}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`).join(";")}`;
+  let context = discoveryContextCache.get(key);
+  if (!context || Date.now() - context.at >= 600000) {
+    // Look around the walking destination, rather than every edge of a large forest or lake.
+    const filters = [
+      { tags: '[~"^(landuse|natural|place)$"~"^(residential|retail|commercial|industrial|farmland|farmyard|orchard|vineyard|forest|meadow|wood|grassland|scrub|wetland|water|peak|city|village|hamlet|isolated_dwelling)$"]', radius: rural ? 800 : 400, limit: 80 },
+      { tags: '[shop]', radius: 400, limit: 16 },
+      { tags: '[amenity~"^(cafe|restaurant|fast_food|bank|library|post_office|cinema)$"]', radius: 400, limit: 16 }
+    ];
+    if (rural) filters.push({ tags: '[~"^(landuse|natural)$"~"^(forest|wood|peak)$"]', radius: 2000, limit: 40 });
+    // Keep a separate quota for each place so one busy area cannot hide other places' surroundings.
+    const queries = points.map((point) => filters.map((filter) => `nwr(${discoveryBounds(point, filter.radius)})${filter.tags}->.neighborhood;`
+      + `.neighborhood out body center ${filter.limit};`).join("")).join("");
+    const query = `[out:json][timeout:10];${queries}`;
+    context = { at: Date.now(), elements: await fetchDiscoveryMapData(query, request, 15000, false) };
+    if (discoveryContextCache.size >= 20) discoveryContextCache.delete(discoveryContextCache.keys().next().value);
+    discoveryContextCache.set(key, context);
+  }
+  return context.elements;
+}
+
+async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}) {
+  const maxRadius = Math.ceil(criteria.minutes * criteria.speed * 1000 / 60 / DISCOVERY_DISTANCE_FACTOR);
+  const preferences = discoveryPreferences(criteria);
+  const { ambience } = preferences;
+  const kinds = discoverySearchKinds(criteria, preferences);
+  const preferredKinds = kinds.filter((kind) => preferences.kinds.has(kind));
+  const minRadius = (criteria.minMinutes || 0) * criteria.speed * 1000 / 60 / DISCOVERY_DISTANCE_FACTOR;
+  let radius = minRadius > 0 ? maxRadius : Math.min(maxRadius, 2000);
+  let elements = [];
+  const ruralChecked = new Set();
+  const ruralAttempted = new Set();
+  const assessmentKey = (place) => `${place.key}|${place.lat.toFixed(5)},${place.lng.toFixed(5)}`;
+  const assessPlaces = async () => {
+    const candidateLimit = ambience === "rural" ? 250 : 24;
+    let candidates = discoveryCandidates(elements, criteria, start, candidateLimit);
+    if (ambience !== "rural") { onUpdate(candidates); return candidates; }
+    const confirmed = () => candidates.filter((place) => ruralChecked.has(assessmentKey(place)) && place.ruralMatch);
+    let matches = confirmed();
+    onUpdate(matches);
+    while (matches.length < 5 && !request.ambienceUnavailable) {
+      const batch = candidates.filter((place) => !place.ruralRejected && !ruralAttempted.has(assessmentKey(place))).slice(0, 4);
+      if (!batch.length) break;
+      for (const place of batch) ruralAttempted.add(assessmentKey(place));
+      try {
+        elements = mergeDiscoveryElements(elements, await fetchDiscoveryContext(batch, request));
+        for (const place of batch) ruralChecked.add(assessmentKey(place));
+      } catch (error) {
+        if (request.controller.signal.aborted) throw error;
+        request.ambienceUnavailable = true;
       }
-      if (context) elements = [...elements, ...context.elements];
+      candidates = discoveryCandidates(elements, criteria, start, candidateLimit);
+      matches = confirmed();
+      onUpdate(matches);
     }
+    return matches;
+  };
+  while (true) {
+    if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const key = `${start.lat.toFixed(5)},${start.lng.toFixed(5)},${radius},${kinds.join(",")},min:${minRadius.toFixed(3)}`;
+    let cached = discoveryMapCache.get(key);
+    if (!cached || Date.now() - cached.at >= 600000) {
+      const access = '[access!~"^(private|no|permit|military)$"][foot!~"^(no|private)$"][opening_hours!="closed"]';
+      const bounds = discoveryBounds(start, radius);
+      const limit = Math.floor(250 / kinds.length);
+      // Give each kind a share so nearby shops or woodland fragments cannot fill every slot.
+      const queries = kinds.map((kind) => {
+        const spatial = `(${discoveryBounds(start, radius + 150)})`;
+        const band = DISCOVERY_KINDS[kind].geometry ? "" : discoveryDistanceFilter(start, minRadius, radius);
+        const filters = discoveryTagFilters(kind).map((tags) => `nwr${spatial}`
+          + Object.entries(tags).map(([tag, values]) => `[${tag}~"^(${values.join("|")})$"]`).join("") + `${access}${band};`).join("");
+        return `(${filters});out body center ${limit};`;
+      }).join("");
+      const query = `[out:json][timeout:30];${queries}`;
+      const elements = await fetchDiscoveryMapData(query, request);
+      if (discoveryMapCache.size >= 20) discoveryMapCache.delete(discoveryMapCache.keys().next().value);
+      cached = { at: Date.now(), elements, bounds };
+      discoveryMapCache.set(key, cached);
+    }
+    elements = mergeDiscoveryElements(elements, cached.elements);
+    const needsGeometry = (element) => ["way", "relation"].includes(element.type) && Number.isSafeInteger(element.id) && element.id > 0
+      && !Array.isArray(element.geometry) && !element.members?.some((member) => Array.isArray(member?.geometry))
+      && kinds.some((kind) => DISCOVERY_KINDS[kind].geometry && discoveryKindMatches(element.tags || {}, kind));
+    const geometryKey = (element) => `${cached.bounds}|${element.type}/${element.id}`;
+    const pending = [];
+    const savedGeometry = [];
+    for (const element of elements.filter(needsGeometry)) {
+      const saved = discoveryGeometryCache.get(geometryKey(element));
+      if (saved && Date.now() - saved.at < 600000) { if (saved.element) savedGeometry.push(saved.element); }
+      else pending.push(element);
+    }
+    elements = mergeDiscoveryElements(elements, savedGeometry);
+    let places = await assessPlaces();
+    if (ambience === "rural" && request.ambienceUnavailable) return places;
+    const geometryPriority = (element) => {
+      const point = discoveryPoint(element);
+      const preferred = preferredKinds.some((kind) => discoveryKindMatches(element.tags || {}, kind));
+      return (preferred ? -1e9 : 0) + (point ? Math.abs(map.distance(start, point) - (minRadius + radius) / 2) : 1e8);
+    };
+    pending.sort((a, b) => geometryPriority(a) - geometryPriority(b));
+    while (pending.length && (places.length < 5 || (preferredKinds.length && !places.some((place) => preferredKinds.includes(place.kindId))))) {
+      const batch = pending.splice(0, 12);
+      const ids = ["way", "relation"].map((type) => {
+        const selected = batch.filter((element) => element.type === type).map((element) => element.id);
+        return selected.length ? `${type}(id:${selected.join(",")});` : "";
+      }).join("");
+      message(ui["discovery-status"], "検索中…");
+      const geometry = await fetchDiscoveryMapData(`[out:json][timeout:30];(${ids});out body geom(${cached.bounds});`, request);
+      for (const element of batch) {
+        if (discoveryGeometryCache.size >= 128) discoveryGeometryCache.delete(discoveryGeometryCache.keys().next().value);
+        discoveryGeometryCache.set(geometryKey(element), { at: Date.now(), element: geometry.find((item) => item?.type === element.type && item.id === element.id) || null });
+      }
+      elements = mergeDiscoveryElements(elements, geometry);
+      places = await assessPlaces();
+      if (ambience === "rural" && request.ambienceUnavailable) return places;
+    }
+    if (!["any", "rural"].includes(ambience) && places.length) {
+      try {
+        elements = mergeDiscoveryElements(elements, await fetchDiscoveryContext(places, request));
+      } catch (error) {
+        if (request.controller.signal.aborted) throw error;
+        request.ambienceUnavailable = true;
+      }
+      places = discoveryCandidates(elements, criteria, start, 24);
+      onUpdate(places);
+    }
+    if (radius >= maxRadius || (places.length >= 5
+      && (!preferredKinds.length || places.some((place) => preferredKinds.includes(place.kindId)))
+      && (["any", "rural"].includes(ambience) || places.some((place) => place.ambienceNote) || request.ambienceUnavailable))) return places;
+    radius = Math.min(maxRadius, radius * 3);
+    message(ui["discovery-status"], "検索中…");
   }
-  return discoveryCandidates(elements, criteria, start);
 }
 
 function discoveryContextMatches(request) {
@@ -1569,34 +1982,42 @@ function discoveryContextMatches(request) {
 function renderDiscoveryResults(results, request) {
   const list = ui["discovery-results"];
   const ordered = [...results].sort((a, b) => b.preferenceScore - a.preferenceScore || a.duration - b.duration || a.distance - b.distance).slice(0, 5);
+  request.places = ordered;
+  if (!request.historical) {
+    request.elapsedSeconds = Math.max(0, Date.now() - request.startedAt) / 1000;
+    rememberDiscoverySearch(request);
+  }
   // Keep existing buttons so late results do not remove keyboard focus.
   for (const button of list.querySelectorAll("[data-place-key]")) {
     if (!ordered.some((place) => place.key === button.dataset.placeKey)) button.closest("li").remove();
   }
   for (const [index, place] of ordered.entries()) {
     let button = [...list.querySelectorAll("[data-place-key]")].find((item) => item.dataset.placeKey === place.key);
+    const detail = `${place.kindLabel} ／ ${request.historical ? "検索時の目安" : "徒歩の目安"} 約${routeDuration(place.duration)}・${routeDistance(place.distance)}`;
+    const content = placeButton(place, detail, "discovery-result");
+    const matched = [place.free ? "無料" : "", place.toilets ? "トイレ100m以内" : "", place.benches ? "ベンチ100m以内" : ""].filter(Boolean);
+    if (matched.length) content.append(textElement("span", matched.join("・"), "place-detail"));
+    if (place.ambienceNote) content.append(textElement("span", place.ambienceNote, "place-detail"));
+    if (place.address) content.append(textElement("span", place.address, "place-detail"));
+    content.append(textElement("span", "目的地に指定", "discovery-result-action"));
     if (!button) {
       const item = document.createElement("li");
-      const detail = `${place.kindLabel} ／ 徒歩 約${routeDuration(place.duration)}・${routeDistance(place.distance)}`;
-      button = placeButton(place, detail, "discovery-result");
+      button = content;
       button.dataset.placeKey = place.key;
-      const matched = [place.free ? "無料" : "", place.toilets ? "トイレ100m以内" : "", place.benches ? "ベンチ100m以内" : ""].filter(Boolean);
-      if (matched.length) button.append(textElement("span", matched.join("・"), "place-detail"));
-      if (place.ambienceNote) button.append(textElement("span", place.ambienceNote, "place-detail"));
-      if (place.address) button.append(textElement("span", place.address, "place-detail"));
-      button.append(textElement("span", "目的地に指定", "discovery-result-action"));
-      button.addEventListener("click", () => {
-        if (!discoveryContextMatches(request)) {
-          cancelDiscovery();
-          message(ui["discovery-status"], "現在地か歩く速さが変わりました。もう一度探してください。", true);
-          return;
-        }
-        setDiscoveryOpen(false, false);
-        setDestination(place);
-        ui["destination-search-input"].focus({ preventScroll: true });
-      });
       item.append(button);
+    } else {
+      button.replaceChildren(...content.childNodes);
     }
+    button.onclick = () => {
+      if (!request.historical && !discoveryContextMatches(request)) {
+        cancelDiscovery();
+        message(ui["discovery-status"], "現在地か歩く速さが変わりました。もう一度探してください。", true);
+        return;
+      }
+      setDiscoveryOpen(false, false);
+      setDestination(place);
+      ui["destination-search-input"].focus({ preventScroll: true });
+    };
     const item = button.closest("li") || button.parentElement;
     if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
   }
@@ -1604,58 +2025,34 @@ function renderDiscoveryResults(results, request) {
 
 async function fetchDiscoverySuggestions(request) {
   const { criteria, start } = request;
+  const rural = discoveryPreferences(criteria).ambience === "rural";
   const isCurrent = () => discoveryRequest === request;
-  const results = [];
-  let failures = 0;
-  request.timeout = setTimeout(() => request.controller.abort(), 60000);
+  let results = [];
   try {
-    const places = await findDiscoveryPlaces(criteria, start, request);
-    if (!isCurrent()) return;
-    if (!routeAttributionAdded && places.length) {
-      map.attributionControl.addAttribution('<a href="https://valhalla.openstreetmap.de/" target="_blank" rel="noopener">Valhalla</a>');
-      routeAttributionAdded = true;
-    }
-    for (const [index, place] of places.entries()) {
+    await findDiscoveryPlaces(criteria, start, request, (places) => {
       if (!isCurrent()) return;
-      message(ui["discovery-status"], `徒歩で行ける場所を確認しています（${index + 1}/${places.length}）`);
-      try {
-        const key = `${start.lat.toFixed(5)},${start.lng.toFixed(5)},${place.lat.toFixed(6)},${place.lng.toFixed(6)},${criteria.speed}`;
-        const cached = discoveryRouteCache.get(key);
-        const route = cached && Date.now() - cached.at < 300000 ? cached.route
-          : await calculateWalkingRoute(start, place, "standard", criteria.speed, request);
-        if (!isCurrent()) return;
-        if (!discoveryContextMatches(request)) { cancelDiscovery(); return; }
-        if (discoveryRouteCache.size >= 40) discoveryRouteCache.delete(discoveryRouteCache.keys().next().value);
-        discoveryRouteCache.set(key, { at: Date.now(), route });
-        const startGap = map.distance([start.lat, start.lng], route.points[0]);
-        const endGap = map.distance([place.lat, place.lng], route.points[route.points.length - 1]);
-        if (startGap > 100 || endGap > 60 || route.steps.some((step) => step.mode !== "walking")) continue;
-        const duration = route.duration + (startGap + endGap) / (criteria.speed / 3.6);
-        if (duration > criteria.minutes * 60) continue;
-        results.push({ ...place, key, duration, distance: route.distance + startGap + endGap });
-        renderDiscoveryResults(results, request);
-      } catch (error) {
-        if (!isCurrent()) return;
-        if (request.controller.signal.aborted) throw error;
-        if (!["NoRoute", "NoSegment", 171, 172, 442, 443].includes(error.routeCode)) failures++;
-      }
-    }
+      if (!discoveryContextMatches(request)) { cancelDiscovery(); return; }
+      results = places;
+      renderDiscoveryResults(results, request);
+    });
     if (isCurrent()) message(ui["discovery-status"], results.length
-      ? `希望に近い候補 ${Math.min(5, results.length)}件${failures ? "（一部の経路は確認できませんでした）" : ""}${request.ambienceUnavailable ? "。雰囲気の情報は取得できませんでした。" : ""}`
-      : failures ? "徒歩ルートを確認できませんでした。通信を確認して、もう一度お試しください。"
-        : "徒歩時間内の候補が見つかりませんでした。時間を延ばすか、場所の種類を変えてください。", !results.length && failures > 0);
+      ? `候補 ${Math.min(5, results.length)}件`
+      : rural && request.ambienceUnavailable ? "周辺情報を取得できませんでした。"
+        : "候補が見つかりませんでした。");
   } catch (error) {
     if (isCurrent()) message(ui["discovery-status"], results.length
-      ? `確認できた候補 ${Math.min(5, results.length)}件。残りは確認できませんでした。`
-      : error.name === "AbortError" ? "検索に時間がかかっています。もう一度お試しください。"
+      ? `取得できた候補 ${Math.min(5, results.length)}件。`
+      : error.routeCode === "MapBusy" ? "検索先が混み合っています。少し待ってからお試しください。"
+        : error.routeCode === "MapTimeout" ? "検索先の応答に時間がかかっています。少し待ってからお試しください。"
+        : error.name === "AbortError" ? "検索に時間がかかっています。もう一度お試しください。"
         : "候補を取得できませんでした。通信を確認して、もう一度お試しください。", !results.length);
   } finally {
-    clearTimeout(request.timeout);
-    if (isCurrent()) { discoveryRequest = null; setDiscoveryBusy(false); }
+    if (isCurrent()) { finishDiscoverySearch(request); discoveryRequest = null; setDiscoveryBusy(false); }
   }
 }
 
 ui["open-discovery"].addEventListener("click", () => setDiscoveryOpen(true));
+ui["discovery-cancel"].addEventListener("click", stopDiscovery);
 ui["close-discovery"].addEventListener("click", () => setDiscoveryOpen(false));
 ui["discovery-screen"].addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
@@ -1664,8 +2061,25 @@ ui["discovery-screen"].addEventListener("keydown", (event) => {
     setDiscoveryOpen(false);
   }
 });
-ui["discovery-form"].addEventListener("input", cancelDiscovery);
-ui["discovery-form"].addEventListener("change", cancelDiscovery);
+function discoveryTimeWindow() {
+  const hours = ui["discovery-hours"].valueAsNumber;
+  const minutePart = ui["discovery-minutes"].valueAsNumber;
+  const minutes = hours * 60 + minutePart;
+  if (!Number.isInteger(hours) || hours < 0 || !Number.isInteger(minutePart) || minutePart < 0 || minutePart > 59
+    || !Number.isFinite(minutes) || minutes < 5) return null;
+  return { minMinutes: Math.max(0, minutes - 30), minutes: minutes + 30 };
+}
+
+function updateDiscoveryTimeRange() {
+  const time = discoveryTimeWindow();
+  message(ui["discovery-time-range"], time
+    ? `${time.minMinutes ? routeDuration(time.minMinutes * 60) : "0分"}〜${routeDuration(time.minutes * 60)}の場所を探します。` : "");
+}
+
+for (const type of ["input", "change"]) ui["discovery-form"].addEventListener(type, () => {
+  cancelDiscovery();
+  updateDiscoveryTimeRange();
+});
 ui["discovery-keyword"].addEventListener("compositionstart", () => { discoveryComposing = true; });
 ui["discovery-keyword"].addEventListener("compositionend", () => { discoveryComposing = false; });
 ui["discovery-keyword"].addEventListener("keydown", (event) => {
@@ -1677,22 +2091,20 @@ ui["discovery-form"].addEventListener("submit", (event) => {
   event.preventDefault();
   if (discoveryComposing || !ui["discovery-form"].reportValidity()) return;
   const kind = ui["discovery-kind"].value;
-  const hours = ui["discovery-hours"].valueAsNumber;
-  const minutePart = ui["discovery-minutes"].valueAsNumber;
-  const minutes = hours * 60 + minutePart;
+  const time = discoveryTimeWindow();
   const ambience = ui["discovery-ambience"].value;
   if (!Object.hasOwn(DISCOVERY_KINDS, kind) || !["any", "urban", "rural", "nature"].includes(ambience)) return;
-  if (!Number.isInteger(hours) || !Number.isInteger(minutePart) || !Number.isFinite(minutes) || minutes < 5) {
+  if (!time) {
     message(ui["discovery-status"], "徒歩時間は5分以上で指定してください。", true);
     ui["discovery-hours"].focus({ preventScroll: true });
     return;
   }
   cancelDiscovery();
-  const criteria = { kind, minutes, ambience, keyword: ui["discovery-keyword"].value.trim(), speed: currentWalkingSpeed().kmh,
-    free: ui["discovery-free"].checked, toilets: ui["discovery-toilets"].checked, benches: ui["discovery-benches"].checked };
-  discoveryRequest = { criteria, controller: new AbortController(), start: currentPosition ? { ...currentPosition } : null, awaitingLocation: !currentPosition };
+  updateDiscoveryTimeRange();
+  const criteria = { kind, ...time, ambience, keyword: ui["discovery-keyword"].value.trim(), speed: currentWalkingSpeed().kmh };
+  discoveryRequest = { criteria, controller: new AbortController(), startedAt: Date.now(), start: currentPosition ? { ...currentPosition } : null, awaitingLocation: !currentPosition };
   setDiscoveryBusy(true);
-  message(ui["discovery-status"], "目的地を探しています…");
+  message(ui["discovery-status"], "検索中…");
   if (discoveryRequest.awaitingLocation) requestCurrentLocation();
   else fetchDiscoverySuggestions(discoveryRequest);
 });
