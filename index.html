@@ -13,55 +13,86 @@
     <link rel="stylesheet" href="static/css/style.css" />
   </head>
   <body>
-    <div id="setup-screen" class="setup-screen" role="dialog" aria-modal="true" aria-labelledby="setup-heading" hidden>
+    <div id="setup-screen" class="setup-screen" role="region" aria-labelledby="setup-heading" hidden>
       <form id="walking-settings-form" class="walking-settings">
-        <h1 id="setup-heading">歩く速さ</h1>
-        <fieldset class="speed-options">
-          <legend class="sr-only">速さを選ぶ</legend>
-          <label class="speed-option"><input type="radio" name="walking-speed" value="slow" required /><span>ゆっくり</span><small>3.0 km/h</small></label>
-          <label class="speed-option"><input type="radio" name="walking-speed" value="normal" checked /><span>ふつう</span><small>4.0 km/h</small></label>
-          <label class="speed-option"><input type="radio" name="walking-speed" value="fast" /><span>はやめ</span><small>5.5 km/h</small></label>
-          <div class="custom-speed-row"><label class="speed-option"><input type="radio" name="walking-speed" value="custom" /><span>数値で指定</span></label><span class="speed-value"><output id="custom-speed-value" for="custom-walking-speed">4.0</output><small>km/h</small></span></div>
-          <div class="custom-speed-field">
-            <label class="sr-only" for="custom-walking-speed">歩く速さ（時速）</label>
-            <input id="custom-walking-speed" type="range" min="2.5" max="6.5" step="0.1" value="4" aria-describedby="custom-speed-help" />
-          </div>
-          <div class="speed-scale" aria-hidden="true"><span>2.5</span><span>6.5 km/h</span></div>
-          <p id="custom-speed-help" class="sr-only">時速2.5〜6.5 kmを0.1刻みで調整できます。</p>
-        </fieldset>
-        <p id="settings-status" class="status" role="status" aria-live="polite"></p>
-        <div class="settings-actions"><button id="open-map" class="open-map-button" type="submit">保存</button></div>
+        <div class="walking-settings-heading"><h1 id="setup-heading">歩く速さ</h1><button id="close-walking-settings" type="button">閉じる</button></div>
+        <div id="walking-settings-content">
+          <fieldset class="speed-options">
+            <legend class="sr-only">速さを選ぶ</legend>
+            <label class="speed-option"><input type="radio" name="walking-speed" value="slow" required /><span>ゆっくり</span><small>3.0 km/h</small></label>
+            <label class="speed-option"><input type="radio" name="walking-speed" value="normal" checked /><span>ふつう</span><small>4.0 km/h</small></label>
+            <label class="speed-option"><input type="radio" name="walking-speed" value="fast" /><span>はやめ</span><small>5.5 km/h</small></label>
+            <div class="custom-speed-row"><label class="speed-option"><input type="radio" name="walking-speed" value="custom" /><span>数値で指定</span></label><span class="speed-value"><output id="custom-speed-value" for="custom-walking-speed">4.0</output><small>km/h</small></span></div>
+            <div class="custom-speed-field">
+              <label class="sr-only" for="custom-walking-speed">歩く速さ（時速）</label>
+              <input id="custom-walking-speed" type="range" min="2.5" max="6.5" step="0.1" value="4" aria-describedby="custom-speed-help" />
+            </div>
+            <div class="speed-scale" aria-hidden="true"><span>2.5</span><span>6.5 km/h</span></div>
+            <p id="custom-speed-help" class="sr-only">時速2.5〜6.5 kmを0.1刻みで調整できます。</p>
+          </fieldset>
+          <p id="settings-status" class="status" role="status" aria-live="polite"></p>
+          <div class="settings-actions"><button id="open-map" class="open-map-button" type="submit">保存</button></div>
+        </div>
       </form>
     </div>
-    <div id="discovery-screen" class="setup-screen" role="dialog" aria-modal="true" aria-labelledby="discovery-heading" hidden>
+    <div id="discovery-screen" class="discovery-screen" role="region" aria-labelledby="discovery-heading" hidden>
       <div class="discovery-panel">
-        <div class="discovery-heading"><h2 id="discovery-heading">条件で探す</h2><button id="close-discovery" type="button">閉じる</button><p class="discovery-elapsed"><span id="discovery-elapsed-label">経過時間</span> <span id="discovery-elapsed" role="timer" aria-live="off">0秒</span></p></div>
-        <details id="discovery-history" class="discovery-history" hidden><summary>検索履歴</summary><ul id="discovery-history-list" class="place-list" aria-label="過去の条件検索"></ul></details>
-        <form id="discovery-form">
-          <div class="discovery-fields">
-            <div><label for="discovery-kind">場所の種類</label><select id="discovery-kind">
-              <option value="places">散歩先</option><option value="any">すべて</option>
-              <optgroup label="自然"><option value="mountain">山</option><option value="forest">森・林</option><option value="waterside">川辺・湖畔</option><option value="coast">海辺・浜辺</option><option value="park">公園・緑地</option></optgroup>
-              <optgroup label="街歩き・観光"><option value="neighborhood">街並み・集落</option><option value="sightseeing">景色・観光</option><option value="shrine">神社・寺院</option><option value="culture">美術館・博物館</option></optgroup>
-              <optgroup label="飲食"><option value="cafe">カフェ</option><option value="restaurant">食事</option></optgroup>
-              <optgroup label="買い物"><option value="convenience">コンビニ</option><option value="shopping">買い物</option></optgroup>
-            </select></div>
-            <div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div>
-          </div>
-          <fieldset class="discovery-time">
-            <legend>歩ける時間（片道）</legend>
-            <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
-          </fieldset>
-          <p id="discovery-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
-          <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
-          <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 森" />
-          <div class="settings-actions"><button id="discovery-cancel" type="button" hidden>中止</button><button id="discovery-submit" type="submit">候補を探す</button></div>
-        </form>
-        <p id="discovery-status" class="status" role="status" aria-live="polite"></p>
-        <ul id="discovery-results" class="place-list" aria-label="希望に近い目的地"></ul>
+        <div class="discovery-heading"><h2 id="discovery-heading">目的地を探す</h2><button id="close-discovery" type="button">閉じる</button><p class="discovery-elapsed">条件検索：<span id="discovery-elapsed-label">経過時間</span> <span id="discovery-elapsed" role="timer" aria-live="off">0秒</span></p></div>
+        <div id="discovery-content">
+          <section class="destination-start-search" aria-label="スタート地点の選択">
+            <div class="start-point-row"><span>スタート地点</span><button id="start-name" type="button" aria-label="スタート地点の検索を閉じる" aria-controls="start-picker">現在地</button><button id="change-start" type="button" aria-label="スタート地点を検索" aria-expanded="false" aria-controls="start-picker">検索</button><button id="pick-start-on-map" type="button">地図で指定</button></div>
+            <div id="start-picker" class="start-picker" hidden>
+              <label class="sr-only" for="start-search-input">スタート地点の名前・住所</label>
+              <form id="start-search-form" class="search-form" role="search">
+                <input id="start-search-input" type="search" placeholder="スタート地点の名前・住所" maxlength="200" />
+                <button id="start-search-button" type="button" aria-label="スタート地点を検索" title="検索"></button>
+              </form>
+              <p id="start-search-status" class="status" role="status" aria-live="polite"></p>
+              <ul id="start-search-results" class="place-list" aria-label="スタート地点の検索結果"></ul>
+              <button id="use-current-start" class="start-current-reset" type="button" hidden>現在地に戻す</button>
+            </div>
+          </section>
+          <section class="destination-name-search" aria-labelledby="destination-name-heading">
+            <h3 id="destination-name-heading" class="destination-search-title">名前・住所で検索</h3>
+            <label class="sr-only" for="destination-search-input">場所の名前・住所</label>
+            <form id="destination-search-form" class="search-form" role="search">
+              <input id="destination-search-input" type="search" placeholder="目的地の名前・住所" maxlength="200" />
+              <button id="destination-search-button" type="button" aria-label="名前・住所で検索" title="名前・住所で検索"></button>
+            </form>
+            <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
+            <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
+          </section>
+          <section class="destination-condition-search" aria-labelledby="destination-condition-heading">
+            <h3 id="destination-condition-heading" class="destination-search-title">条件から探す</h3>
+          <details id="discovery-history" class="discovery-history" hidden><summary>検索履歴</summary><ul id="discovery-history-list" class="place-list" aria-label="過去の条件検索"></ul></details>
+          <form id="discovery-form" aria-labelledby="destination-condition-heading">
+            <div class="discovery-fields">
+              <div><label for="discovery-kind">場所の種類</label><select id="discovery-kind">
+                <option value="places">散歩先</option><option value="any">すべて</option>
+                <optgroup label="自然"><option value="mountain">山</option><option value="forest">森・林</option><option value="waterside">川辺・湖畔</option><option value="coast">海辺・浜辺</option><option value="park">公園・緑地</option></optgroup>
+                <optgroup label="街歩き・観光"><option value="neighborhood">街並み・集落</option><option value="sightseeing">景色・観光</option><option value="shrine">神社・寺院</option><option value="culture">美術館・博物館</option></optgroup>
+                <optgroup label="飲食"><option value="cafe">カフェ</option><option value="restaurant">食事</option></optgroup>
+                <optgroup label="買い物"><option value="convenience">コンビニ</option><option value="shopping">買い物</option></optgroup>
+              </select></div>
+              <div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div>
+            </div>
+            <label class="discovery-elevation"><input id="discovery-high-elevation" type="checkbox" />標高が高め</label>
+            <fieldset class="discovery-time">
+              <legend>歩ける時間（片道）</legend>
+              <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
+            </fieldset>
+            <p id="discovery-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
+            <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
+            <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 森" />
+            <div class="settings-actions"><button id="discovery-cancel" type="button" hidden>中止</button><button id="discovery-submit" type="submit">条件に合う場所を探す</button></div>
+          </form>
+          <p id="discovery-status" class="status" role="status" aria-live="polite"></p>
+          <ul id="discovery-results" class="place-list" aria-label="希望に近い目的地"></ul>
+          </section>
+        </div>
       </div>
     </div>
-    <div class="app-shell" hidden inert>
+    <div class="app-shell" hidden>
       <button id="panel-toggle" class="panel-toggle" type="button" aria-controls="search-panel" aria-expanded="false" aria-label="場所を登録：開く" title="右に引っ張ると開きます"><span class="panel-label">場所を登録</span><span class="panel-chevron" aria-hidden="true">›</span></button>
       <aside id="search-panel" class="sidebar" aria-label="場所の検索と散歩の記録" aria-hidden="true" inert>
         <div class="sidebar-content">
@@ -84,7 +115,7 @@
               <label for="visit-note">メモ <span class="optional">（任意）</span></label>
               <textarea id="visit-note" rows="3" maxlength="1000"></textarea>
               <div class="actions">
-                <button id="set-destination" type="button" class="secondary">目的地に指定</button>
+                <div class="place-point-actions"><button id="set-start" type="button" class="secondary">スタート地点に指定</button><button id="set-destination" type="button" class="secondary">目的地に指定</button></div>
                 <div class="record-save-actions">
                   <button id="cancel-selection" type="button" class="secondary">キャンセル</button>
                   <button id="save-button" type="submit">保存</button>
@@ -102,24 +133,17 @@
         </div>
       </aside>
       <main id="map" aria-label="散歩用の地図"></main>
+      <div id="start-map-selection" class="start-map-selection" role="group" aria-label="スタート地点の指定" hidden><span>スタート地点を地図で指定</span><button id="cancel-start-map" type="button">戻る</button></div>
       <div class="map-utility-actions" role="group" aria-label="地図の操作">
         <button id="location-button" type="button">現在地</button>
-        <button id="edit-walking-settings" type="button" class="secondary">歩く速さ</button>
+        <button id="edit-walking-settings" type="button" class="secondary" aria-expanded="false" aria-controls="setup-screen">歩く速さ</button>
       </div>
-      <section class="map-destination-search" aria-label="目的地の検索">
-        <label class="sr-only" for="destination-search-input">目的地を検索</label>
-        <form id="destination-search-form" class="search-form" role="search">
-          <input id="destination-search-input" type="search" placeholder="目的地の名前・住所" maxlength="200" />
-          <button id="destination-search-button" type="button" aria-label="目的地を検索" title="検索"></button>
-        </form>
-        <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
-        <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
-      </section>
-      <button id="open-discovery" class="discovery-toggle" type="button" aria-haspopup="dialog" aria-controls="discovery-screen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 3v6M16 9v6M10 15v6" stroke-width="3"/></svg>条件で探す</button>
+      <button id="open-discovery" class="discovery-toggle" type="button" aria-expanded="false" aria-controls="discovery-screen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 3v6M16 9v6M10 15v6" stroke-width="3"/></svg>目的地を探す</button>
       <div class="map-legend" role="note" aria-label="地点の凡例">
         <span class="legend-item"><span class="legend-dot registered" aria-hidden="true"></span>登録地点</span>
         <span class="legend-item"><span class="legend-dot selected" aria-hidden="true"></span>選択地点</span>
         <span id="location-legend" class="legend-item" hidden><span class="legend-dot current" aria-hidden="true"></span>現在地</span>
+        <span id="start-legend" class="legend-item" hidden><span class="legend-dot start" aria-hidden="true"></span>スタート地点</span>
         <span id="destination-legend" class="legend-item" hidden><span class="legend-dot destination" aria-hidden="true"></span>目的地</span>
       </div>
       <div class="location-controls">

@@ -145,6 +145,7 @@ const DISCOVERY_KINDS = {
   convenience: { label: "コンビニ", tags: { shop: ["convenience"] } },
 };
 const DISCOVERY_MOOD_WORDS = { urban: ["都会", "都会寄り", "街中", "まちなか", "都市"], rural: ["田舎", "田舎寄り", "田園", "里山"], nature: ["自然", "自然が多い", "緑", "緑が多い"] };
+const DISCOVERY_ELEVATION_WORDS = ["高台", "高原", "標高高め", "標高が高い", "標高が高め"];
 const DISCOVERY_KIND_WORDS = { mountain: ["山", "山頂", "低山", "登山"], forest: ["森", "林", "森林"], waterside: ["川", "川辺", "川沿い", "河川敷", "水辺", "湖", "湖畔", "池", "滝"], coast: ["海", "海辺", "海岸", "浜辺", "砂浜"], neighborhood: ["街", "街並み", "住宅街", "集落"], park: ["公園", "緑地"], cafe: ["カフェ", "喫茶店", "コーヒー"], restaurant: ["食事", "ご飯", "ランチ"], sightseeing: ["観光", "景色", "絶景"], culture: ["美術館", "博物館"], shrine: ["神社", "寺院", "お寺"], shopping: ["買い物", "ショッピング"], convenience: ["コンビニ"] };
 const WALKING_SETTINGS_KEY = "walking.preferences.v1";
 const MIN_WALKING_SPEED = 2.5;
@@ -175,12 +176,17 @@ const ui = Object.fromEntries([
   "clear-destination", "destination-legend",
   "destination-search-form", "destination-search-input",
   "destination-search-button", "destination-search-status", "destination-search-results",
+  "change-start", "start-name", "start-picker", "use-current-start", "start-legend",
+  "pick-start-on-map", "start-map-selection", "cancel-start-map", "set-start",
+  "start-search-form", "start-search-input", "start-search-button", "start-search-status", "start-search-results",
   "route-button", "route-status", "route-panel", "route-summary", "route-directions",
   "route-steps", "clear-route", "route-options", "route-choice-note",
   "discovery-screen", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
   "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
   "discovery-submit", "discovery-cancel", "discovery-status", "discovery-elapsed-label", "discovery-elapsed", "discovery-results",
   "discovery-history", "discovery-history-list",
+  "discovery-high-elevation",
+  "close-walking-settings",
 ].map((id) => [id, document.getElementById(id)]));
 const savedMarkers = L.layerGroup().addTo(map);
 const searchCache = new Map();
@@ -194,6 +200,9 @@ let locating = false;
 let recenterWhenLocated = false;
 let currentLocationMarker = null;
 let currentPosition = null;
+let searchedStart = null;
+let startMarker = null;
+let selectingStartOnMap = false;
 let locationAccuracyCircle = null;
 let destination = null;
 let destinationMarker = null;
@@ -216,6 +225,7 @@ const convenienceCache = new Map();
 const discoveryMapCache = new Map();
 const discoveryGeometryCache = new Map();
 const discoveryContextCache = new Map();
+const discoveryElevationCache = new Map();
 let discoveryRequest = null;
 let discoveryComposing = false;
 let discoveryStartedAt = null;
@@ -223,6 +233,7 @@ let discoveryElapsedTimer = null;
 let discoveryHistory = loadDiscoveryHistory();
 let discoveryHasOpened = false;
 let discoveryScrollTop = 0;
+let walkingSettingsScrollTop = 0;
 const destinationMapIcon = L.divIcon({
   className: "destination-map-icon",
   iconSize: [32, 32],
@@ -241,6 +252,11 @@ const panelToggle = document.getElementById("panel-toggle");
 const panelChevron = panelToggle.querySelector(".panel-chevron");
 let panelDrag = null;
 let suppressPanelClick = false;
+
+for (const panel of [ui["setup-screen"], ui["discovery-screen"], searchPanel]) {
+  panel.addEventListener("pointerdown", () => bringToolToFront(panel));
+  panel.addEventListener("focusin", () => bringToolToFront(panel));
+}
 
 function loadWalkingSpeed() {
   try {
@@ -326,25 +342,57 @@ ui["walking-settings-form"].addEventListener("submit", (event) => {
 });
 
 function openMap() {
-  ui["setup-screen"].hidden = true;
+  closeWalkingSettings(false);
   appShell.hidden = false;
-  appShell.inert = false;
   setDrawerOffset(panelIsOpen() ? searchPanel.getBoundingClientRect().width : 0);
   map.invalidateSize({ animate: false });
   map.getContainer().focus({ preventScroll: true });
 }
 
 function openWalkingSettings() {
+  stopStartMapSelection();
   clearTimeout(zoomEndTimer);
   finishZoom();
   appShell.hidden = false;
-  appShell.inert = true;
   map.invalidateSize({ animate: false });
   ui["setup-screen"].hidden = false;
+  ui["edit-walking-settings"].setAttribute("aria-expanded", "true");
+  ui["walking-settings-form"].scrollTop = walkingSettingsScrollTop;
+  bringToolToFront(ui["setup-screen"]);
+  closeOverlappingTools(ui["setup-screen"]);
   ui["custom-walking-speed"].focus({ preventScroll: true });
 }
 
 ui["edit-walking-settings"].addEventListener("click", openWalkingSettings);
+ui["close-walking-settings"].addEventListener("click", () => closeWalkingSettings());
+
+function closeWalkingSettings(focus = true) {
+  if (!ui["setup-screen"].hidden) walkingSettingsScrollTop = ui["walking-settings-form"].scrollTop;
+  ui["setup-screen"].hidden = true;
+  ui["setup-screen"].style.zIndex = "";
+  ui["edit-walking-settings"].setAttribute("aria-expanded", "false");
+  if (focus) ui["edit-walking-settings"].focus({ preventScroll: true });
+}
+
+function bringToolToFront(active) {
+  for (const panel of [ui["setup-screen"], ui["discovery-screen"], searchPanel]) {
+    panel.style.zIndex = panel === active ? "1081" : "";
+  }
+}
+
+function closeOverlappingTools(active, preserveFocus = false) {
+  if (active.hidden) return;
+  const area = active.getBoundingClientRect();
+  for (const panel of [ui["setup-screen"], ui["start-picker"]]) {
+    if (panel === active || active.contains(panel) || panel.hidden) continue;
+    if (preserveFocus && panel.contains(document.activeElement)) continue;
+    const other = panel.getBoundingClientRect();
+    if (area.left < other.right && area.right > other.left && area.top < other.bottom && area.bottom > other.top) {
+      if (panel === ui["setup-screen"]) closeWalkingSettings(false);
+      else setStartPickerOpen(false, false);
+    }
+  }
+}
 
 function panelIsOpen() {
   return appShell.classList.contains("panel-open");
@@ -352,6 +400,7 @@ function panelIsOpen() {
 
 function setDrawerOffset(offset) {
   appShell.style.setProperty("--drawer-offset", `${offset}px`);
+  ui["discovery-screen"].style.setProperty("--drawer-offset", `${offset}px`);
 }
 
 function releasePanelDrag() {
@@ -364,6 +413,7 @@ function releasePanelDrag() {
 }
 
 function setPanelOpen(open, focus = true) {
+  if (open) stopStartMapSelection();
   releasePanelDrag();
   const focusWasInside = searchPanel.contains(document.activeElement);
   clearTimeout(zoomEndTimer);
@@ -372,6 +422,10 @@ function setPanelOpen(open, focus = true) {
   searchPanel.setAttribute("aria-hidden", String(!open));
   appShell.classList.toggle("panel-open", open);
   setDrawerOffset(open ? searchPanel.getBoundingClientRect().width : 0);
+  if (open) {
+    bringToolToFront(searchPanel);
+    closeOverlappingTools(searchPanel);
+  } else searchPanel.style.zIndex = "";
   panelToggle.setAttribute("aria-expanded", String(open));
   panelChevron.textContent = open ? "‹" : "›";
   panelToggle.setAttribute("aria-label", open ? "場所を登録：閉じる" : "場所を登録：開く");
@@ -543,6 +597,107 @@ function setLocationBusy(busy) {
   }
 }
 
+function getStartPoint() {
+  return searchedStart || currentPosition;
+}
+
+function setStartPickerOpen(open, focus = true) {
+  ui["start-picker"].hidden = !open;
+  ui["use-current-start"].hidden = !searchedStart;
+  ui["change-start"].setAttribute("aria-expanded", String(open));
+  if (open) closeOverlappingTools(ui["start-picker"].closest("section"));
+  else {
+    if (startSearch.active || startSearch.timer !== null) message(startSearch.status, "");
+    cancelSearch(startSearch);
+  }
+  if (focus) {
+    const target = ui[open ? "start-search-input" : "change-start"];
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }
+}
+
+function startPointChanged() {
+  cancelDiscovery();
+  routeAwaitingLocation = routeEnabled && !getStartPoint();
+  routePointsChanged();
+  if (!getStartPoint()) requestCurrentLocation();
+}
+
+function setStartPoint(place, { moveMap = true } = {}) {
+  if (!place || !validCoordinates(place.lat, place.lng)) return;
+  searchedStart = {
+    name: typeof place.name === "string" ? place.name.trim().slice(0, 120) : "",
+    address: typeof place.address === "string" ? place.address.trim() : "",
+    lat: place.lat, lng: place.lng,
+  };
+  if (startMarker) startMarker.setLatLng([searchedStart.lat, searchedStart.lng]);
+  else startMarker = L.circleMarker([searchedStart.lat, searchedStart.lng], {
+    radius: 9, color: "#fff", weight: 2, fillColor: "#8250b5", fillOpacity: 1, bubblingMouseEvents: false,
+  }).addTo(map);
+  startMarker.bringToFront();
+  const name = searchedStart.name || "指定した地点";
+  ui["start-name"].textContent = name;
+  ui["change-start"].setAttribute("aria-label", `スタート地点を検索：${name}`);
+  ui["change-start"].title = [name, searchedStart.address].filter(Boolean).join(" ／ ");
+  ui["start-legend"].hidden = false;
+  cancelSearch(startSearch);
+  clearSearchDisplay(startSearch);
+  startSearch.input.value = searchedStart.name;
+  setStartPickerOpen(false);
+  if (moveMap) focusPlace(searchedStart, { keepZoom: true });
+  startPointChanged();
+}
+
+function stopStartMapSelection(reopen = false) {
+  const wasSelecting = selectingStartOnMap;
+  selectingStartOnMap = false;
+  ui["start-map-selection"].hidden = true;
+  map.getContainer().classList.remove("is-selecting-start");
+  if (reopen && wasSelecting) setDiscoveryOpen(true);
+}
+
+ui["pick-start-on-map"].addEventListener("click", () => {
+  setDiscoveryOpen(false, false);
+  setPanelOpen(false, false);
+  selectingStartOnMap = true;
+  ui["start-map-selection"].hidden = false;
+  map.getContainer().classList.add("is-selecting-start");
+  map.getContainer().focus({ preventScroll: true });
+});
+ui["cancel-start-map"].addEventListener("click", () => stopStartMapSelection(true));
+map.getContainer().addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !selectingStartOnMap) return;
+  event.preventDefault();
+  event.stopPropagation();
+  stopStartMapSelection(true);
+});
+
+ui["change-start"].addEventListener("click", () => setStartPickerOpen(true));
+ui["start-name"].addEventListener("click", () => setStartPickerOpen(false));
+ui["start-picker"].addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  setStartPickerOpen(false);
+});
+ui["use-current-start"].addEventListener("click", () => {
+  const changed = Boolean(searchedStart);
+  searchedStart = null;
+  if (startMarker) startMarker.remove();
+  startMarker = null;
+  ui["start-name"].textContent = "現在地";
+  ui["change-start"].setAttribute("aria-label", "スタート地点を検索：現在地");
+  ui["change-start"].removeAttribute("title");
+  ui["start-legend"].hidden = true;
+  clearSearchDisplay(startSearch);
+  startSearch.input.value = "";
+  setStartPickerOpen(false);
+  if (currentPosition) focusPlace(currentPosition, { keepZoom: true });
+  if (changed) startPointChanged();
+  else if (!currentPosition) requestCurrentLocation();
+});
+
 function showCurrentLocation(position, { center = true, keepZoom = routeEnabled } = {}) {
   setLocationBusy(false);
   const { latitude: lat, longitude: lng, accuracy } = position.coords;
@@ -551,7 +706,7 @@ function showCurrentLocation(position, { center = true, keepZoom = routeEnabled 
     routeLocationFailed();
     return;
   }
-  if (currentPosition && map.distance([currentPosition.lat, currentPosition.lng], [lat, lng]) > 30) cancelDiscovery();
+  if (!searchedStart && currentPosition && map.distance([currentPosition.lat, currentPosition.lng], [lat, lng]) > 30) cancelDiscovery();
   currentPosition = { lat, lng };
   const point = [lat, lng];
   if (Number.isFinite(accuracy) && accuracy >= 0) {
@@ -579,9 +734,11 @@ function showCurrentLocation(position, { center = true, keepZoom = routeEnabled 
   ui["location-legend"].hidden = false;
   if (center) focusPlace({ lat, lng }, { keepZoom });
   message(ui["location-status"], "");
-  routeAwaitingLocation = false;
-  routePointsChanged();
-  if (discoveryRequest?.awaitingLocation) {
+  if (!searchedStart) {
+    routeAwaitingLocation = false;
+    routePointsChanged();
+  }
+  if (!searchedStart && discoveryRequest?.awaitingLocation) {
     discoveryRequest.awaitingLocation = false;
     discoveryRequest.start = { ...currentPosition };
     fetchDiscoverySuggestions(discoveryRequest);
@@ -623,7 +780,7 @@ function requestCurrentLocation({ initial = false, recenter = false } = {}) {
   try {
     navigator.geolocation.getCurrentPosition((position) => {
       // A slow startup fix must not replace a destination or a view the user moved.
-      const viewUnchanged = !initial || (!selectedPlace && !destination && !routeEnabled
+      const viewUnchanged = !initial || (!selectedPlace && !destination && !searchedStart && !routeEnabled
         && map.getZoom() === initialView.zoom
         && map.project(map.getCenter()).distanceTo(map.project(initialView.center)) <= 1);
       const requestedRecenter = recenterWhenLocated;
@@ -677,6 +834,7 @@ function setDestination(place) {
   map.closePopup();
   focusPlace(destination, { keepZoom: true });
   setPanelOpen(false, false);
+  closeOverlappingTools(ui["destination-panel"]);
   cancelSearch(destinationSearch);
   clearSearchDisplay(destinationSearch);
   destinationSearch.input.value = destination.name;
@@ -698,7 +856,7 @@ function clearDestination() {
   cancelSearch(destinationSearch);
   clearSearchDisplay(destinationSearch);
   destinationSearch.input.value = "";
-  if (focusWasInside) destinationSearch.input.focus({ preventScroll: true });
+  if (focusWasInside) ui["open-discovery"].focus({ preventScroll: true });
 }
 
 function destinationButton(place) {
@@ -753,7 +911,7 @@ function stopWalkingRoute() {
   ui["route-directions"].open = false;
   message(ui["route-status"], "");
   setRouteBusy(false);
-  if (focusWasInside) ui[destination ? "route-button" : "destination-search-input"].focus({ preventScroll: true });
+  if (focusWasInside) ui[destination ? "route-button" : "open-discovery"].focus({ preventScroll: true });
 }
 
 function routeLocationFailed() {
@@ -933,13 +1091,15 @@ function displayWalkingRoute(route, kind = "standard") {
   updateRouteChoiceNote(kind);
   renderRouteChoices();
   message(ui["route-status"], "");
+  // A background route update must not close the tool the user is editing.
+  closeOverlappingTools(ui["route-panel"], true);
 }
 
 function requestWalkingRoute() {
   cancelRouteRequest();
   clearRouteDisplay();
-  if (!routeEnabled || !destination || !currentPosition) { setRouteBusy(false); return; }
-  const start = { ...currentPosition };
+  if (!routeEnabled || !destination || !getStartPoint()) { setRouteBusy(false); return; }
+  const start = { ...getStartPoint() };
   const end = { ...destination };
   const version = routeVersion;
   setRouteBusy(true);
@@ -1011,14 +1171,18 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
   }
 }
 
-async function calculateWalkingRoute(start, end, kind, speed, request, via = null) {
-  // Keep requests for the different walking routes spaced apart.
+async function waitForRouteTurn(request) {
+  // Share the request interval between routing and elevation lookups.
   const turn = routeTurn.then(async () => {
     await abortableRouteDelay(Math.max(0, 1000 - (Date.now() - lastRouteAt)), request.controller.signal);
     lastRouteAt = Date.now();
   });
   routeTurn = turn.catch(() => {});
   await turn;
+}
+
+async function calculateWalkingRoute(start, end, kind, speed, request, via = null) {
+  await waitForRouteTurn(request);
   const point = (place, type = "break") => ({ lat: place.lat, lon: place.lng, type, search_cutoff: 100 });
   const locations = [point(start)];
   const viaPoints = Array.isArray(via) ? via : via ? [via] : [];
@@ -1260,6 +1424,11 @@ async function fetchWalkingRoute(start, end, version) {
 ui["route-button"].addEventListener("click", () => {
   if (!destination || ui["route-button"].disabled) return;
   routeEnabled = true;
+  if (searchedStart) {
+    routeAwaitingLocation = false;
+    requestWalkingRoute();
+    return;
+  }
   routeAwaitingLocation = true;
   cancelRouteRequest();
   clearRouteDisplay();
@@ -1271,6 +1440,13 @@ ui["clear-route"].addEventListener("click", stopWalkingRoute);
 
 ui["set-destination"].addEventListener("click", () => {
   if (selectedPlace) setDestination({ ...selectedPlace, name: ui["visit-name"].value.trim() });
+});
+ui["set-start"].addEventListener("click", () => {
+  if (!selectedPlace) return;
+  const place = { ...selectedPlace, name: ui["visit-name"].value.trim() };
+  setPanelOpen(false, false);
+  setDiscoveryOpen(true, false);
+  setStartPoint(place, { moveMap: false });
 });
 ui["clear-destination"].addEventListener("click", clearDestination);
 
@@ -1398,7 +1574,12 @@ function createSearchContext(prefix, onSelect) {
 }
 
 const placeSearch = createSearchContext("search", (place) => selectPlace(place));
-const destinationSearch = createSearchContext("destination-search", (place) => setDestination(place));
+const destinationSearch = createSearchContext("destination-search", (place) => {
+  setDiscoveryOpen(false, false);
+  setDestination(place);
+  ui["open-discovery"].focus({ preventScroll: true });
+});
+const startSearch = createSearchContext("start-search", (place) => setStartPoint(place));
 
 function loadDiscoveryHistory() {
   try {
@@ -1412,6 +1593,7 @@ function loadDiscoveryHistory() {
         || !validCoordinates(entry.start?.lat, entry.start?.lng)
         || !criteria || !Object.hasOwn(DISCOVERY_KINDS, criteria.kind)
         || !["any", "urban", "rural", "nature"].includes(criteria.ambience)
+        || (criteria.highElevation !== undefined && typeof criteria.highElevation !== "boolean")
         || typeof criteria.keyword !== "string" || criteria.keyword.length > 80
         || !validWalkingSpeed(criteria.speed)
         || !Number.isInteger(criteria.minutes) || criteria.minutes < 35
@@ -1424,6 +1606,7 @@ function loadDiscoveryHistory() {
           && Object.hasOwn(DISCOVERY_KINDS, place.kindId) && DISCOVERY_KINDS[place.kindId].tags
           && Number.isFinite(place.duration) && place.duration >= 0
           && Number.isFinite(place.distance) && place.distance >= 0
+          && (place.elevation == null || validDiscoveryElevation(place.elevation))
           && Number.isFinite(place.preferenceScore))) return false;
       ids.add(entry.id);
       return true;
@@ -1454,7 +1637,7 @@ function renderDiscoveryHistory() {
   const moods = { any: "こだわらない", urban: "都会寄り", rural: "田舎寄り", nature: "自然が多い" };
   for (const entry of discoveryHistory) {
     const criteria = entry.criteria;
-    const title = `${routeDuration((criteria.minutes - 30) * 60)} / ${DISCOVERY_KINDS[criteria.kind].label} / ${moods[criteria.ambience]}`;
+    const title = `${routeDuration((criteria.minutes - 30) * 60)} / ${DISCOVERY_KINDS[criteria.kind].label} / ${moods[criteria.ambience]}${discoveryPreferences(criteria).highElevation ? " / 標高が高め" : ""}`;
     const date = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(entry.at);
     const button = textElement("button", title, "discovery-history-button");
     button.type = "button";
@@ -1474,6 +1657,7 @@ function restoreDiscoverySearch(entry, focus = true) {
   ui["discovery-minutes"].value = minutes % 60;
   ui["discovery-ambience"].value = entry.criteria.ambience;
   ui["discovery-keyword"].value = entry.criteria.keyword;
+  ui["discovery-high-elevation"].checked = !!entry.criteria.highElevation;
   ui["discovery-history"].open = false;
   updateDiscoveryTimeRange();
   renderDiscoveryResults(entry.places, { historical: true, criteria: entry.criteria, start: entry.start });
@@ -1493,12 +1677,12 @@ function updateDiscoveryElapsed() {
   if (discoveryStartedAt === null) return;
   const seconds = Math.max(0, Math.floor((Date.now() - discoveryStartedAt) / 1000));
   ui["discovery-elapsed"].textContent = `${seconds}秒`;
-  if (ui["discovery-submit"].disabled) ui["discovery-submit"].textContent = `検索中… ${seconds}秒`;
+  if (ui["discovery-submit"].disabled) ui["discovery-submit"].textContent = `条件検索中… ${seconds}秒`;
 }
 
 function setDiscoveryBusy(busy) {
   ui["discovery-submit"].disabled = busy;
-  ui["discovery-submit"].textContent = busy ? "検索中… 0秒" : "候補を探す";
+  ui["discovery-submit"].textContent = busy ? "条件検索中… 0秒" : "条件に合う場所を探す";
   ui["discovery-cancel"].hidden = !busy;
   if (busy) ui["discovery-form"].setAttribute("aria-busy", "true");
   else ui["discovery-form"].removeAttribute("aria-busy");
@@ -1548,14 +1732,20 @@ function stopDiscovery() {
 }
 
 function setDiscoveryOpen(open, focus = true) {
+  if (open) stopStartMapSelection();
   const panel = ui["discovery-screen"].querySelector(".discovery-panel");
   if (!open) {
     discoveryScrollTop = panel.scrollTop;
     if (discoveryRequest) stopDiscovery();
+    if (destinationSearch.active || destinationSearch.timer !== null) message(destinationSearch.status, "");
+    cancelSearch(destinationSearch);
+    setStartPickerOpen(false, false);
   }
   ui["discovery-screen"].hidden = !open;
-  appShell.inert = open || !ui["setup-screen"].hidden;
+  ui["open-discovery"].setAttribute("aria-expanded", String(open));
   if (open) {
+    bringToolToFront(ui["discovery-screen"]);
+    closeOverlappingTools(ui["discovery-screen"]);
     if (!discoveryHasOpened) {
       discoveryHasOpened = true;
       if (discoveryHistory[0]) restoreDiscoverySearch(discoveryHistory[0], false);
@@ -1563,8 +1753,9 @@ function setDiscoveryOpen(open, focus = true) {
     renderDiscoveryHistory();
     panel.scrollTop = discoveryScrollTop;
     updateDiscoveryTimeRange();
-  }
-  if (focus) ui[open ? "discovery-kind" : "open-discovery"].focus({ preventScroll: true });
+  } else ui["discovery-screen"].style.zIndex = "";
+  const focusTarget = open ? panel.scrollTop > 0 ? "close-discovery" : "destination-search-input" : "open-discovery";
+  if (focus) ui[focusTarget].focus({ preventScroll: true });
 }
 
 function discoveryText(value) {
@@ -1620,14 +1811,16 @@ function discoveryPreferences(criteria) {
   const words = [];
   const kinds = new Set();
   let ambience = criteria.ambience || "any";
+  let highElevation = !!criteria.highElevation;
   for (const word of discoveryText(criteria.keyword).split(/[\s,、]+/).filter(Boolean)) {
     const mood = Object.keys(DISCOVERY_MOOD_WORDS).find((key) => DISCOVERY_MOOD_WORDS[key].includes(word));
     const kind = Object.keys(DISCOVERY_KIND_WORDS).find((key) => DISCOVERY_KIND_WORDS[key].includes(word));
-    if (mood) { if (ambience === "any") ambience = mood; }
+    if (DISCOVERY_ELEVATION_WORDS.includes(word)) highElevation = true;
+    else if (mood) { if (ambience === "any") ambience = mood; }
     else if (kind) kinds.add(kind);
     else words.push(word);
   }
-  return { ambience, kinds, words };
+  return { ambience, kinds, words, highElevation };
 }
 
 function discoveryKinds(kind) {
@@ -1727,6 +1920,9 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
     const toilets = tags.toilets === "yes" && !["private", "no", "customers"].includes(tags["toilets:access"]);
     const benches = tags.bench === "yes";
     const mood = discoveryAmbience(point, surroundings, preferences.ambience);
+    const cachedElevation = discoveryElevationCache.get(discoveryElevationKey(point));
+    const mappedElevation = DISCOVERY_KINDS[kindId].geometry ? null : parseDiscoveryElevation(tags.ele);
+    const elevation = mappedElevation ?? (cachedElevation && Date.now() - cachedElevation.at < 600000 ? cachedElevation.height : null);
     const keywordScore = preferences.words.length ? 4 * preferences.words.filter((word) => searchable.includes(word)).length / preferences.words.length : 0;
     const preferenceScore = mood.score * 3 + keywordScore + (preferences.kinds.has(kindId) ? 20 : 0);
     if (places.some((other) => (element.id && other.osmType === element.type && other.osmId === element.id)
@@ -1734,12 +1930,67 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
       && map.distance([point.lat, point.lng], [other.lat, other.lng]) < 30))) continue;
     const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"], tags["addr:quarter"],
       tags["addr:neighbourhood"], tags["addr:street"], tags["addr:housenumber"]].filter((value) => typeof value === "string" && value))].join("、");
-    places.push({ ...point, name, address, free, toilets, benches, directDistance, distance, duration, preferenceScore,
+    places.push({ ...point, name, address, free, toilets, benches, directDistance, distance, duration, preferenceScore, elevation,
       key: `${element.type}/${element.id ?? `${point.lat},${point.lng},${kindId}`}`,
       ambienceNote: mood.note, ruralMatch: !!mood.matches, ruralRejected: !!mood.rejected,
       kindId, kindLabel: kind.label, osmType: element.type, osmId: element.id });
   }
-  return places.sort((a, b) => b.preferenceScore - a.preferenceScore || a.directDistance - b.directDistance).slice(0, limit);
+  return places.sort((a, b) => compareDiscoveryElevation(a, b, preferences.highElevation)
+    || b.preferenceScore - a.preferenceScore || a.directDistance - b.directDistance).slice(0, limit);
+}
+
+function validDiscoveryElevation(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= -12000 && value <= 10000;
+}
+
+function parseDiscoveryElevation(value) {
+  if (validDiscoveryElevation(value)) return value;
+  if (typeof value !== "string" || !/^-?\d+(?:\.\d+)?\s*(?:m)?$/i.test(value.trim())) return null;
+  const height = Number(value.trim().replace(/\s*m$/i, ""));
+  return validDiscoveryElevation(height) ? height : null;
+}
+
+function discoveryElevationKey(place) {
+  return `${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
+}
+
+function compareDiscoveryElevation(a, b, enabled) {
+  if (!enabled) return 0;
+  const knownA = validDiscoveryElevation(a.elevation), knownB = validDiscoveryElevation(b.elevation);
+  return knownA !== knownB ? knownA ? -1 : 1 : knownA ? b.elevation - a.elevation : 0;
+}
+
+async function fetchDiscoveryElevations(places, request) {
+  const pool = places.slice(0, 24).map((place) => ({ ...place }));
+  const missing = new Map();
+  for (const place of pool) {
+    if (validDiscoveryElevation(place.elevation)) continue;
+    const key = discoveryElevationKey(place);
+    const cached = discoveryElevationCache.get(key);
+    if (cached && Date.now() - cached.at < 600000) place.elevation = cached.height;
+    else missing.set(key, place);
+  }
+  if (missing.size) {
+    try {
+      await waitForRouteTurn(request);
+      const url = new URL("height", ROUTE_ENDPOINT);
+      url.searchParams.set("json", JSON.stringify({ range: false, height_precision: 0,
+        shape: [...missing.values()].map((place) => ({ lat: place.lat, lon: place.lng })) }));
+      const data = await fetchRouteJson(url, request, 10000);
+      if (!Array.isArray(data.height) || data.height.length !== missing.size) throw new Error("Invalid elevation data");
+      for (const [index, key] of [...missing.keys()].entries()) {
+        if (discoveryElevationCache.size >= 256) discoveryElevationCache.delete(discoveryElevationCache.keys().next().value);
+        discoveryElevationCache.set(key, { at: Date.now(), height: validDiscoveryElevation(data.height[index]) ? data.height[index] : null });
+      }
+      for (const place of pool) {
+        if (!validDiscoveryElevation(place.elevation)) place.elevation = discoveryElevationCache.get(discoveryElevationKey(place))?.height ?? null;
+      }
+    } catch (error) {
+      if (request.controller.signal.aborted) throw error;
+      request.elevationUnavailable = true;
+    }
+  }
+  return pool.filter((place) => validDiscoveryElevation(place.elevation));
 }
 
 async function fetchDiscoveryMapData(query, request, timeoutMs = DISCOVERY_MAP_TIMEOUT_MS, retry = true) {
@@ -1975,13 +2226,16 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
 }
 
 function discoveryContextMatches(request) {
-  return currentPosition && currentWalkingSpeed().kmh === request.criteria.speed
-    && map.distance([currentPosition.lat, currentPosition.lng], [request.start.lat, request.start.lng]) <= 30;
+  const start = getStartPoint();
+  return start && currentWalkingSpeed().kmh === request.criteria.speed
+    && map.distance([start.lat, start.lng], [request.start.lat, request.start.lng]) <= 30;
 }
 
 function renderDiscoveryResults(results, request) {
   const list = ui["discovery-results"];
-  const ordered = [...results].sort((a, b) => b.preferenceScore - a.preferenceScore || a.duration - b.duration || a.distance - b.distance).slice(0, 5);
+  const highElevation = discoveryPreferences(request.criteria).highElevation;
+  const ordered = [...results].sort((a, b) => compareDiscoveryElevation(a, b, highElevation)
+    || b.preferenceScore - a.preferenceScore || a.duration - b.duration || a.distance - b.distance).slice(0, 5);
   request.places = ordered;
   if (!request.historical) {
     request.elapsedSeconds = Math.max(0, Date.now() - request.startedAt) / 1000;
@@ -1995,6 +2249,7 @@ function renderDiscoveryResults(results, request) {
     let button = [...list.querySelectorAll("[data-place-key]")].find((item) => item.dataset.placeKey === place.key);
     const detail = `${place.kindLabel} ／ ${request.historical ? "検索時の目安" : "徒歩の目安"} 約${routeDuration(place.duration)}・${routeDistance(place.distance)}`;
     const content = placeButton(place, detail, "discovery-result");
+    if (highElevation && validDiscoveryElevation(place.elevation)) content.append(textElement("span", `標高 約${Math.round(place.elevation).toLocaleString("ja-JP")} m`, "place-detail"));
     const matched = [place.free ? "無料" : "", place.toilets ? "トイレ100m以内" : "", place.benches ? "ベンチ100m以内" : ""].filter(Boolean);
     if (matched.length) content.append(textElement("span", matched.join("・"), "place-detail"));
     if (place.ambienceNote) content.append(textElement("span", place.ambienceNote, "place-detail"));
@@ -2011,12 +2266,12 @@ function renderDiscoveryResults(results, request) {
     button.onclick = () => {
       if (!request.historical && !discoveryContextMatches(request)) {
         cancelDiscovery();
-        message(ui["discovery-status"], "現在地か歩く速さが変わりました。もう一度探してください。", true);
+        message(ui["discovery-status"], "スタート地点か歩く速さが変わりました。もう一度探してください。", true);
         return;
       }
       setDiscoveryOpen(false, false);
       setDestination(place);
-      ui["destination-search-input"].focus({ preventScroll: true });
+      ui["open-discovery"].focus({ preventScroll: true });
     };
     const item = button.closest("li") || button.parentElement;
     if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
@@ -2026,18 +2281,26 @@ function renderDiscoveryResults(results, request) {
 async function fetchDiscoverySuggestions(request) {
   const { criteria, start } = request;
   const rural = discoveryPreferences(criteria).ambience === "rural";
+  const highElevation = discoveryPreferences(criteria).highElevation;
   const isCurrent = () => discoveryRequest === request;
   let results = [];
   try {
-    await findDiscoveryPlaces(criteria, start, request, (places) => {
+    const places = await findDiscoveryPlaces(criteria, start, request, (places) => {
       if (!isCurrent()) return;
       if (!discoveryContextMatches(request)) { cancelDiscovery(); return; }
-      results = places;
+      results = highElevation ? places.filter((place) => validDiscoveryElevation(place.elevation)) : places;
       renderDiscoveryResults(results, request);
     });
+    if (highElevation && isCurrent()) {
+      results = await fetchDiscoveryElevations(places, request);
+      if (!isCurrent()) return;
+      if (!discoveryContextMatches(request)) { cancelDiscovery(); return; }
+      renderDiscoveryResults(results, request);
+    }
     if (isCurrent()) message(ui["discovery-status"], results.length
       ? `候補 ${Math.min(5, results.length)}件`
-      : rural && request.ambienceUnavailable ? "周辺情報を取得できませんでした。"
+      : highElevation && places.length ? request.elevationUnavailable ? "標高を取得できませんでした。" : "標高を確認できる候補がありませんでした。"
+        : rural && request.ambienceUnavailable ? "周辺情報を取得できませんでした。"
         : "候補が見つかりませんでした。");
   } catch (error) {
     if (isCurrent()) message(ui["discovery-status"], results.length
@@ -2101,8 +2364,10 @@ ui["discovery-form"].addEventListener("submit", (event) => {
   }
   cancelDiscovery();
   updateDiscoveryTimeRange();
-  const criteria = { kind, ...time, ambience, keyword: ui["discovery-keyword"].value.trim(), speed: currentWalkingSpeed().kmh };
-  discoveryRequest = { criteria, controller: new AbortController(), startedAt: Date.now(), start: currentPosition ? { ...currentPosition } : null, awaitingLocation: !currentPosition };
+  const criteria = { kind, ...time, ambience, highElevation: ui["discovery-high-elevation"].checked,
+    keyword: ui["discovery-keyword"].value.trim(), speed: currentWalkingSpeed().kmh };
+  const start = getStartPoint();
+  discoveryRequest = { criteria, controller: new AbortController(), startedAt: Date.now(), start: start ? { ...start } : null, awaitingLocation: !start };
   setDiscoveryBusy(true);
   message(ui["discovery-status"], "検索中…");
   if (discoveryRequest.awaitingLocation) requestCurrentLocation();
@@ -2230,6 +2495,7 @@ function connectSearch(context) {
 }
 connectSearch(placeSearch);
 connectSearch(destinationSearch);
+connectSearch(startSearch);
 
 ui["visit-form"].addEventListener("submit", (event) => {
   event.preventDefault();
@@ -2269,8 +2535,15 @@ ui["undo-delete"].addEventListener("click", () => {
   ui["undo-delete"].hidden = true;
 });
 map.on("click", ({ latlng }) => {
-  selectPlace({ name: "", address: "", lat: latlng.lat,
-    lng: ((latlng.lng + 180) % 360 + 360) % 360 - 180 }, null, false);
+  const place = { name: "", address: "", lat: latlng.lat,
+    lng: ((latlng.lng + 180) % 360 + 360) % 360 - 180 };
+  if (selectingStartOnMap) {
+    stopStartMapSelection();
+    setDiscoveryOpen(true, false);
+    setStartPoint(place, { moveMap: false });
+    return;
+  }
+  selectPlace(place, null, false);
 });
 renderVisits();
 if (savedWalkingSpeed) openMap();
