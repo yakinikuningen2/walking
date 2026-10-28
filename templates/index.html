@@ -136,7 +136,12 @@
       <div id="start-map-selection" class="start-map-selection" role="group" aria-label="スタート地点の指定" hidden><span>スタート地点を地図で指定</span><button id="cancel-start-map" type="button">戻る</button></div>
       <div class="map-utility-actions" role="group" aria-label="地図の操作">
         <button id="location-button" type="button">現在地</button>
+        <button id="enable-heading" type="button" hidden>方角を表示</button>
         <button id="edit-walking-settings" type="button" class="secondary" aria-expanded="false" aria-controls="setup-screen">歩く速さ</button>
+      </div>
+      <div class="nearby-convenience-controls">
+        <div class="nearby-convenience-actions"><button id="nearby-convenience" type="button" aria-describedby="nearby-convenience-status">近くのコンビニを探す</button><button id="clear-nearby-convenience" type="button" aria-label="コンビニの表示を消す" hidden>消す</button></div>
+        <p id="nearby-convenience-status" class="status" role="status" aria-live="polite"></p>
       </div>
       <button id="open-discovery" class="discovery-toggle" type="button" aria-expanded="false" aria-controls="discovery-screen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 3v6M16 9v6M10 15v6" stroke-width="3"/></svg>目的地を探す</button>
       <div class="map-legend" role="note" aria-label="地点の凡例">
@@ -145,30 +150,35 @@
         <span id="location-legend" class="legend-item" hidden><span class="legend-dot current" aria-hidden="true"></span>現在地</span>
         <span id="start-legend" class="legend-item" hidden><span class="legend-dot start" aria-hidden="true"></span>スタート地点</span>
         <span id="destination-legend" class="legend-item" hidden><span class="legend-dot destination" aria-hidden="true"></span>目的地</span>
+        <span id="convenience-legend" class="legend-item" hidden><span class="legend-dot convenience" aria-hidden="true"></span>コンビニ</span>
       </div>
       <div class="location-controls">
-        <div id="destination-panel" class="destination-panel" role="group" aria-labelledby="destination-heading" hidden>
-          <p id="destination-heading" class="destination-heading">目的地</p>
-          <p id="destination-name" aria-live="polite"></p>
-          <p id="destination-address" class="address" hidden></p>
-          <div class="destination-actions">
-            <button id="route-button" type="button" aria-describedby="route-status">徒歩ルートを表示</button>
-            <button id="clear-destination" type="button" class="secondary">目的地を解除</button>
+        <button id="toggle-route-details" class="route-details-toggle" type="button" aria-expanded="true" aria-controls="route-details-content" hidden>詳細を閉じる</button>
+        <div id="route-details-content" class="route-details-content">
+          <div id="destination-panel" class="destination-panel" role="group" aria-labelledby="destination-heading" hidden>
+            <p id="destination-heading" class="destination-heading">目的地</p>
+            <p id="destination-name" aria-live="polite"></p>
+            <p id="destination-address" class="address" hidden></p>
+            <div class="destination-actions">
+              <button id="route-button" type="button" aria-describedby="route-status">徒歩ルートを表示</button>
+              <button id="clear-destination" type="button" class="secondary">目的地を解除</button>
+            </div>
+          </div>
+          <p id="route-status" class="status" role="status" aria-live="polite"></p>
+          <div id="route-panel" class="route-panel" role="region" aria-labelledby="route-heading" hidden>
+            <h2 id="route-heading">徒歩ルート</h2>
+            <ul id="route-options" class="route-options" aria-label="見つかったルート候補" hidden></ul>
+            <p id="route-choice-note" class="route-choice-note"></p>
+            <p id="route-summary"></p>
+            <details id="route-directions">
+              <summary>道順</summary>
+              <ol id="route-steps"></ol>
+            </details>
+            <button id="clear-route" type="button" class="secondary">案内を終了</button>
           </div>
         </div>
-        <p id="route-status" class="status" role="status" aria-live="polite"></p>
-        <div id="route-panel" class="route-panel" role="region" aria-labelledby="route-heading" hidden>
-          <h2 id="route-heading">徒歩ルート</h2>
-          <ul id="route-options" class="route-options" aria-label="見つかったルート候補" hidden></ul>
-          <p id="route-choice-note" class="route-choice-note"></p>
-          <p id="route-summary"></p>
-          <details id="route-directions">
-            <summary>道順</summary>
-            <ol id="route-steps"></ol>
-          </details>
-          <button id="clear-route" type="button" class="secondary">案内を終了</button>
-        </div>
         <p id="location-status" class="status" role="status" aria-live="polite"></p>
+        <p id="heading-status" class="status" role="status" aria-live="polite"></p>
       </div>
     </div>
     <script

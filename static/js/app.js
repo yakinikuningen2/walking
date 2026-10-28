@@ -112,6 +112,7 @@ map.getContainer().addEventListener("wheel", (event) => {
 // text is sent to Photon. Keep the endpoint here so it can be replaced easily.
 const SEARCH_ENDPOINT = "https://photon.komoot.io/api/";
 const SEARCH_LIMIT = 15;
+const NEARBY_CONVENIENCE_RADIUS = 1000;
 const ROUTE_ENDPOINT = "https://valhalla1.openstreetmap.de/route";
 const MAP_DATA_ENDPOINT = "https://overpass.private.coffee/api/interpreter";
 const DISCOVERY_MAP_ENDPOINTS = [MAP_DATA_ENDPOINT, "https://overpass-api.de/api/interpreter"];
@@ -170,7 +171,8 @@ const ui = Object.fromEntries([
   "place-editor", "selected-address", "visit-form", "visit-name", "visit-date",
   "visit-note", "save-button", "cancel-selection", "visit-status", "undo-delete",
   "visits-list", "visits-empty", "visit-count",
-  "location-button", "location-status", "location-legend",
+  "location-button", "location-status", "location-legend", "enable-heading", "heading-status",
+  "nearby-convenience", "clear-nearby-convenience", "nearby-convenience-status", "convenience-legend",
   "setup-screen", "walking-settings-form", "custom-walking-speed", "custom-speed-value", "settings-status", "edit-walking-settings",
   "set-destination", "destination-panel", "destination-name", "destination-address",
   "clear-destination", "destination-legend",
@@ -181,6 +183,7 @@ const ui = Object.fromEntries([
   "start-search-form", "start-search-input", "start-search-button", "start-search-status", "start-search-results",
   "route-button", "route-status", "route-panel", "route-summary", "route-directions",
   "route-steps", "clear-route", "route-options", "route-choice-note",
+  "toggle-route-details", "route-details-content",
   "discovery-screen", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
   "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
   "discovery-submit", "discovery-cancel", "discovery-status", "discovery-elapsed-label", "discovery-elapsed", "discovery-results",
@@ -189,6 +192,9 @@ const ui = Object.fromEntries([
   "close-walking-settings",
 ].map((id) => [id, document.getElementById(id)]));
 const savedMarkers = L.layerGroup().addTo(map);
+const nearbyConvenienceMarkers = L.layerGroup().addTo(map);
+const nearbyConvenienceCache = new Map();
+let nearbyConvenienceRequest = null;
 const searchCache = new Map();
 let selectedPlace = null;
 let selectedVisitId = null;
@@ -200,6 +206,11 @@ let locating = false;
 let recenterWhenLocated = false;
 let currentLocationMarker = null;
 let currentPosition = null;
+let locationWatchId = null;
+let locationPermissionDenied = false;
+let currentHeadingMarker = null;
+let headingReading = null;
+let headingListening = false;
 let searchedStart = null;
 let startMarker = null;
 let selectingStartOnMap = false;
@@ -698,16 +709,126 @@ ui["use-current-start"].addEventListener("click", () => {
   else if (!currentPosition) requestCurrentLocation();
 });
 
-function showCurrentLocation(position, { center = true, keepZoom = routeEnabled } = {}) {
-  setLocationBusy(false);
+function screenOrientationAngle() {
+  return Number.isFinite(window.screen.orientation?.angle) ? window.screen.orientation.angle
+    : Number.isFinite(window.orientation) ? window.orientation : 0;
+}
+
+function deviceHeading(reading) {
+  if (!reading) return null;
+  const screenAngle = screenOrientationAngle();
+  if (Number.isFinite(reading.compass)) return (reading.compass + screenAngle + 360) % 360;
+  const radians = Math.PI / 180;
+  const a = reading.alpha * radians, b = reading.beta * radians, g = reading.gamma * radians;
+  const s = screenAngle * radians;
+  const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+  const cg = Math.cos(g), sg = Math.sin(g);
+  // Project the current screen's top edge onto east/north using the Z-X'-Y'' rotation.
+  let east = (ca * cg - sa * sb * sg) * Math.sin(s) - sa * cb * Math.cos(s);
+  let north = (sa * cg + ca * sb * sg) * Math.sin(s) + ca * cb * Math.cos(s);
+  if (Math.hypot(east, north) < 0.5) {
+    // With an upright phone the top edge points up; use the direction behind its screen.
+    east = -ca * sg - sa * sb * cg;
+    north = -sa * sg + ca * sb * cg;
+  }
+  if (Math.hypot(east, north) < 0.01) return null;
+  return (Math.atan2(east, north) / radians + 360) % 360;
+}
+
+function renderCurrentHeading() {
+  const heading = deviceHeading(headingReading);
+  if (!currentPosition || heading === null) {
+    if (currentHeadingMarker) currentHeadingMarker.remove();
+    currentHeadingMarker = null;
+    return;
+  }
+  if (!currentHeadingMarker) {
+    currentHeadingMarker = L.marker([currentPosition.lat, currentPosition.lng], {
+      icon: L.divIcon({
+        className: "current-heading-icon", iconSize: [48, 48], iconAnchor: [24, 24],
+        html: '<span class="current-heading-pointer" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 3 33 19 24 15 15 19Z" fill="#2476cf" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></span>',
+      }),
+      interactive: false, keyboard: false, zIndexOffset: 1000,
+    }).addTo(map);
+  } else {
+    const point = currentHeadingMarker.getLatLng();
+    if (point.lat !== currentPosition.lat || point.lng !== currentPosition.lng) {
+      currentHeadingMarker.setLatLng([currentPosition.lat, currentPosition.lng]);
+    }
+  }
+  currentHeadingMarker.getElement().style.setProperty("--heading-angle", `${heading.toFixed(1)}deg`);
+}
+
+function handleDeviceOrientation(event) {
+  if (document.hidden) return;
+  if ("webkitCompassHeading" in event) {
+    headingReading = Number.isFinite(event.webkitCompassHeading) && event.webkitCompassHeading >= 0
+      && !(Number.isFinite(event.webkitCompassAccuracy) && event.webkitCompassAccuracy < 0)
+      ? { compass: event.webkitCompassHeading } : null;
+  } else {
+    // Relative rotation and GPS travel bearing cannot tell which way the phone faces.
+    if (!event.absolute && event.type !== "deviceorientationabsolute") return;
+    headingReading = [event.alpha, event.beta, event.gamma].every(Number.isFinite)
+      ? { alpha: event.alpha, beta: event.beta, gamma: event.gamma } : null;
+  }
+  renderCurrentHeading();
+}
+
+function startHeadingUpdates() {
+  if (headingListening) return;
+  headingListening = true;
+  window.addEventListener("deviceorientationabsolute", handleDeviceOrientation);
+  window.addEventListener("deviceorientation", handleDeviceOrientation);
+  window.screen.orientation?.addEventListener("change", renderCurrentHeading);
+  window.addEventListener("orientationchange", renderCurrentHeading);
+}
+
+function clearCurrentHeading() {
+  headingReading = null;
+  renderCurrentHeading();
+}
+
+ui["enable-heading"].addEventListener("click", async () => {
+  ui["enable-heading"].disabled = true;
+  message(ui["heading-status"], "");
+  try {
+    const permission = await window.DeviceOrientationEvent.requestPermission(true);
+    if (permission !== "granted") {
+      message(ui["heading-status"], "方角の表示が許可されていません。ブラウザの設定を確認してください。", true);
+      return;
+    }
+    startHeadingUpdates();
+    ui["enable-heading"].hidden = true;
+    appShell.classList.remove("heading-permission-needed");
+  } catch {
+    message(ui["heading-status"], "方角を取得できませんでした。ブラウザの設定を確認して、もう一度お試しください。", true);
+  } finally {
+    ui["enable-heading"].disabled = false;
+  }
+});
+
+if (window.isSecureContext !== false && window.DeviceOrientationEvent) {
+  if (typeof window.DeviceOrientationEvent.requestPermission === "function") {
+    ui["enable-heading"].hidden = false;
+    appShell.classList.add("heading-permission-needed");
+  } else startHeadingUpdates();
+}
+window.addEventListener("pagehide", clearCurrentHeading);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) clearCurrentHeading();
+});
+
+function showCurrentLocation(position, { center = true, keepZoom = routeEnabled, refreshRoute = true } = {}) {
+  if (refreshRoute) setLocationBusy(false);
   const { latitude: lat, longitude: lng, accuracy } = position.coords;
   if (!validCoordinates(lat, lng)) {
     message(ui["location-status"], "位置情報を読み取れませんでした。もう一度お試しください。", true);
-    routeLocationFailed();
+    if (refreshRoute) routeLocationFailed();
     return;
   }
-  if (!searchedStart && currentPosition && map.distance([currentPosition.lat, currentPosition.lng], [lat, lng]) > 30) cancelDiscovery();
+  if (refreshRoute && !searchedStart && currentPosition && map.distance([currentPosition.lat, currentPosition.lng], [lat, lng]) > 30) cancelDiscovery();
   currentPosition = { lat, lng };
+  locationPermissionDenied = false;
   const point = [lat, lng];
   if (Number.isFinite(accuracy) && accuracy >= 0) {
     if (locationAccuracyCircle) {
@@ -731,10 +852,11 @@ function showCurrentLocation(position, { center = true, keepZoom = routeEnabled 
     }).addTo(map);
   }
   currentLocationMarker.bringToFront();
+  renderCurrentHeading();
   ui["location-legend"].hidden = false;
   if (center) focusPlace({ lat, lng }, { keepZoom });
   message(ui["location-status"], "");
-  if (!searchedStart) {
+  if (!searchedStart && (refreshRoute || (routeAwaitingLocation && !locating))) {
     routeAwaitingLocation = false;
     routePointsChanged();
   }
@@ -746,6 +868,7 @@ function showCurrentLocation(position, { center = true, keepZoom = routeEnabled 
 }
 
 function locationFailed(error) {
+  locationPermissionDenied = error.code === 1;
   recenterWhenLocated = false;
   setLocationBusy(false);
   const reasons = {
@@ -758,7 +881,48 @@ function locationFailed(error) {
   routeLocationFailed();
 }
 
-function requestCurrentLocation({ initial = false, recenter = false } = {}) {
+function stopWatchingLocation() {
+  if (locationWatchId === null) return;
+  navigator.geolocation.clearWatch(locationWatchId);
+  locationWatchId = null;
+}
+
+function startWatchingLocation() {
+  if (locationWatchId !== null || window.isSecureContext === false || !navigator.geolocation?.watchPosition) return;
+  try {
+    locationWatchId = navigator.geolocation.watchPosition((position) => {
+      // Update the blue marker without moving the user's view or restarting routes/searches.
+      showCurrentLocation(position, { center: false, refreshRoute: false });
+    }, (error) => {
+      if (error.code === 1) stopWatchingLocation();
+      if (!locating) locationFailed(error);
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  } catch (error) {
+    if (!locating) locationFailed(error);
+  }
+}
+
+window.addEventListener("pagehide", stopWatchingLocation);
+function resumeLocationUpdates() {
+  if (document.hidden) return;
+  if (locationPermissionDenied) requestCurrentLocation({ preserveView: true });
+  else if (currentPosition) startWatchingLocation();
+}
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) resumeLocationUpdates();
+});
+document.addEventListener("visibilitychange", resumeLocationUpdates);
+
+if (window.isSecureContext !== false && navigator.permissions?.query) {
+  navigator.permissions.query({ name: "geolocation" }).then((permission) => {
+    permission.addEventListener("change", () => {
+      if (permission.state === "granted" && locationPermissionDenied) resumeLocationUpdates();
+    });
+  }).catch(() => { /* Resume on returning to the page if permission monitoring is unavailable. */ });
+}
+
+function requestCurrentLocation({ initial = false, recenter = false, preserveView = false } = {}) {
   recenterWhenLocated ||= recenter;
   if (locating) return;
   if (window.isSecureContext === false) {
@@ -786,10 +950,14 @@ function requestCurrentLocation({ initial = false, recenter = false } = {}) {
       const requestedRecenter = recenterWhenLocated;
       recenterWhenLocated = false;
       showCurrentLocation(position, {
-        center: requestedRecenter || (!forRoute && viewUnchanged),
+        center: requestedRecenter || (!preserveView && !forRoute && viewUnchanged),
         keepZoom: requestedRecenter || routeEnabled,
       });
-    }, locationFailed, {
+      startWatchingLocation();
+    }, (error) => {
+      locationFailed(error);
+      if (error.code !== 1) startWatchingLocation();
+    }, {
       enableHighAccuracy: true, timeout: 15000, maximumAge: 0,
     });
   } catch (error) {
@@ -800,6 +968,107 @@ function requestCurrentLocation({ initial = false, recenter = false } = {}) {
 ui["location-button"].addEventListener("click", () => {
   if (currentPosition) focusPlace(currentPosition, { keepZoom: true });
   requestCurrentLocation({ recenter: true });
+});
+
+function clearNearbyConvenience() {
+  nearbyConvenienceRequest?.controller.abort();
+  nearbyConvenienceRequest = null;
+  nearbyConvenienceMarkers.clearLayers();
+  ui["nearby-convenience"].disabled = false;
+  ui["nearby-convenience"].removeAttribute("aria-busy");
+  ui["clear-nearby-convenience"].hidden = true;
+  ui["convenience-legend"].hidden = true;
+  message(ui["nearby-convenience-status"], "");
+}
+
+function nearbyConveniencePlaces(elements, origin) {
+  const places = [];
+  for (const element of elements) {
+    if (!element || typeof element !== "object") continue;
+    const tags = element.tags || {};
+    if (tags.shop !== "convenience" || ["private", "no"].includes(tags.access)
+      || tags.opening_hours === "closed" || tags.disused === "yes" || tags.abandoned === "yes") continue;
+    const lat = element.lat ?? element.center?.lat, lng = element.lon ?? element.center?.lon;
+    if (!validCoordinates(lat, lng)) continue;
+    const distance = map.distance([origin.lat, origin.lng], [lat, lng]);
+    if (distance > NEARBY_CONVENIENCE_RADIUS) continue;
+    const name = String(tags["name:ja"] || tags.name || tags["brand:ja"] || tags.brand || "コンビニ").trim().slice(0, 120) || "コンビニ";
+    const key = name.normalize("NFKC").replace(/\s/g, "").toLowerCase();
+    if (places.some((place) => place.key === key && map.distance([lat, lng], [place.lat, place.lng]) < 20)) continue;
+    const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"],
+      tags["addr:street"], tags["addr:housenumber"]].filter((value) => typeof value === "string" && value))].join("、");
+    places.push({ name, key, address, lat, lng, distance });
+  }
+  return places.sort((a, b) => a.distance - b.distance).slice(0, 200);
+}
+
+function showNearbyConvenience(places) {
+  nearbyConvenienceMarkers.clearLayers();
+  const pane = map.getPane("nearbyStores") || map.createPane("nearbyStores");
+  pane.style.zIndex = "390";
+  const icon = L.divIcon({
+    className: "nearby-store-marker", iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -16],
+    html: '<span class="nearby-store-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 10v10h16V10M3 10l2-6h14l2 6Z M9 20v-6h6v6 M8 4l-1 6 M16 4l1 6"/></svg></span>',
+  });
+  for (const place of places) {
+    const popup = document.createElement("div");
+    popup.append(textElement("strong", place.name));
+    if (place.address) popup.append(textElement("p", place.address));
+    popup.append(destinationButton(place));
+    L.marker([place.lat, place.lng], { icon, pane: "nearbyStores", title: place.name,
+      alt: place.name, bubblingMouseEvents: false }).addTo(nearbyConvenienceMarkers)
+      .bindTooltip(textElement("span", place.name)).bindPopup(popup, { autoPan: false });
+  }
+  ui["convenience-legend"].hidden = places.length === 0;
+}
+
+async function searchNearbyConvenience() {
+  clearNearbyConvenience();
+  const useCurrentLocation = Boolean(currentPosition);
+  const point = currentPosition || map.getCenter();
+  const origin = { lat: point.lat, lng: ((point.lng + 180) % 360 + 360) % 360 - 180 };
+  const request = { controller: new AbortController() };
+  nearbyConvenienceRequest = request;
+  ui["nearby-convenience"].disabled = true;
+  ui["nearby-convenience"].setAttribute("aria-busy", "true");
+  ui["clear-nearby-convenience"].hidden = false;
+  message(ui["nearby-convenience-status"], "検索中…");
+  if (useCurrentLocation) focusPlace(origin, { keepZoom: true });
+  const key = `${origin.lat.toFixed(6)},${origin.lng.toFixed(6)}`;
+  try {
+    let cached = nearbyConvenienceCache.get(key);
+    if (!cached || Date.now() - cached.at > 600000) {
+      const query = `[out:json][timeout:12];nwr(around:${NEARBY_CONVENIENCE_RADIUS},${key})`
+        + '[shop="convenience"][access!~"^(private|no)$"][opening_hours!="closed"]'
+        + '[disused!="yes"][abandoned!="yes"];out body center 200;';
+      const elements = await fetchDiscoveryMapData(query, request, 18000, false);
+      if (nearbyConvenienceRequest !== request) return;
+      cached = { at: Date.now(), places: nearbyConveniencePlaces(elements, origin) };
+      if (nearbyConvenienceCache.size >= 10) nearbyConvenienceCache.delete(nearbyConvenienceCache.keys().next().value);
+      nearbyConvenienceCache.set(key, cached);
+    }
+    if (nearbyConvenienceRequest !== request) return;
+    showNearbyConvenience(cached.places);
+    const area = useCurrentLocation ? "現在地" : "地図の中心";
+    message(ui["nearby-convenience-status"], cached.places.length
+      ? `${area}から1km以内：${cached.places.length}件` : `${area}から1km以内に見つかりませんでした。`);
+  } catch (error) {
+    if (nearbyConvenienceRequest === request && error.name !== "AbortError") {
+      message(ui["nearby-convenience-status"], "検索できませんでした。もう一度お試しください。", true);
+    }
+  } finally {
+    if (nearbyConvenienceRequest === request) {
+      nearbyConvenienceRequest = null;
+      ui["nearby-convenience"].disabled = false;
+      ui["nearby-convenience"].removeAttribute("aria-busy");
+    }
+  }
+}
+
+ui["nearby-convenience"].addEventListener("click", searchNearbyConvenience);
+ui["clear-nearby-convenience"].addEventListener("click", () => {
+  clearNearbyConvenience();
+  ui["nearby-convenience"].focus({ preventScroll: true });
 });
 
 function setDestination(place) {
@@ -901,9 +1170,22 @@ function clearRouteDisplay() {
   ui["route-panel"].hidden = true;
 }
 
+function setRouteDetailsOpen(open, focus = false) {
+  ui["route-details-content"].hidden = !open;
+  ui["toggle-route-details"].hidden = !routeEnabled;
+  ui["toggle-route-details"].textContent = open ? "詳細を閉じる" : "ルート詳細";
+  ui["toggle-route-details"].setAttribute("aria-expanded", String(open));
+  if (focus) ui["toggle-route-details"].focus({ preventScroll: true });
+}
+
+ui["toggle-route-details"].addEventListener("click", () => {
+  setRouteDetailsOpen(ui["route-details-content"].hidden);
+});
+
 function stopWalkingRoute() {
   const focusWasInside = ui["route-panel"].contains(document.activeElement);
   routeEnabled = false;
+  setRouteDetailsOpen(true);
   routeAwaitingLocation = false;
   selectedRouteKind = "standard";
   cancelRouteRequest();
@@ -922,6 +1204,7 @@ function routeLocationFailed() {
   if (!routeAwaitingLocation) return;
   routeAwaitingLocation = false;
   routeEnabled = false;
+  setRouteDetailsOpen(true);
   cancelRouteRequest();
   setRouteBusy(false);
   message(ui["route-status"], "現在地を取得できませんでした。位置情報の設定を確認して、もう一度ルートを表示してください。", true);
@@ -1092,7 +1375,7 @@ function displayWalkingRoute(route, kind = "standard") {
   renderRouteChoices();
   message(ui["route-status"], "");
   // A background route update must not close the tool the user is editing.
-  closeOverlappingTools(ui["route-panel"], true);
+  if (!ui["route-details-content"].hidden) closeOverlappingTools(ui["route-panel"], true);
 }
 
 function requestWalkingRoute() {
@@ -1408,9 +1691,11 @@ async function fetchWalkingRoute(start, end, version) {
     }
     if (!isCurrent()) return;
     message(ui["route-status"], routeLayer ? "" : "ルートを取得できませんでした。目的地や通信状況を確認し、もう一度お試しください。", !routeLayer);
+    if (!routeLayer) setRouteDetailsOpen(true);
   } catch (error) {
     if (isCurrent()) {
       message(ui["route-status"], routeErrorMessage(error), true);
+      if (!routeLayer) setRouteDetailsOpen(true);
     }
   } finally {
     clearTimeout(request.timeout);
@@ -1423,7 +1708,12 @@ async function fetchWalkingRoute(start, end, version) {
 
 ui["route-button"].addEventListener("click", () => {
   if (!destination || ui["route-button"].disabled) return;
+  const starting = !routeEnabled;
   routeEnabled = true;
+  if (starting) {
+    const compact = window.matchMedia("(max-width: 680px), (max-height: 480px)").matches;
+    setRouteDetailsOpen(!compact, compact);
+  }
   if (searchedStart) {
     routeAwaitingLocation = false;
     requestWalkingRoute();
@@ -2543,6 +2833,7 @@ map.on("click", ({ latlng }) => {
     setStartPoint(place, { moveMap: false });
     return;
   }
+  if (!panelIsOpen()) return;
   selectPlace(place, null, false);
 });
 renderVisits();
