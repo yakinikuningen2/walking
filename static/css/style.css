@@ -215,7 +215,7 @@ label { display: block; margin: 12px 0 6px; font-size: 12px; font-weight: 600; }
 #destination-name { margin: 0; font-size: 14px; font-weight: 600; }
 #destination-address { margin: 6px 0 0; }
 .destination-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-#clear-destination, #route-button, #clear-route { padding: 6px 9px; font-size: 12px; }
+#clear-destination, #route-button, #scenic-route-button, #roundtrip-route-button, #clear-route { padding: 6px 9px; font-size: 12px; }
 .route-panel { width: 100%; padding: 10px; background: #fffefa; color: #000; overflow-wrap: anywhere; }
 #route-heading { margin: 0 0 6px; font-size: 14px; }
 #route-summary { margin: 0 0 8px; font-size: 13px; line-height: 1.6; }

@@ -161,6 +161,10 @@ const ROUTE_KINDS = [
   { id: "gentle", label: "坂道少なめ", detail: "坂道・階段をなるべく避けるルート", color: "#8250b5" },
   { id: "convenience", label: "コンビニが多い道", detail: "コンビニがある道を経由するルート", color: "#b96b16" },
   { id: "nature", label: "自然を楽しむ", detail: "公園・緑地内の歩道を経由するルート", color: "#41834b" },
+  { id: "ors_standard", label: "短めの道", detail: "", color: "#365c96" },
+  { id: "scenic", label: "景色を楽しむ", detail: "", color: "#bf4777" },
+  { id: "roundtrip", label: "出発地点に戻る", detail: "", color: "#168787" },
+  { id: "roundtrip_scenic", label: "景色を楽しんで戻る", detail: "", color: "#854a21" },
 ];
 const countryNames = new Intl.DisplayNames(["ja"], { type: "region", fallback: "none" });
 const VISITS_KEY = "walking.visits.v1";
@@ -183,6 +187,7 @@ const ui = Object.fromEntries([
   "start-search-form", "start-search-input", "start-search-button", "start-search-status", "start-search-results",
   "route-button", "route-status", "route-panel", "route-summary", "route-directions",
   "route-steps", "clear-route", "route-options", "route-choice-note",
+  "scenic-route-button", "roundtrip-route-button",
   "toggle-route-details", "route-details-content",
   "discovery-screen", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
   "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
@@ -219,6 +224,9 @@ let destination = null;
 let destinationMarker = null;
 let destinationIconMarker = null;
 let routeEnabled = false;
+let walkingRouteMode = "standard";
+let roundTripOrigin = null;
+let routeContext = null;
 let routeAwaitingLocation = false;
 let routeLayer = null;
 const routeLayers = new Map();
@@ -228,6 +236,7 @@ let routeVersion = 0;
 let lastRouteAt = -Infinity;
 let routeTurn = Promise.resolve();
 let routeAttributionAdded = false;
+let orsAttributionAdded = false;
 let routeChoices = new Map();
 let selectedRouteKind = "standard";
 let activeRouteKind = null;
@@ -629,6 +638,7 @@ function setStartPickerOpen(open, focus = true) {
 }
 
 function startPointChanged() {
+  roundTripOrigin = null;
   cancelDiscovery();
   routeAwaitingLocation = routeEnabled && !getStartPoint();
   routePointsChanged();
@@ -1137,8 +1147,8 @@ function destinationButton(place) {
 }
 
 function setRouteBusy(busy) {
-  ui["route-button"].disabled = busy;
-  ui["route-button"].textContent = busy ? "取得中…" : routeLayer ? "ルートを更新" : "徒歩ルートを表示";
+  for (const id of ["route-button", "scenic-route-button", "roundtrip-route-button"]) ui[id].disabled = busy;
+  ui["route-button"].textContent = busy ? "取得中…" : routeLayer && walkingRouteMode === "standard" ? "ルートを更新" : "徒歩ルートを表示";
   if (busy) ui["route-button"].setAttribute("aria-busy", "true");
   else ui["route-button"].removeAttribute("aria-busy");
 }
@@ -1185,6 +1195,9 @@ ui["toggle-route-details"].addEventListener("click", () => {
 function stopWalkingRoute() {
   const focusWasInside = ui["route-panel"].contains(document.activeElement);
   routeEnabled = false;
+  walkingRouteMode = "standard";
+  roundTripOrigin = null;
+  routeContext = null;
   setRouteDetailsOpen(true);
   routeAwaitingLocation = false;
   selectedRouteKind = "standard";
@@ -1234,6 +1247,7 @@ function routeDuration(seconds) {
 }
 
 function walkingInstruction(step) {
+  if (typeof step.instruction === "string" && step.instruction) return step.instruction;
   const maneuver = step.maneuver;
   if (maneuver.type === "arrive") return "目的地に到着";
   const directions = {
@@ -1344,6 +1358,7 @@ function renderRouteChoices() {
     button.setAttribute("aria-pressed", String(selected));
     button.querySelector(".route-option-selected").textContent = selected ? "選択中" : "";
     button.querySelector(".route-option-detail").textContent = `${routeDistance(choice.route.distance)} ／ 約${routeDuration(choice.route.duration)}`
+      + (choice.route.roundTrip ? " ／ 往復・周回" : "")
       + (choice.convenienceCount > 0 ? ` ／ コンビニ${choice.convenienceCount}件` : "");
   }
 }
@@ -1359,7 +1374,7 @@ function displayWalkingRoute(route, kind = "standard") {
   activeRouteKind = kind;
   syncRouteLayers();
   const speed = currentWalkingSpeed();
-  ui["route-summary"].textContent = `距離 ${routeDistance(route.distance)} ／ 徒歩 約${routeDuration(route.duration)}（${speed.label ? `${speed.label}・` : ""}時速${speed.kmh} km）`;
+  ui["route-summary"].textContent = `${route.roundTrip ? "往復・周回 " : ""}距離 ${routeDistance(route.distance)} ／ 徒歩 約${routeDuration(route.duration)}（${speed.label ? `${speed.label}・` : ""}時速${speed.kmh} km）`;
   ui["route-steps"].replaceChildren();
   for (const step of route.steps) {
     const item = textElement("li", walkingInstruction(step));
@@ -1378,21 +1393,29 @@ function displayWalkingRoute(route, kind = "standard") {
   if (!ui["route-details-content"].hidden) closeOverlappingTools(ui["route-panel"], true);
 }
 
-function requestWalkingRoute() {
+function requestWalkingRoute({ preserveRoutes = false } = {}) {
   cancelRouteRequest();
-  clearRouteDisplay();
   if (!routeEnabled || !destination || !getStartPoint()) { setRouteBusy(false); return; }
-  const start = { ...getStartPoint() };
+  if (walkingRouteMode === "roundtrip" && !roundTripOrigin) roundTripOrigin = { ...getStartPoint() };
+  const start = { ...(walkingRouteMode === "roundtrip" ? roundTripOrigin : getStartPoint()) };
   const end = { ...destination };
+  const speed = currentWalkingSpeed().kmh;
+  const samePoints = routeContext && routeContext.speed === speed
+    && map.distance([start.lat, start.lng], [routeContext.start.lat, routeContext.start.lng]) < 30
+    && map.distance([end.lat, end.lng], [routeContext.end.lat, routeContext.end.lng]) < 1;
+  if (!preserveRoutes || !samePoints) clearRouteDisplay();
+  routeContext = { start, end, speed };
   const version = routeVersion;
   setRouteBusy(true);
   renderRouteChoices();
   message(ui["route-status"], "ルートを検索しています…");
   const wait = Math.max(0, 1000 - (Date.now() - lastRouteAt));
-  routeTimer = setTimeout(() => fetchWalkingRoute(start, end, version), wait);
+  const mode = walkingRouteMode;
+  routeTimer = setTimeout(() => fetchWalkingRoute(start, end, version, mode), wait);
 }
 
 function routeErrorMessage(error) {
+  if (error.userMessage) return error.userMessage;
   if (error.name === "AbortError") return "取得に時間がかかっています。更新してお試しください。";
   if (["NoRoute", "NoSegment", 171, 172, 442].includes(error.routeCode)) return "徒歩で通れるルートが見つかりませんでした。";
   return "取得できませんでした。通信を確認して更新してください。";
@@ -1640,13 +1663,77 @@ async function findConvenienceRoute(start, end, stores, reference, speed, reques
   return best;
 }
 
-async function fetchWalkingRoute(start, end, version) {
+async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent) {
+  const endpoint = MAP_PROXY_ENDPOINT ? new URL("/api/walking-routes", MAP_PROXY_ENDPOINT)
+    : new URL("/api/walking-routes", window.location.href);
+  request.timeout = setTimeout(() => request.controller.abort(), 90000);
+  let response;
+  try {
+    response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" },
+      signal: request.controller.signal,
+      body: JSON.stringify({ start: { lat: start.lat, lng: start.lng }, destination: { lat: end.lat, lng: end.lng },
+        mode, speed_kmh: currentWalkingSpeed().kmh }) });
+  } catch (error) {
+    if (error.name !== "AbortError") error.userMessage = "Pythonサーバーに接続できません。app.pyを起動してください。";
+    throw error;
+  }
+  let data;
+  try { data = await response.json(); }
+  catch { throw Object.assign(new Error("Invalid server response"), { userMessage: "Pythonサーバーを更新して起動し直してください。" }); }
+  if (!response.ok || data.error) throw Object.assign(new Error("Walking route unavailable"), {
+    userMessage: typeof data.error === "string" ? data.error : "ルートを取得できませんでした。" });
+  if (!isCurrent()) return;
+  if (!Array.isArray(data.routes) || !data.routes.length) throw new Error("Missing walking routes");
+  const permitted = mode === "roundtrip" ? ["roundtrip", "roundtrip_scenic"] : ["ors_standard", "scenic"];
+  const added = [];
+  for (const entry of data.routes) {
+    if (!permitted.includes(entry.id)) continue;
+    const route = parseWalkingRoute({ routes: [entry.route] });
+    route.roundTrip = mode === "roundtrip";
+    if ([...routeChoices].some(([id, choice]) => id !== entry.id && Boolean(choice.route.roundTrip) === route.roundTrip
+      && routesEquivalent(choice.route, route))) continue;
+    routeLayers.get(entry.id)?.remove();
+    routeLayers.delete(entry.id);
+    routeChoices.set(entry.id, { route, detail: typeof entry.detail === "string" ? entry.detail : "" });
+    added.push(entry.id);
+  }
+  const preferred = [...added].reverse()[0];
+  if (preferred) {
+    selectedRouteKind = preferred;
+    displayWalkingRoute(routeChoices.get(preferred).route, preferred);
+  }
+  renderRouteChoices();
+  const warnings = Array.isArray(data.warnings) ? data.warnings.filter((item) => typeof item === "string") : [];
+  if (!added.length) warnings.push("別の道を通る候補は見つかりませんでした。");
+  message(ui["route-status"], warnings.join(" "));
+  if (warnings.length) setRouteDetailsOpen(true);
+  if (!orsAttributionAdded) {
+    map.attributionControl.addAttribution('ルート候補: <a href="https://openrouteservice.org/">openrouteservice / HeiGIT</a>');
+    orsAttributionAdded = true;
+  }
+}
+
+async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode) {
   routeTimer = null;
   if (!routeEnabled || version !== routeVersion) return;
   const controller = new AbortController();
   const request = { controller };
   routeRequest = request;
   const isCurrent = () => routeEnabled && routeRequest === request && version === routeVersion;
+  if (mode !== "standard") {
+    try {
+      await fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent);
+    } catch (error) {
+      if (isCurrent()) {
+        message(ui["route-status"], routeErrorMessage(error), true);
+        setRouteDetailsOpen(true);
+      }
+    } finally {
+      clearTimeout(request.timeout);
+      if (routeRequest === request) { routeRequest = null; setRouteBusy(false); }
+    }
+    return;
+  }
   if (!routeAttributionAdded) {
     map.attributionControl.addAttribution('ルート: <a href="https://valhalla.openstreetmap.de/">Valhalla / FOSSGIS</a>・周辺情報: <a href="https://overpass.private.coffee/">Overpass</a> | <a href="https://www.openstreetmap.org/fixthemap">地図の修正</a>');
     routeAttributionAdded = true;
@@ -1655,6 +1742,7 @@ async function fetchWalkingRoute(start, end, version) {
     const speed = currentWalkingSpeed().kmh;
     let stores = null;
     for (const kind of ROUTE_KINDS) {
+      if (!["standard", "gentle", "convenience", "nature"].includes(kind.id)) continue;
       if (!isCurrent()) return;
       try {
         let via = null;
@@ -1706,17 +1794,21 @@ async function fetchWalkingRoute(start, end, version) {
   }
 }
 
-ui["route-button"].addEventListener("click", () => {
+function beginWalkingRoute(mode) {
   if (!destination || ui["route-button"].disabled) return;
   const starting = !routeEnabled;
+  if (mode !== walkingRouteMode) {
+    roundTripOrigin = mode === "roundtrip" && routeContext ? { ...routeContext.start } : null;
+  }
+  walkingRouteMode = mode;
   routeEnabled = true;
   if (starting) {
     const compact = window.matchMedia("(max-width: 680px), (max-height: 480px)").matches;
     setRouteDetailsOpen(!compact, compact);
   }
-  if (searchedStart) {
+  if (searchedStart || (mode !== "standard" && getStartPoint())) {
     routeAwaitingLocation = false;
-    requestWalkingRoute();
+    requestWalkingRoute({ preserveRoutes: true });
     return;
   }
   routeAwaitingLocation = true;
@@ -1725,7 +1817,10 @@ ui["route-button"].addEventListener("click", () => {
   setRouteBusy(true);
   message(ui["route-status"], "");
   requestCurrentLocation();
-});
+}
+ui["route-button"].addEventListener("click", () => beginWalkingRoute("standard"));
+ui["scenic-route-button"].addEventListener("click", () => beginWalkingRoute("scenic"));
+ui["roundtrip-route-button"].addEventListener("click", () => beginWalkingRoute("roundtrip"));
 ui["clear-route"].addEventListener("click", stopWalkingRoute);
 
 ui["set-destination"].addEventListener("click", () => {

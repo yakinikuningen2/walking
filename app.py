@@ -11,10 +11,12 @@ from urllib.parse import urlsplit
 import argparse
 import json
 import mimetypes
+import os
 import socket
 import time
 
 import requests
+from walking_routes import RouteError, walking_suggestions
 
 
 ROOT = Path(__file__).resolve().parent
@@ -28,6 +30,21 @@ CACHE_LIMIT = 32
 _CACHE = OrderedDict()
 _CACHE_LOCK = Lock()
 _SESSIONS = local()
+
+
+def allowed_origin(value):
+    """Keep local previews working; allow only the explicitly configured public HTTPS origin."""
+    try:
+        origin = urlsplit(value)
+        if origin.username or origin.password or origin.path not in ("", "/") or origin.query or origin.fragment:
+            return False
+        if origin.scheme in ("http", "https") and origin.hostname in ("localhost", "127.0.0.1", "::1"):
+            return True
+        public = urlsplit(os.environ.get("WALKING_PUBLIC_ORIGIN", "").strip())
+        return bool(public.hostname and public.scheme == "https" and origin.scheme == "https"
+                    and origin.hostname == public.hostname and (origin.port or 443) == (public.port or 443))
+    except ValueError:
+        return False
 
 
 class WalkingServer(ThreadingHTTPServer):
@@ -81,8 +98,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
     def end_headers(self):
         self.send_header("X-Walking-Map", "1")
         origin = self.headers.get("Origin", "")
-        parsed = urlsplit(origin)
-        if parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1", "::1"):
+        if origin and allowed_origin(origin):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
@@ -108,7 +124,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
             pass  # The browser may have cancelled this search.
 
     def do_OPTIONS(self):
-        if urlsplit(self.path).path != "/api/overpass":
+        if urlsplit(self.path).path not in ("/api/overpass", "/api/walking-routes"):
             self.send_json({"error": "Not found"}, 404)
             return
         self.send_response(204)
@@ -154,18 +170,28 @@ class WalkingHandler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_POST(self):
-        if urlsplit(self.path).path != "/api/overpass":
+        path = urlsplit(self.path).path
+        if path not in ("/api/overpass", "/api/walking-routes"):
             self.send_json({"error": "Not found"}, 404)
             return
-        origin = urlsplit(self.headers.get("Origin", ""))
-        if origin.scheme and (origin.scheme != "http" or origin.hostname not in ("localhost", "127.0.0.1", "::1")):
-            self.send_json({"error": "Local browser origins only"}, 403)
+        origin = self.headers.get("Origin", "")
+        if origin and not allowed_origin(origin):
+            self.send_json({"error": "Browser origin is not allowed"}, 403)
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > 262144:
+            if length <= 0 or length > (8192 if path == "/api/walking-routes" else 262144):
                 raise ValueError("Invalid body size")
             payload = json.loads(self.rfile.read(length))
+            if path == "/api/walking-routes":
+                try:
+                    self.send_json(walking_suggestions(payload, map_data))
+                except RouteError as error:
+                    self.send_json({"error": error.message, "code": error.code}, error.status)
+                except Exception:
+                    # Neither exception details nor upstream responses may expose credentials.
+                    self.send_json({"error": "ルートの情報を取得できませんでした。", "code": "ROUTE_INTERNAL_ERROR"}, 502)
+                return
             query = payload["query"]
             provider = payload.get("provider", 0)
             timeout_ms = payload.get("timeout_ms", 60000)
