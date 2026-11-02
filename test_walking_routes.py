@@ -92,6 +92,39 @@ class WalkingRoutesTest(unittest.TestCase):
             self.assertEqual(route["legs"][-1]["steps"][-1]["instruction"], "出発地点に戻る")
 
     @patch.object(routes, "_request_ors", side_effect=ors_response)
+    def test_roundtrip_reroutes_from_current_position_to_original_start(self, upstream):
+        current = {"lat": 35.684, "lng": 139.765}
+        payload = {**self.payload("roundtrip"), "start": current, "return_to": START}
+        routes.walking_suggestions(payload, map_response)
+        for call in upstream.call_args_list:
+            self.assertEqual(call.args[0][0], current)
+            self.assertEqual(call.args[0][1], END)
+            self.assertEqual(call.args[0][-1], START)
+        upstream.reset_mock()
+        result = routes.walking_suggestions({**payload, "destination_reached": True}, map_response)
+        self.assertEqual(result["return_to"], START)
+        self.assertTrue(result["destination_reached"])
+        for call in upstream.call_args_list:
+            self.assertEqual(call.args[0][0], current)
+            self.assertEqual(call.args[0][-1], START)
+            self.assertNotIn(END, call.args[0])
+        self.assertEqual(result["routes"][0]["route"]["legs"][-1]["steps"][-1]["instruction"], "出発地点に戻る")
+        self.assertEqual(result["routes"][1]["route"]["legs"][0]["steps"][-1]["instruction"], "経由地点に到着")
+
+    @patch.object(routes, "_request_ors", side_effect=ors_response)
+    def test_roundtrip_cache_separates_return_points_and_validates_state(self, upstream):
+        current = {"lat": 35.684, "lng": 139.765}
+        payload = {**self.payload("roundtrip"), "start": current, "return_to": START}
+        routes.walking_suggestions(payload, map_response)
+        routes.walking_suggestions({**payload, "return_to": {"lat": 35.67, "lng": 139.75}}, map_response)
+        self.assertEqual(upstream.call_count, 4)
+        upstream.reset_mock()
+        for change in [{"return_to": None}, {"destination_reached": "true"}]:
+            with self.assertRaises(routes.RouteError):
+                routes.walking_suggestions({**payload, **change}, map_response)
+        upstream.assert_not_called()
+
+    @patch.object(routes, "_request_ors", side_effect=ors_response)
     def test_speed_and_cache(self, upstream):
         slow = routes.walking_suggestions(self.payload(speed=3), map_response)
         routes.walking_suggestions(self.payload(speed=3), map_response)
