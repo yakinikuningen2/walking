@@ -29,6 +29,67 @@ def map_response(*_args):
 
 
 class WalkingRoutesTest(unittest.TestCase):
+    def test_local_binding_and_cli_override(self):
+        with patch.dict(os.environ, {}, clear=True):
+            options = app.server_options([])
+            self.assertEqual((options.host, options.port), ("127.0.0.1", 8000))
+            options = app.server_options(["--host", "0.0.0.0", "--port", "8123"])
+            self.assertEqual((options.host, options.port), ("0.0.0.0", 8123))
+        with patch.dict(os.environ, {"PORT": "10000"}, clear=True):
+            options = app.server_options([])
+            self.assertEqual((options.host, options.port), ("127.0.0.1", 10000))
+            self.assertEqual(app.server_options(["--port", "8123"]).port, 8123)
+
+    def test_render_forces_public_host_and_environment_port(self):
+        markers = [{"RENDER": value} for value in ("true", "True", " TRUE ", "1")]
+        markers += [{"RENDER_SERVICE_ID": "srv-test"},
+                    {"RENDER_EXTERNAL_URL": "https://walking-test.onrender.com"},
+                    {"RENDER_EXTERNAL_HOSTNAME": "walking-test.onrender.com"},
+                    {"RENDER": "false", "RENDER_SERVICE_ID": "srv-test"}]
+        for marker in markers:
+            with self.subTest(marker=marker), patch.dict(os.environ, {**marker, "PORT": "10000"}, clear=True):
+                for argv in ([], ["--host", "127.0.0.1", "--port", "8123"]):
+                    options = app.server_options(argv)
+                    self.assertEqual((options.host, options.port), ("0.0.0.0", 10000))
+        with patch.dict(os.environ, {"RENDER": "true"}, clear=True):
+            self.assertEqual(app.server_options([]).port, 10000)
+
+    def test_invalid_render_port_fails_instead_of_using_cli_port(self):
+        for port in ("not-a-port", "0", "65536"):
+            with self.subTest(port=port), patch.dict(os.environ, {"RENDER": "true", "PORT": port}, clear=True), patch("sys.stderr"):
+                with self.assertRaises(SystemExit) as error:
+                    app.server_options(["--port", "8123"])
+                self.assertEqual(error.exception.code, 2)
+
+    def test_main_binds_to_selected_public_address(self):
+        with patch.dict(os.environ, {"RENDER": "true", "PORT": "10000"}, clear=True):
+            options = app.server_options(["--host", "127.0.0.1"])
+        server = MagicMock()
+        server.server_port = 10000
+        server.serve_forever.side_effect = KeyboardInterrupt()
+        with patch.object(app, "server_options", return_value=options), \
+             patch.object(app, "WalkingServer", return_value=server) as factory, patch("builtins.print"):
+            app.main()
+        factory.assert_called_once_with(("0.0.0.0", 10000), app.WalkingHandler)
+        server.server_close.assert_called_once()
+
+    def test_server_bind_failure_reports_original_error(self):
+        options = app.server_options(["--host", "127.0.0.1", "--port", "8123"])
+        with patch.object(app, "server_options", return_value=options), \
+             patch.object(app, "WalkingServer", side_effect=OSError("port already in use")):
+            with self.assertRaises(SystemExit) as error:
+                app.main()
+        self.assertIn("port already in use", str(error.exception.code))
+
+    def test_render_public_origin_and_custom_domain_override(self):
+        with patch.dict(os.environ, {"WALKING_PUBLIC_ORIGIN": "", "RENDER_EXTERNAL_URL": "https://walking-test.onrender.com"}):
+            self.assertTrue(app.allowed_origin("https://walking-test.onrender.com"))
+            self.assertFalse(app.allowed_origin("https://another-app.onrender.com"))
+            self.assertFalse(app.allowed_origin("http://walking-test.onrender.com"))
+            with patch.dict(os.environ, {"WALKING_PUBLIC_ORIGIN": "https://walk.example"}):
+                self.assertTrue(app.allowed_origin("https://walk.example"))
+                self.assertFalse(app.allowed_origin("https://walking-test.onrender.com"))
+
     def test_public_origin_is_explicit_https_only(self):
         with patch.dict(os.environ, {"WALKING_PUBLIC_ORIGIN": "https://walking.example"}):
             self.assertTrue(app.allowed_origin("https://walking.example"))

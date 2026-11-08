@@ -1,0 +1,1934 @@
+{
+  "version": 1,
+  "updated": "2026-11-06",
+  "attribution": "地点名・分類：日本さくらの会、Wikipedia各記事、GO TOKYO。座標：Wikipedia各記事・Wikidata（CC0）。記事本文は収録せず、掲載地点の事実情報のみ使用。",
+  "sources": {
+    "cherry_list": "https://ja.wikipedia.org/wiki/%E6%97%A5%E6%9C%AC%E3%81%95%E3%81%8F%E3%82%89%E5%90%8D%E6%89%80100%E9%81%B8",
+    "autumn_list": "https://ja.wikipedia.org/wiki/%E6%97%A5%E6%9C%AC%E7%B4%85%E8%91%89%E3%81%AE%E5%90%8D%E6%89%80100%E9%81%B8",
+    "sakura_association": "https://www.sakuranokai.or.jp/information/",
+    "tokyo_autumn": "https://www.gotokyo.org/jp/story/guide/autumn-leaves-forecast/",
+    "wikidata": "https://www.wikidata.org/wiki/Wikidata:Licensing"
+  },
+  "places": [
+    {
+      "id": "1426794",
+      "name": "松前公園",
+      "lat": 41.430325,
+      "lng": 140.1086,
+      "address": "松前町",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%9D%BE%E5%89%8D%E5%9F%8E"
+    },
+    {
+      "id": "718232",
+      "name": "弘前公園",
+      "lat": 40.6080278,
+      "lng": 140.4638056,
+      "address": "青森県弘前市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%BC%98%E5%89%8D%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "982292",
+      "name": "北上市立公園展勝地",
+      "lat": 39.2809917,
+      "lng": 141.12925,
+      "address": "岩手県北上市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%8C%97%E4%B8%8A%E5%B8%82%E7%AB%8B%E5%85%AC%E5%9C%92%E5%B1%95%E5%8B%9D%E5%9C%B0"
+    },
+    {
+      "id": "364547",
+      "name": "船岡城址公園・白石川堤",
+      "lat": 38.0535,
+      "lng": 140.75494,
+      "address": "宮城県大河原町・柴田町",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%88%B9%E5%B2%A1%E5%9F%8E"
+    },
+    {
+      "id": "1449782",
+      "name": "真人公園",
+      "lat": 39.2097222,
+      "lng": 140.5730556,
+      "address": "秋田県横手市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%9C%9F%E4%BA%BA%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "1938635",
+      "name": "鶴岡公園",
+      "lat": 38.7281667,
+      "lng": 139.8254167,
+      "address": "山形県鶴岡市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%B6%B4%E5%B2%A1%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "2458980",
+      "name": "烏帽子山公園",
+      "lat": 38.0511389,
+      "lng": 140.1669167,
+      "address": "山形県南陽市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%83%8F%E5%B8%BD%E5%AD%90%E5%B1%B1%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "134626",
+      "name": "鶴ヶ城公園",
+      "lat": 37.4877778,
+      "lng": 139.9297222,
+      "address": "福島県会津若松市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%8B%A5%E6%9D%BE%E5%9F%8E"
+    },
+    {
+      "id": "599639",
+      "name": "霞ヶ城公園",
+      "lat": 37.599642,
+      "lng": 140.427986,
+      "address": "福島県二本松市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BA%8C%E6%9C%AC%E6%9D%BE%E5%9F%8E"
+    },
+    {
+      "id": "281455",
+      "name": "三春町のシダレザクラ",
+      "lat": 37.4080389,
+      "lng": 140.4998278,
+      "address": "福島県三春町",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B8%89%E6%98%A5%E6%BB%9D%E6%A1%9C"
+    },
+    {
+      "id": "335284",
+      "name": "静峰公園",
+      "lat": 36.50133,
+      "lng": 140.41994,
+      "address": "茨城県那珂市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%9D%99%E5%B3%B0%E3%81%B5%E3%82%8B%E3%81%95%E3%81%A8%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "2266825",
+      "name": "桜山公園",
+      "lat": 36.16169,
+      "lng": 139.02117,
+      "address": "群馬県藤岡市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%A1%9C%E5%B1%B1%20%28%E7%BE%A4%E9%A6%AC%E7%9C%8C%29"
+    },
+    {
+      "id": "80772",
+      "name": "大宮公園",
+      "lat": 35.9190222,
+      "lng": 139.6308194,
+      "address": "埼玉県さいたま市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A7%E5%AE%AE%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "247558",
+      "name": "長瀞",
+      "lat": 36.0917833,
+      "lng": 139.1169972,
+      "address": "埼玉県長瀞町",
+      "seasons": [
+        "cherry_blossom",
+        "autumn_leaves"
+      ],
+      "sources": [
+        "cherry_list",
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%95%B7%E7%80%9E%E6%B8%93%E8%B0%B7"
+    },
+    {
+      "id": "3918517",
+      "name": "泉自然公園",
+      "lat": 35.5769444,
+      "lng": 140.2266667,
+      "address": "千葉県千葉市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%B3%89%E8%87%AA%E7%84%B6%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "522593",
+      "name": "清水公園",
+      "lat": 35.9598417,
+      "lng": 139.8498639,
+      "address": "千葉県野田市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%B8%85%E6%B0%B4%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "3918422",
+      "name": "茂原公園",
+      "lat": 35.4305556,
+      "lng": 140.2841667,
+      "address": "千葉県茂原市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%8C%82%E5%8E%9F%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "35618",
+      "name": "新宿御苑",
+      "lat": 35.6852778,
+      "lng": 139.7097222,
+      "address": "東京都新宿区",
+      "seasons": [
+        "cherry_blossom",
+        "autumn_leaves"
+      ],
+      "sources": [
+        "cherry_list",
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%96%B0%E5%AE%BF%E5%BE%A1%E8%8B%91"
+    },
+    {
+      "id": "33752",
+      "name": "上野恩賜公園",
+      "lat": 35.71222,
+      "lng": 139.77111,
+      "address": "東京都台東区",
+      "seasons": [
+        "cherry_blossom",
+        "autumn_leaves"
+      ],
+      "sources": [
+        "cherry_list",
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B8%8A%E9%87%8E%E6%81%A9%E8%B3%9C%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "475145",
+      "name": "隅田公園",
+      "lat": 35.7119444,
+      "lng": 139.8036389,
+      "address": "東京都墨田区",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%9A%85%E7%94%B0%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "103083",
+      "name": "井の頭恩賜公園",
+      "lat": 35.69829,
+      "lng": 139.57147,
+      "address": "東京都武蔵野市",
+      "seasons": [
+        "cherry_blossom",
+        "autumn_leaves"
+      ],
+      "sources": [
+        "cherry_list",
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BA%95%E3%81%AE%E9%A0%AD%E6%81%A9%E8%B3%9C%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "148401",
+      "name": "小金井公園",
+      "lat": 35.7144444,
+      "lng": 139.5188889,
+      "address": "東京都小金井市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B0%8F%E9%87%91%E4%BA%95%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "248220",
+      "name": "神奈川県立三ツ池公園",
+      "lat": 35.5228889,
+      "lng": 139.6603056,
+      "address": "神奈川県横浜市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%A5%9E%E5%A5%88%E5%B7%9D%E7%9C%8C%E7%AB%8B%E4%B8%89%E3%83%84%E6%B1%A0%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "786047",
+      "name": "衣笠山公園",
+      "lat": 35.2502778,
+      "lng": 139.6578889,
+      "address": "神奈川県横須賀市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%A1%A3%E7%AC%A0%E5%B1%B1%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "108699",
+      "name": "小田原城址公園・城山公園",
+      "lat": 35.25075,
+      "lng": 139.1547778,
+      "address": "神奈川県小田原市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B0%8F%E7%94%B0%E5%8E%9F%E5%9F%8E%E5%9D%80%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "3800137",
+      "name": "村松公園",
+      "lat": 37.6928333,
+      "lng": 139.1881667,
+      "address": "新潟県五泉市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%9D%91%E6%9D%BE%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "531989",
+      "name": "高岡古城公園",
+      "lat": 36.749167,
+      "lng": 137.020556,
+      "address": "富山県高岡市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%AB%98%E5%B2%A1%E5%9F%8E"
+    },
+    {
+      "id": "860",
+      "name": "兼六園",
+      "lat": 36.5621389,
+      "lng": 136.6625,
+      "address": "石川県金沢市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%85%BC%E5%85%AD%E5%9C%92"
+    },
+    {
+      "id": "267916",
+      "name": "足羽川・足羽山公園",
+      "lat": 36.0513889,
+      "lng": 136.2005556,
+      "address": "福井県福井市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%B6%B3%E7%BE%BD%E5%B1%B1"
+    },
+    {
+      "id": "189649",
+      "name": "霞ヶ城公園（坂井）",
+      "lat": 36.1523,
+      "lng": 136.2721,
+      "address": "福井県坂井市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B8%B8%E5%B2%A1%E5%9F%8E"
+    },
+    {
+      "id": "2287193",
+      "name": "大法師公園",
+      "lat": 35.5458333,
+      "lng": 138.4555556,
+      "address": "山梨県富士川町",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A7%E6%B3%95%E5%B8%AB%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "1976876",
+      "name": "臥竜公園",
+      "lat": 36.6431944,
+      "lng": 138.3141944,
+      "address": "長野県須坂市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%87%A5%E7%AB%9C%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "108708",
+      "name": "小諸城趾懐古園",
+      "lat": 36.327336,
+      "lng": 138.417247,
+      "address": "長野県小諸市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B0%8F%E8%AB%B8%E5%9F%8E"
+    },
+    {
+      "id": "105526",
+      "name": "高遠城址公園",
+      "lat": 35.8334722,
+      "lng": 138.0623056,
+      "address": "長野県伊那市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%AB%98%E9%81%A0%E5%9F%8E%E5%9D%80%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "840603",
+      "name": "霞間ヶ渓",
+      "lat": 35.4303583,
+      "lng": 136.5486861,
+      "address": "岐阜県池田町",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%9C%9E%E9%96%93%E3%83%B6%E6%B8%93"
+    },
+    {
+      "id": "4327589",
+      "name": "さくらの里",
+      "lat": 34.9069444,
+      "lng": 139.0897222,
+      "address": "静岡県伊東市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E3%81%95%E3%81%8F%E3%82%89%E3%81%AE%E9%87%8C"
+    },
+    {
+      "id": "783418",
+      "name": "冨士霊園",
+      "lat": 35.37278,
+      "lng": 138.91333,
+      "address": "静岡県小山町",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%86%A8%E5%A3%AB%E9%9C%8A%E5%9C%92"
+    },
+    {
+      "id": "473716",
+      "name": "鶴舞公園",
+      "lat": 35.1556667,
+      "lng": 136.9184722,
+      "address": "愛知県名古屋市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%B6%B4%E8%88%9E%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "1654743",
+      "name": "岡崎公園",
+      "lat": 34.9565389,
+      "lng": 137.1593306,
+      "address": "愛知県岡崎市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B2%A1%E5%B4%8E%E5%9F%8E%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "461533",
+      "name": "豊公園",
+      "lat": 35.3775,
+      "lng": 136.2611,
+      "address": "滋賀県長浜市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%95%B7%E6%B5%9C%E5%9F%8E%20%28%E8%BF%91%E6%B1%9F%E5%9B%BD%29"
+    },
+    {
+      "id": "120805",
+      "name": "嵐山",
+      "lat": 35.0095833,
+      "lng": 135.6663889,
+      "address": "京都府京都市",
+      "seasons": [
+        "cherry_blossom",
+        "autumn_leaves"
+      ],
+      "sources": [
+        "cherry_list",
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B5%90%E5%B1%B1"
+    },
+    {
+      "id": "73310",
+      "name": "御室桜",
+      "lat": 35.0310556,
+      "lng": 135.7138056,
+      "address": "京都府京都市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BB%81%E5%92%8C%E5%AF%BA"
+    },
+    {
+      "id": "57709",
+      "name": "醍醐寺",
+      "lat": 34.9515,
+      "lng": 135.8217778,
+      "address": "京都府京都市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%86%8D%E9%86%90%E5%AF%BA"
+    },
+    {
+      "id": "773546",
+      "name": "笠置山自然公園",
+      "lat": 34.75,
+      "lng": 135.94,
+      "address": "京都府笠置町",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%AC%A0%E7%BD%AE%E5%B1%B1%20%28%E4%BA%AC%E9%83%BD%E5%BA%9C%29"
+    },
+    {
+      "id": "3384933",
+      "name": "造幣局の通り抜け",
+      "lat": 34.6962222,
+      "lng": 135.5209444,
+      "address": "大阪府大阪市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%A1%9C%E3%81%AE%E9%80%9A%E3%82%8A%E6%8A%9C%E3%81%91%20%28%E5%A4%A7%E9%98%AA%E9%80%A0%E5%B9%A3%E5%B1%80%29"
+    },
+    {
+      "id": "110570",
+      "name": "大阪城公園",
+      "lat": 34.6819722,
+      "lng": 135.5310556,
+      "address": "大阪府大阪市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A7%E9%98%AA%E5%9F%8E%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "54832",
+      "name": "万博記念公園",
+      "lat": 34.8095222,
+      "lng": 135.5324083,
+      "address": "大阪府吹田市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B8%87%E5%8D%9A%E8%A8%98%E5%BF%B5%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "46690",
+      "name": "姫路城",
+      "lat": 34.8393778,
+      "lng": 134.6940972,
+      "address": "兵庫県姫路市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A7%AB%E8%B7%AF%E5%9F%8E"
+    },
+    {
+      "id": "102420",
+      "name": "明石公園",
+      "lat": 34.1567028,
+      "lng": 134.9939056,
+      "address": "兵庫県明石市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%85%B5%E5%BA%AB%E7%9C%8C%E7%AB%8B%E6%98%8E%E7%9F%B3%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "220718",
+      "name": "夙川河川敷緑地",
+      "lat": 34.7355556,
+      "lng": 135.3289444,
+      "address": "兵庫県西宮市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%99%E5%B7%9D%E6%B2%B3%E5%B7%9D%E6%95%B7%E7%B7%91%E5%9C%B0"
+    },
+    {
+      "id": "423049",
+      "name": "奈良公園",
+      "lat": 34.6855556,
+      "lng": 135.8433333,
+      "address": "奈良県奈良市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A5%88%E8%89%AF%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "109517",
+      "name": "郡山城址公園",
+      "lat": 34.6519167,
+      "lng": 135.7789444,
+      "address": "奈良県大和郡山市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%83%A1%E5%B1%B1%E5%9F%8E%20%28%E5%A4%A7%E5%92%8C%E5%9B%BD%29"
+    },
+    {
+      "id": "1341166",
+      "name": "吉野山",
+      "lat": 34.3564,
+      "lng": 135.8706,
+      "address": "奈良県吉野町",
+      "seasons": [
+        "cherry_blossom",
+        "autumn_leaves"
+      ],
+      "sources": [
+        "cherry_list",
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%90%89%E9%87%8E%E5%B1%B1"
+    },
+    {
+      "id": "91208",
+      "name": "紀三井寺",
+      "lat": 34.1851667,
+      "lng": 135.1900278,
+      "address": "和歌山県和歌山市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%B4%80%E4%B8%89%E4%BA%95%E5%AF%BA"
+    },
+    {
+      "id": "257380",
+      "name": "根来寺",
+      "lat": 34.2872222,
+      "lng": 135.3166667,
+      "address": "和歌山県岩出市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%A0%B9%E6%9D%A5%E5%AF%BA"
+    },
+    {
+      "id": "1516667",
+      "name": "打吹公園",
+      "lat": 35.4299167,
+      "lng": 133.8219722,
+      "address": "鳥取県倉吉市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%89%93%E5%90%B9%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "296607",
+      "name": "松江城山公園",
+      "lat": 35.4751389,
+      "lng": 133.0506944,
+      "address": "島根県松江市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%9D%BE%E6%B1%9F%E5%9F%8E"
+    },
+    {
+      "id": "103717",
+      "name": "鶴山公園",
+      "lat": 35.0628,
+      "lng": 134.005,
+      "address": "岡山県津山市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%B4%A5%E5%B1%B1%E5%9F%8E"
+    },
+    {
+      "id": "1268745",
+      "name": "千光寺公園",
+      "lat": 34.4102778,
+      "lng": 133.1966667,
+      "address": "広島県尾道市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%8D%83%E5%85%89%E5%AF%BA%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "121446",
+      "name": "常盤公園",
+      "lat": 33.9457778,
+      "lng": 131.2830833,
+      "address": "山口県宇部市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B8%B8%E7%9B%A4%E5%85%AC%E5%9C%92%20%28%E5%AE%87%E9%83%A8%E5%B8%82%29"
+    },
+    {
+      "id": "1062567",
+      "name": "吉香公園・錦帯橋",
+      "lat": 34.1700833,
+      "lng": 132.17575,
+      "address": "山口県岩国市",
+      "seasons": [
+        "cherry_blossom",
+        "autumn_leaves"
+      ],
+      "sources": [
+        "cherry_list",
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%90%89%E9%A6%99%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "2034216",
+      "name": "琴弾公園",
+      "lat": 34.1335583,
+      "lng": 133.642225,
+      "address": "香川県観音寺市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%90%B4%E5%BC%BE%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "111695",
+      "name": "城山公園",
+      "lat": 33.84475,
+      "lng": 132.765361,
+      "address": "愛媛県松山市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%9F%8E%E5%B1%B1%E5%85%AC%E5%9C%92%20%28%E6%9D%BE%E5%B1%B1%E5%B8%82%29"
+    },
+    {
+      "id": "1180422",
+      "name": "西公園",
+      "lat": 33.5980833,
+      "lng": 130.3754167,
+      "address": "福岡県福岡市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%A5%BF%E5%85%AC%E5%9C%92%20%28%E7%A6%8F%E5%B2%A1%E5%B8%82%29"
+    },
+    {
+      "id": "3582235",
+      "name": "小城公園",
+      "lat": 33.2891389,
+      "lng": 130.1966944,
+      "address": "佐賀県小城市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B0%8F%E5%9F%8E%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "1591767",
+      "name": "大村公園",
+      "lat": 32.8980556,
+      "lng": 129.9586111,
+      "address": "長崎県大村市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A7%E6%9D%91%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "30741",
+      "name": "熊本城",
+      "lat": 32.8060278,
+      "lng": 130.7058972,
+      "address": "熊本県熊本市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%86%8A%E6%9C%AC%E5%9F%8E"
+    },
+    {
+      "id": "191189",
+      "name": "岡城公園",
+      "lat": 32.9692167,
+      "lng": 131.4080694,
+      "address": "大分県竹田市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B2%A1%E5%9F%8E%20%28%E8%B1%8A%E5%BE%8C%E5%9B%BD%29"
+    },
+    {
+      "id": "646661",
+      "name": "母智丘・関之尾県立自然公園",
+      "lat": 31.762122,
+      "lng": 130.986107,
+      "address": "宮崎県都城市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%AF%8D%E6%99%BA%E4%B8%98%E3%83%BB%E9%96%A2%E4%B9%8B%E5%B0%BE%E7%9C%8C%E7%AB%8B%E8%87%AA%E7%84%B6%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "7020",
+      "name": "大雪山",
+      "lat": 43.6635833,
+      "lng": 142.8541389,
+      "address": "北海道上川町など",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A7%E9%9B%AA%E5%B1%B1"
+    },
+    {
+      "id": "183587",
+      "name": "奥入瀬渓流",
+      "lat": 40.5252778,
+      "lng": 140.9745,
+      "address": "青森県十和田市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A5%A5%E5%85%A5%E7%80%AC%E6%B8%93%E6%B5%81"
+    },
+    {
+      "id": "798703",
+      "name": "鳴子峡",
+      "lat": 38.736389,
+      "lng": 140.692222,
+      "address": "宮城県大崎市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%B3%B4%E5%AD%90%E5%B3%A1"
+    },
+    {
+      "id": "2128726",
+      "name": "地獄谷 (登別市)",
+      "lat": 42.4975278,
+      "lng": 141.1486667,
+      "address": "北海道登別市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%9C%B0%E7%8D%84%E8%B0%B7%20%28%E7%99%BB%E5%88%A5%E5%B8%82%29"
+    },
+    {
+      "id": "150747",
+      "name": "秋の宮温泉郷・鬼首エコロード",
+      "lat": 38.96,
+      "lng": 140.5402778,
+      "address": "秋田県湯沢市など",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%A7%8B%E3%83%8E%E5%AE%AE%E6%B8%A9%E6%B3%89%E9%83%B7"
+    },
+    {
+      "id": "669509",
+      "name": "養老渓谷",
+      "lat": 35.2576111,
+      "lng": 140.1600833,
+      "address": "千葉県市原市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%A4%8A%E8%80%81%E6%B8%93%E8%B0%B7"
+    },
+    {
+      "id": "2468371",
+      "name": "国営昭和記念公園",
+      "lat": 35.707417,
+      "lng": 139.394306,
+      "address": "東京都立川市・昭島市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list",
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%9B%BD%E5%96%B6%E6%98%AD%E5%92%8C%E8%A8%98%E5%BF%B5%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "59117",
+      "name": "高尾山",
+      "lat": 35.6252778,
+      "lng": 139.2436111,
+      "address": "東京都八王子市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list",
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%AB%98%E5%B0%BE%E5%B1%B1"
+    },
+    {
+      "id": "69265",
+      "name": "大山寺・大山阿夫利神社",
+      "lat": 35.4292778,
+      "lng": 139.2393611,
+      "address": "神奈川県伊勢原市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A7%E5%B1%B1%E5%AF%BA%20%28%E4%BC%8A%E5%8B%A2%E5%8E%9F%E5%B8%82%29"
+    },
+    {
+      "id": "196907",
+      "name": "妙義山",
+      "lat": 36.2986111,
+      "lng": 138.7488889,
+      "address": "群馬県富岡市など",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A6%99%E7%BE%A9%E5%B1%B1"
+    },
+    {
+      "id": "342003",
+      "name": "御岳昇仙峡",
+      "lat": 35.745,
+      "lng": 138.5663889,
+      "address": "山梨県甲府市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%98%87%E4%BB%99%E5%B3%A1"
+    },
+    {
+      "id": "346945",
+      "name": "千畳敷カール",
+      "lat": 35.7786111,
+      "lng": 137.8130556,
+      "address": "長野県駒ヶ根市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%8D%83%E7%95%B3%E6%95%B7%E3%82%AB%E3%83%BC%E3%83%AB"
+    },
+    {
+      "id": "135479",
+      "name": "天龍峡",
+      "lat": 35.44031,
+      "lng": 137.818,
+      "address": "長野県飯田市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A9%E7%AB%9C%E5%B3%A1"
+    },
+    {
+      "id": "114149",
+      "name": "袋田の滝",
+      "lat": 36.7641944,
+      "lng": 140.4073611,
+      "address": "茨城県大子町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%A2%8B%E7%94%B0%E3%81%AE%E6%BB%9D"
+    },
+    {
+      "id": "169981",
+      "name": "太平山謙信平",
+      "lat": 36.3650278,
+      "lng": 139.6901944,
+      "address": "栃木県栃木市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%AA%E5%B9%B3%E5%B1%B1%20%28%E6%A0%83%E6%9C%A8%E7%9C%8C%29"
+    },
+    {
+      "id": "345445",
+      "name": "寸又峡",
+      "lat": 35.178792,
+      "lng": 138.105753,
+      "address": "静岡県川根本町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%AF%B8%E5%8F%88%E5%B3%A1"
+    },
+    {
+      "id": "187086",
+      "name": "那谷寺",
+      "lat": 36.3134083,
+      "lng": 136.4203917,
+      "address": "石川県小松市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%82%A3%E8%B0%B7%E5%AF%BA"
+    },
+    {
+      "id": "2239289",
+      "name": "萬徳寺",
+      "lat": 35.4688333,
+      "lng": 135.7852778,
+      "address": "福井県小浜市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%90%AC%E5%BE%B3%E5%AF%BA"
+    },
+    {
+      "id": "3643503",
+      "name": "曽木公園",
+      "lat": 35.2961667,
+      "lng": 137.2630556,
+      "address": "岐阜県土岐市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%9B%BD%E6%9C%A8%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "1285165",
+      "name": "伊勢神宮内宮神苑",
+      "lat": 34.455,
+      "lng": 136.725175,
+      "address": "三重県伊勢市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BC%8A%E5%8B%A2%E7%A5%9E%E5%AE%AE"
+    },
+    {
+      "id": "2785189",
+      "name": "メタセコイア並木",
+      "lat": 35.4962222,
+      "lng": 136.0335556,
+      "address": "滋賀県高島市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E3%83%9E%E3%82%AD%E3%83%8E%E9%AB%98%E5%8E%9F"
+    },
+    {
+      "id": "762690",
+      "name": "保津峡",
+      "lat": 35.0245833,
+      "lng": 135.6433333,
+      "address": "京都府亀岡市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BF%9D%E6%B4%A5%E5%B3%A1"
+    },
+    {
+      "id": "803322",
+      "name": "箕面公園",
+      "lat": 34.8410556,
+      "lng": 135.4715556,
+      "address": "大阪府箕面市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%98%8E%E6%B2%BB%E3%81%AE%E6%A3%AE%E7%AE%95%E9%9D%A2%E5%9B%BD%E5%AE%9A%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "189931",
+      "name": "武田尾",
+      "lat": 34.85294,
+      "lng": 135.29967,
+      "address": "兵庫県西宮市・宝塚市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%AD%A6%E7%94%B0%E5%B0%BE%E6%B8%A9%E6%B3%89"
+    },
+    {
+      "id": "646467",
+      "name": "長岳寺",
+      "lat": 34.5609722,
+      "lng": 135.852,
+      "address": "奈良県天理市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%95%B7%E5%B2%B3%E5%AF%BA"
+    },
+    {
+      "id": "16617",
+      "name": "大山",
+      "lat": 35.3711,
+      "lng": 133.5464,
+      "address": "鳥取県大山町など",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A4%A7%E5%B1%B1%20%28%E9%B3%A5%E5%8F%96%E7%9C%8C%29"
+    },
+    {
+      "id": "901606",
+      "name": "三徳山",
+      "lat": 35.399319,
+      "lng": 133.955761,
+      "address": "鳥取県三朝町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B8%89%E5%BE%B3%E5%B1%B1"
+    },
+    {
+      "id": "17955",
+      "name": "宮島・紅葉谷公園",
+      "lat": 34.2666667,
+      "lng": 132.3,
+      "address": "広島県廿日市市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%8E%B3%E5%B3%B6"
+    },
+    {
+      "id": "802030",
+      "name": "別府峡",
+      "lat": 33.89,
+      "lng": 134.11,
+      "address": "高知県香美市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%89%A3%E5%B1%B1%E5%9B%BD%E5%AE%9A%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "4105229",
+      "name": "白滝公園",
+      "lat": 35.1230556,
+      "lng": 138.9141667,
+      "address": "愛媛県大洲市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%99%BD%E6%BB%9D%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "754640",
+      "name": "高の瀬峡",
+      "lat": 33.788591,
+      "lng": 134.078962,
+      "address": "徳島県那賀町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%AB%98%E3%81%AE%E7%80%AC%E5%B3%A1"
+    },
+    {
+      "id": "503387",
+      "name": "塩江温泉郷",
+      "lat": 34.16828,
+      "lng": 134.08489,
+      "address": "香川県高松市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%A1%A9%E6%B1%9F%E6%B8%A9%E6%B3%89"
+    },
+    {
+      "id": "1421120",
+      "name": "秋月城跡周辺",
+      "lat": 33.4655556,
+      "lng": 130.6955556,
+      "address": "福岡県朝倉市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E7%A7%8B%E6%9C%88%E5%9F%8E"
+    },
+    {
+      "id": "79408",
+      "name": "雲仙",
+      "lat": 32.761342,
+      "lng": 130.298694,
+      "address": "長崎県雲仙市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%9B%B2%E4%BB%99%E5%B2%B3"
+    },
+    {
+      "id": "368329",
+      "name": "人吉城跡・球磨川周辺",
+      "lat": 32.2110833,
+      "lng": 130.7664917,
+      "address": "熊本県人吉市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BA%BA%E5%90%89%E5%9F%8E"
+    },
+    {
+      "id": "297284",
+      "name": "国東",
+      "lat": 33.5,
+      "lng": 131.6,
+      "address": "大分県国東市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%9B%BD%E6%9D%B1%E5%8D%8A%E5%B3%B6"
+    },
+    {
+      "id": "117387",
+      "name": "耶馬渓",
+      "lat": 33.44,
+      "lng": 131.1413889,
+      "address": "大分県中津市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%80%B6%E9%A6%AC%E6%B8%93"
+    },
+    {
+      "id": "236126",
+      "name": "霧島連山",
+      "lat": 31.9341667,
+      "lng": 130.8616667,
+      "address": "鹿児島県霧島市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%9C%A7%E5%B3%B6%E5%B1%B1"
+    },
+    {
+      "id": "114039",
+      "name": "英彦山",
+      "lat": 33.48,
+      "lng": 130.9322,
+      "address": "福岡県添田町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E8%8B%B1%E5%BD%A6%E5%B1%B1"
+    },
+    {
+      "id": "3605065",
+      "name": "御船山楽園",
+      "lat": 33.1813889,
+      "lng": 130.0172222,
+      "address": "佐賀県武雄市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%BE%A1%E8%88%B9%E5%B1%B1%E6%A5%BD%E5%9C%92"
+    },
+    {
+      "id": "149537",
+      "name": "くじゅう連山",
+      "lat": 33.0858333,
+      "lng": 131.2488889,
+      "address": "大分県竹田市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B9%9D%E9%87%8D%E5%B1%B1"
+    },
+    {
+      "id": "102037",
+      "name": "代々木公園",
+      "lat": 35.671975,
+      "lng": 139.697685,
+      "address": "東京都",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BB%A3%E3%80%85%E6%9C%A8%E5%85%AC%E5%9C%92"
+    },
+    {
+      "id": "286979",
+      "name": "六義園",
+      "lat": 35.73306,
+      "lng": 139.74667,
+      "address": "東京都",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%85%AD%E7%BE%A9%E5%9C%92"
+    },
+    {
+      "id": "131329",
+      "name": "小石川後楽園",
+      "lat": 35.7051111,
+      "lng": 139.7498889,
+      "address": "東京都",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B0%8F%E7%9F%B3%E5%B7%9D%E5%BE%8C%E6%A5%BD%E5%9C%92"
+    },
+    {
+      "id": "537654",
+      "name": "千秋公園",
+      "lat": 39.72196,
+      "lng": 140.12411,
+      "address": "秋田県秋田市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11405791"
+    },
+    {
+      "id": "1114066",
+      "name": "日立市かみね公園・平和通り",
+      "lat": 36.608944,
+      "lng": 140.657333,
+      "address": "茨城県日立市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11510041"
+    },
+    {
+      "id": "838293",
+      "name": "太平山県立自然公園",
+      "lat": 36.3666667,
+      "lng": 139.6875,
+      "address": "栃木県栃木市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11443951"
+    },
+    {
+      "id": "457785",
+      "name": "松川公園",
+      "lat": 36.6944333,
+      "lng": 137.2108806,
+      "address": "富山県富山市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11530270"
+    },
+    {
+      "id": "584144",
+      "name": "山崎川四季の道",
+      "lat": 35.092539,
+      "lng": 136.894313,
+      "address": "愛知県名古屋市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11468049"
+    },
+    {
+      "id": "980555",
+      "name": "海津大崎",
+      "lat": 35.44927,
+      "lng": 136.08763,
+      "address": "滋賀県高島市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11559016"
+    },
+    {
+      "id": "2544341",
+      "name": "名護城公園",
+      "lat": 26.5886111,
+      "lng": 127.9933333,
+      "address": "沖縄県名護市",
+      "seasons": [
+        "cherry_blossom"
+      ],
+      "sources": [
+        "cherry_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11415614"
+    },
+    {
+      "id": "1277529",
+      "name": "田沢湖抱返り県立自然公園",
+      "lat": 39.73,
+      "lng": 140.66,
+      "address": "秋田県仙北市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q10856374"
+    },
+    {
+      "id": "261088",
+      "name": "定山渓",
+      "lat": 42.969224,
+      "lng": 141.166053,
+      "address": "北海道札幌市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11452186"
+    },
+    {
+      "id": "754616",
+      "name": "赤芝峡",
+      "lat": 38.0763611,
+      "lng": 139.7191667,
+      "address": "山形県小国町など",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11635967"
+    },
+    {
+      "id": "735563",
+      "name": "清津峡",
+      "lat": 36.96775,
+      "lng": 138.7516389,
+      "address": "新潟県十日町市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11561258"
+    },
+    {
+      "id": "154189",
+      "name": "黒部峡谷・宇奈月温泉",
+      "lat": 36.6444444,
+      "lng": 137.6833333,
+      "address": "富山県黒部市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11179607"
+    },
+    {
+      "id": "1048901",
+      "name": "大矢田もみじ谷",
+      "lat": 35.555806,
+      "lng": 136.868375,
+      "address": "岐阜県美濃市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11438123"
+    },
+    {
+      "id": "301126",
+      "name": "香嵐渓",
+      "lat": 35.1318417,
+      "lng": 137.3133694,
+      "address": "愛知県豊田市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11667254"
+    },
+    {
+      "id": "298199",
+      "name": "三段峡",
+      "lat": 34.6,
+      "lng": 132.2077778,
+      "address": "広島県安芸太田町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q3137717"
+    },
+    {
+      "id": "528529",
+      "name": "蒜山高原",
+      "lat": 35.3032222,
+      "lng": 133.6639722,
+      "address": "岡山県真庭市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11621255"
+    },
+    {
+      "id": "802042",
+      "name": "祖谷渓谷",
+      "lat": 33.8752778,
+      "lng": 133.8352778,
+      "address": "徳島県三好市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q3408660"
+    },
+    {
+      "id": "533094",
+      "name": "寒霞渓",
+      "lat": 34.5155556,
+      "lng": 134.3008333,
+      "address": "香川県小豆島町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q6363624"
+    },
+    {
+      "id": "771294",
+      "name": "宇甘渓",
+      "lat": 34.795801,
+      "lng": 133.935946,
+      "address": "岡山県吉備中央町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11449562"
+    },
+    {
+      "id": "3420390",
+      "name": "安居渓谷",
+      "lat": 33.609057,
+      "lng": 133.176264,
+      "address": "高知県仁淀川町",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q24860558"
+    },
+    {
+      "id": "623026",
+      "name": "曽木の滝公園",
+      "lat": 32.011492,
+      "lng": 130.577223,
+      "address": "鹿児島県伊佐市",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "autumn_list"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q11515310"
+    },
+    {
+      "id": "253338",
+      "name": "明治神宮外苑",
+      "lat": 35.6775,
+      "lng": 139.7183333,
+      "address": "東京都",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q6631448"
+    },
+    {
+      "id": "175779",
+      "name": "浜離宮恩賜庭園",
+      "lat": 35.66,
+      "lng": 139.762,
+      "address": "東京都",
+      "seasons": [
+        "autumn_leaves"
+      ],
+      "sources": [
+        "tokyo_autumn"
+      ],
+      "coordinateSource": "https://www.wikidata.org/wiki/Q1033333"
+    }
+  ]
+}

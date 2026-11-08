@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: walking-map
+    runtime: python
+    plan: free
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python -u app.py --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+
+# Set ORS_API_KEY in Render's Environment settings to enable ORS routes.
+# API keys must never be committed to this file.

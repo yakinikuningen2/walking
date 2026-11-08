@@ -1,4 +1,4 @@
-"""Local web server and Overpass relay for the walking map.
+"""Web server and Overpass relay for the walking map.
 
 Run with the project's Python environment: .venv/Scripts/python.exe app.py
 """
@@ -40,7 +40,8 @@ def allowed_origin(value):
             return False
         if origin.scheme in ("http", "https") and origin.hostname in ("localhost", "127.0.0.1", "::1"):
             return True
-        public = urlsplit(os.environ.get("WALKING_PUBLIC_ORIGIN", "").strip())
+        public = urlsplit(os.environ.get("WALKING_PUBLIC_ORIGIN", "").strip()
+                          or os.environ.get("RENDER_EXTERNAL_URL", "").strip())
         return bool(public.hostname and public.scheme == "https" and origin.scheme == "https"
                     and origin.hostname == public.hostname and (origin.port or 443) == (public.port or 443))
     except ValueError:
@@ -226,17 +227,42 @@ class WalkingHandler(BaseHTTPRequestHandler):
         super().log_message(format, *args)
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run the walking map locally.")
-    parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
+def is_render_environment():
+    flag = os.environ.get("RENDER", "").strip().lower()
+    return flag in ("true", "1", "yes", "on") or any(
+        os.environ.get(name, "").strip()
+        for name in ("RENDER_SERVICE_ID", "RENDER_EXTERNAL_URL", "RENDER_EXTERNAL_HOSTNAME")
+    )
+
+
+def server_options(argv=None):
+    on_render = is_render_environment()
+    environment_port = os.environ.get("PORT", "10000" if on_render else "8000")
+    parser = argparse.ArgumentParser(description="Run the walking map locally or on Render.")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=environment_port)
+    args = parser.parse_args(argv)
+    if on_render:
+        # Render's public listener must not be changed back to localhost by CLI flags.
+        args.host = "0.0.0.0"
+        try:
+            args.port = int(environment_port)
+        except ValueError:
+            parser.error("PORT must be an integer")
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
+    if not args.host.strip():
+        parser.error("--host must not be empty")
+    return args
+
+
+def main():
+    args = server_options()
     try:
-        server = WalkingServer(("127.0.0.1", args.port), WalkingHandler)
+        server = WalkingServer((args.host, args.port), WalkingHandler)
     except OSError as error:
-        parser.exit(1, f"Could not start local server: {error}\n")
-    print(f"Walking map: http://127.0.0.1:{server.server_port}/", flush=True)
+        raise SystemExit(f"Could not start server: {error}") from None
+    print(f"Walking map: http://{args.host}:{server.server_port}/", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

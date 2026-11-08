@@ -112,6 +112,11 @@ map.getContainer().addEventListener("wheel", (event) => {
 // text is sent to Photon. Keep the endpoint here so it can be replaced easily.
 const SEARCH_ENDPOINT = "https://photon.komoot.io/api/";
 const SEARCH_LIMIT = 15;
+const SEASONAL_PLACES_ENDPOINT = new URL("../seasonal-places.json", document.currentScript.src).href;
+const SEASONAL_KIND_WORDS = {
+  cherry_blossom: ["桜", "さくら", "サクラ", "花見", "お花見", "桜の名所", "桜が見たい", "桜を見たい"],
+  autumn_leaves: ["紅葉", "もみじ", "モミジ", "黄葉", "紅葉狩り", "紅葉の名所", "紅葉が見たい", "紅葉を見たい"],
+};
 const NEARBY_CONVENIENCE_RADIUS = 1000;
 const NEARBY_CONVENIENCE_CACHE_RADIUS = 1200;
 const NEARBY_CONVENIENCE_TIMEOUT_MS = 10000;
@@ -144,6 +149,8 @@ const DISCOVERY_KINDS = {
   coast: { label: "海辺・浜辺", tags: { natural: ["beach", "coastline"] }, geometry: true },
   neighborhood: { label: "街並み・集落", tags: { place: ["neighbourhood", "quarter", "suburb", "village", "hamlet"] } },
   park: { label: "公園・緑地", tags: { leisure: ["park", "garden", "nature_reserve"] } },
+  cherry_blossom: { label: "桜の名所", seasonal: true },
+  autumn_leaves: { label: "紅葉の名所", seasonal: true },
   cafe: { label: "カフェ", tags: { amenity: ["cafe"] } },
   restaurant: { label: "食事", tags: { amenity: ["restaurant", "fast_food"] } },
   sightseeing: { label: "景色・観光", tags: { tourism: ["viewpoint", "attraction"] } },
@@ -196,7 +203,7 @@ const ui = Object.fromEntries([
   "route-steps", "clear-route", "route-options", "route-choice-note",
   "scenic-route-button", "roundtrip-route-button",
   "toggle-route-details", "route-details-content",
-  "discovery-screen", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
+  "discovery-screen", "discovery-content", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
   "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
   "discovery-submit", "discovery-cancel", "discovery-status", "discovery-elapsed-label", "discovery-elapsed", "discovery-results",
   "discovery-history", "discovery-history-list",
@@ -253,6 +260,7 @@ let activeRouteKind = null;
 const natureCache = new Map();
 const convenienceCache = new Map();
 const discoveryMapCache = new Map();
+let seasonalPlacesCache = null;
 const discoveryGeometryCache = new Map();
 const discoveryContextCache = new Map();
 const discoveryElevationCache = new Map();
@@ -367,7 +375,6 @@ ui["walking-settings-form"].addEventListener("submit", (event) => {
     message(ui["settings-status"], "設定を保存できません。この画面を開いている間は選んだ速さを使います。", true);
   }
   openMap();
-  if (speedChanged) cancelDiscovery();
   if (speedChanged && routeEnabled && !routeAwaitingLocation) requestWalkingRoute();
 });
 
@@ -442,7 +449,7 @@ function releasePanelDrag() {
   }
 }
 
-function setPanelOpen(open, focus = true) {
+function setPanelOpen(open, focus = true, { preserveToolState = false } = {}) {
   if (open) stopStartMapSelection();
   releasePanelDrag();
   const focusWasInside = searchPanel.contains(document.activeElement);
@@ -453,8 +460,10 @@ function setPanelOpen(open, focus = true) {
   appShell.classList.toggle("panel-open", open);
   setDrawerOffset(open ? searchPanel.getBoundingClientRect().width : 0);
   if (open) {
-    bringToolToFront(searchPanel);
-    closeOverlappingTools(searchPanel);
+    if (!preserveToolState) {
+      bringToolToFront(searchPanel);
+      closeOverlappingTools(searchPanel);
+    }
   } else searchPanel.style.zIndex = "";
   panelToggle.setAttribute("aria-expanded", String(open));
   panelChevron.textContent = open ? "‹" : "›";
@@ -522,7 +531,7 @@ function cancelPanelDrag(event) {
 }
 panelToggle.addEventListener("pointercancel", cancelPanelDrag);
 panelToggle.addEventListener("lostpointercapture", cancelPanelDrag);
-window.addEventListener("resize", () => setPanelOpen(panelIsOpen(), false));
+window.addEventListener("resize", () => setPanelOpen(panelIsOpen(), false, { preserveToolState: true }));
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && (panelIsOpen() || panelDrag)) {
     event.preventDefault();
@@ -650,7 +659,11 @@ function setStartPickerOpen(open, focus = true) {
 function startPointChanged() {
   roundTripOrigin = null;
   roundTripDestinationReached = false;
-  cancelDiscovery();
+  if (discoveryRequest?.awaitingLocation && getStartPoint()) {
+    discoveryRequest.awaitingLocation = false;
+    discoveryRequest.start = { ...getStartPoint() };
+    fetchDiscoverySuggestions(discoveryRequest);
+  }
   routeAwaitingLocation = routeEnabled && !getStartPoint();
   routePointsChanged();
   if (!getStartPoint()) requestCurrentLocation();
@@ -847,7 +860,6 @@ function showCurrentLocation(position, { center = true, keepZoom = routeEnabled,
     if (refreshRoute) routeLocationFailed();
     return;
   }
-  if (refreshRoute && !searchedStart && currentPosition && map.distance([currentPosition.lat, currentPosition.lng], [lat, lng]) > 30) cancelDiscovery();
   currentPosition = { lat, lng };
   locationPermissionDenied = false;
   const point = [lat, lng];
@@ -2150,7 +2162,8 @@ function loadDiscoveryHistory() {
         || !entry.places.every((place) => place && validCoordinates(place.lat, place.lng)
           && typeof place.key === "string" && typeof place.name === "string" && place.name.length <= 120
           && typeof place.address === "string" && typeof place.ambienceNote === "string"
-          && Object.hasOwn(DISCOVERY_KINDS, place.kindId) && DISCOVERY_KINDS[place.kindId].tags
+          && Object.hasOwn(DISCOVERY_KINDS, place.kindId)
+          && (DISCOVERY_KINDS[place.kindId].tags || DISCOVERY_KINDS[place.kindId].seasonal)
           && Number.isFinite(place.duration) && place.duration >= 0
           && Number.isFinite(place.distance) && place.distance >= 0
           && (place.elevation == null || validDiscoveryElevation(place.elevation))
@@ -2278,11 +2291,44 @@ function stopDiscovery() {
   if (restoreFocus) ui["discovery-submit"].focus({ preventScroll: true });
 }
 
+function updateDiscoveryViewport() {
+  const viewport = window.visualViewport;
+  const height = viewport?.height || window.innerHeight;
+  const inset = Math.max(0, window.innerHeight - ((viewport?.offsetTop || 0) + height));
+  const screen = ui["discovery-screen"], content = ui["discovery-content"];
+  screen.style.setProperty("--discovery-visible-height", `${height}px`);
+  screen.style.setProperty("--discovery-viewport-inset", `${inset}px`);
+  const field = document.activeElement;
+  const editing = content.contains(field) && field.matches('input:not([type="checkbox"]), textarea');
+  const keyboard = (viewport?.scale || 1) < 1.1 && height < window.innerHeight - 100;
+  screen.classList.toggle("keyboard-open", keyboard || (editing && height < 420));
+  if (screen.hidden || !editing) return;
+  const area = content.getBoundingClientRect(), box = field.getBoundingClientRect();
+  // Scroll only the form body; the heading and map stay in place.
+  if (box.top < area.top + 12) content.scrollTop += box.top - area.top - 12;
+  else if (box.bottom > area.bottom - 12) content.scrollTop += box.bottom - area.bottom + 12;
+}
+
+let discoveryViewportFrame = null;
+function scheduleDiscoveryViewport() {
+  if (discoveryViewportFrame !== null) cancelAnimationFrame(discoveryViewportFrame);
+  discoveryViewportFrame = requestAnimationFrame(() => {
+    discoveryViewportFrame = null;
+    updateDiscoveryViewport();
+  });
+}
+window.addEventListener("resize", scheduleDiscoveryViewport);
+window.visualViewport?.addEventListener("resize", scheduleDiscoveryViewport);
+window.visualViewport?.addEventListener("scroll", scheduleDiscoveryViewport);
+ui["discovery-content"].addEventListener("focusin", scheduleDiscoveryViewport);
+ui["discovery-content"].addEventListener("focusout", scheduleDiscoveryViewport);
+
 function setDiscoveryOpen(open, focus = true) {
   if (open) stopStartMapSelection();
-  const panel = ui["discovery-screen"].querySelector(".discovery-panel");
+  const panel = ui["discovery-content"];
   if (!open) {
     discoveryScrollTop = panel.scrollTop;
+    if (ui["discovery-screen"].contains(document.activeElement)) document.activeElement.blur();
     if (discoveryRequest) stopDiscovery();
     if (destinationSearch.active || destinationSearch.timer !== null) message(destinationSearch.status, "");
     cancelSearch(destinationSearch);
@@ -2291,6 +2337,7 @@ function setDiscoveryOpen(open, focus = true) {
   ui["discovery-screen"].hidden = !open;
   ui["open-discovery"].setAttribute("aria-expanded", String(open));
   if (open) {
+    updateDiscoveryViewport();
     bringToolToFront(ui["discovery-screen"]);
     closeOverlappingTools(ui["discovery-screen"]);
     if (!discoveryHasOpened) {
@@ -2301,7 +2348,8 @@ function setDiscoveryOpen(open, focus = true) {
     panel.scrollTop = discoveryScrollTop;
     updateDiscoveryTimeRange();
   } else ui["discovery-screen"].style.zIndex = "";
-  const focusTarget = open ? panel.scrollTop > 0 ? "close-discovery" : "destination-search-input" : "open-discovery";
+  const compact = window.matchMedia("(max-width: 680px), (max-height: 420px)").matches;
+  const focusTarget = open ? panel.scrollTop > 0 || compact ? "close-discovery" : "destination-search-input" : "open-discovery";
   if (focus) ui[focusTarget].focus({ preventScroll: true });
 }
 
@@ -2361,7 +2409,8 @@ function discoveryPreferences(criteria) {
   let highElevation = !!criteria.highElevation;
   for (const word of discoveryText(criteria.keyword).split(/[\s,、]+/).filter(Boolean)) {
     const mood = Object.keys(DISCOVERY_MOOD_WORDS).find((key) => DISCOVERY_MOOD_WORDS[key].includes(word));
-    const kind = Object.keys(DISCOVERY_KIND_WORDS).find((key) => DISCOVERY_KIND_WORDS[key].includes(word));
+    const kind = Object.keys(SEASONAL_KIND_WORDS).find((key) => SEASONAL_KIND_WORDS[key].includes(word))
+      || Object.keys(DISCOVERY_KIND_WORDS).find((key) => DISCOVERY_KIND_WORDS[key].includes(word));
     if (DISCOVERY_ELEVATION_WORDS.includes(word)) highElevation = true;
     else if (mood) { if (ambience === "any") ambience = mood; }
     else if (kind) kinds.add(kind);
@@ -2376,6 +2425,8 @@ function discoveryKinds(kind) {
 }
 
 function discoverySearchKinds(criteria, preferences) {
+  const seasonal = [...preferences.kinds].filter((key) => DISCOVERY_KINDS[key].seasonal);
+  if (["places", "any"].includes(criteria.kind) && seasonal.length) return seasonal;
   const kinds = discoveryKinds(criteria.kind);
   // A broad place search can also honor an explicitly requested cafe, shrine, etc.
   return criteria.kind === "places" ? [...new Set([...kinds, ...preferences.kinds])] : kinds;
@@ -2452,7 +2503,8 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
   for (const element of elements) {
     const tags = element?.tags || {};
     if (!element || !discoveryPublic(tags)) continue;
-    const kindId = kinds.find((key) => discoveryKindMatches(tags, key));
+    const kindId = kinds.find((key) => DISCOVERY_KINDS[key].seasonal
+      ? element.seasons?.includes(key) : discoveryKindMatches(tags, key));
     if (!kindId) continue;
     const point = discoveryDestinationPoint(element, kindId, start);
     if (!point) continue;
@@ -2660,6 +2712,22 @@ async function fetchDiscoveryContext(places, request) {
   return context.elements;
 }
 
+async function fetchSeasonalPlaces(request) {
+  if (seasonalPlacesCache) return seasonalPlacesCache;
+  const data = await fetchRouteJson(new URL(SEASONAL_PLACES_ENDPOINT), request, 10000);
+  if (data?.version !== 1 || !Array.isArray(data.places) || !data.places.every((place) =>
+    typeof place?.id === "string" && typeof place.name === "string" && place.name.length > 0 && place.name.length <= 120
+    && typeof place.address === "string" && validCoordinates(place.lat, place.lng)
+    && Array.isArray(place.seasons) && place.seasons.length > 0
+    && place.seasons.every((key) => Object.hasOwn(SEASONAL_KIND_WORDS, key)))) {
+    throw new Error("Invalid seasonal place data");
+  }
+  seasonalPlacesCache = data.places.map((place) => ({ type: "seasonal", id: place.id,
+    lat: place.lat, lon: place.lng, seasons: place.seasons,
+    tags: { name: place.name, "addr:province": place.address } }));
+  return seasonalPlacesCache;
+}
+
 async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}) {
   const maxRadius = Math.ceil(criteria.minutes * criteria.speed * 1000 / 60 / DISCOVERY_DISTANCE_FACTOR);
   const preferences = discoveryPreferences(criteria);
@@ -2696,6 +2764,22 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
     }
     return matches;
   };
+  if (kinds.every((key) => DISCOVERY_KINDS[key].seasonal)) {
+    // Fixed local data identifies actual listed spots, rather than assuming every park
+    // or every place named "Sakura" is a viewing spot. Time/range checks stay local.
+    elements = await fetchSeasonalPlaces(request);
+    let places = await assessPlaces();
+    if (!["any", "rural"].includes(ambience) && places.length) {
+      try { elements = mergeDiscoveryElements(elements, await fetchDiscoveryContext(places, request)); }
+      catch (error) {
+        if (request.controller.signal.aborted) throw error;
+        request.ambienceUnavailable = true;
+      }
+      places = discoveryCandidates(elements, criteria, start, 24);
+      onUpdate(places);
+    }
+    return places;
+  }
   while (true) {
     if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
     const key = `${start.lat.toFixed(5)},${start.lng.toFixed(5)},${radius},${kinds.join(",")},min:${minRadius.toFixed(3)}`;
@@ -2773,12 +2857,6 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
   }
 }
 
-function discoveryContextMatches(request) {
-  const start = getStartPoint();
-  return start && currentWalkingSpeed().kmh === request.criteria.speed
-    && map.distance([start.lat, start.lng], [request.start.lat, request.start.lng]) <= 30;
-}
-
 function renderDiscoveryResults(results, request) {
   const list = ui["discovery-results"];
   const highElevation = discoveryPreferences(request.criteria).highElevation;
@@ -2795,7 +2873,7 @@ function renderDiscoveryResults(results, request) {
   }
   for (const [index, place] of ordered.entries()) {
     let button = [...list.querySelectorAll("[data-place-key]")].find((item) => item.dataset.placeKey === place.key);
-    const detail = `${place.kindLabel} ／ ${request.historical ? "検索時の目安" : "徒歩の目安"} 約${routeDuration(place.duration)}・${routeDistance(place.distance)}`;
+    const detail = `${place.kindLabel} ／ 検索時の目安 約${routeDuration(place.duration)}・${routeDistance(place.distance)}`;
     const content = placeButton(place, detail, "discovery-result");
     if (highElevation && validDiscoveryElevation(place.elevation)) content.append(textElement("span", `標高 約${Math.round(place.elevation).toLocaleString("ja-JP")} m`, "place-detail"));
     const matched = [place.free ? "無料" : "", place.toilets ? "トイレ100m以内" : "", place.benches ? "ベンチ100m以内" : ""].filter(Boolean);
@@ -2812,11 +2890,6 @@ function renderDiscoveryResults(results, request) {
       button.replaceChildren(...content.childNodes);
     }
     button.onclick = () => {
-      if (!request.historical && !discoveryContextMatches(request)) {
-        cancelDiscovery();
-        message(ui["discovery-status"], "スタート地点か歩く速さが変わりました。もう一度探してください。", true);
-        return;
-      }
       setDiscoveryOpen(false, false);
       setDestination(place);
       ui["open-discovery"].focus({ preventScroll: true });
@@ -2835,14 +2908,12 @@ async function fetchDiscoverySuggestions(request) {
   try {
     const places = await findDiscoveryPlaces(criteria, start, request, (places) => {
       if (!isCurrent()) return;
-      if (!discoveryContextMatches(request)) { cancelDiscovery(); return; }
       results = highElevation ? places.filter((place) => validDiscoveryElevation(place.elevation)) : places;
       renderDiscoveryResults(results, request);
     });
     if (highElevation && isCurrent()) {
       results = await fetchDiscoveryElevations(places, request);
       if (!isCurrent()) return;
-      if (!discoveryContextMatches(request)) { cancelDiscovery(); return; }
       renderDiscoveryResults(results, request);
     }
     if (isCurrent()) message(ui["discovery-status"], results.length
