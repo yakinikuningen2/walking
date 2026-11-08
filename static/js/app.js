@@ -1576,6 +1576,7 @@ function prepareRouteReplacement(request) {
 function routeErrorMessage(error) {
   if (error.userMessage) return error.userMessage;
   if (error.name === "AbortError") return "取得に時間がかかっています。更新してお試しください。";
+  if (["DistanceExceeded", 154].includes(error.routeCode)) return "ルート検索の距離上限を超えています。区間を分けて検索してください。";
   if (["NoRoute", "NoSegment", 171, 172, 442].includes(error.routeCode)) return "徒歩で通れるルートが見つかりませんでした。";
   return "取得できませんでした。通信を確認して更新してください。";
 }
@@ -1835,7 +1836,9 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
         mode, speed_kmh: currentWalkingSpeed().kmh,
         ...(mode === "roundtrip" ? { return_to: roundTripOrigin, destination_reached: request.destinationReached } : {}) }) });
   } catch (error) {
-    if (error.name !== "AbortError") error.userMessage = "Pythonサーバーに接続できません。app.pyを起動してください。";
+    if (error.name !== "AbortError") error.userMessage = mode === "standard"
+      ? "通常の検索の距離上限を超えています。長距離検索用のPythonサーバーに接続できません。"
+      : "Pythonサーバーに接続できません。app.pyを起動してください。";
     throw error;
   }
   let data;
@@ -1850,7 +1853,8 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
     throw Object.assign(new Error("Outdated roundtrip server"), { userMessage: "Pythonサーバーを更新して起動し直してください。" });
   }
   if (!Array.isArray(data.routes) || !data.routes.length) throw new Error("Missing walking routes");
-  const permitted = mode === "roundtrip" ? ["roundtrip", "roundtrip_scenic"] : ["ors_standard", "scenic"];
+  const permitted = mode === "roundtrip" ? ["roundtrip", "roundtrip_scenic"]
+    : mode === "standard" ? ["ors_standard"] : ["ors_standard", "scenic"];
   const added = [];
   for (const entry of data.routes) {
     if (!permitted.includes(entry.id)) continue;
@@ -1910,6 +1914,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
   try {
     const speed = currentWalkingSpeed().kmh;
     let stores = null;
+    let primaryError = null;
     const kinds = ROUTE_KINDS.filter((kind) => ["standard", "gentle", "convenience", "nature"].includes(kind.id));
     if (automatic) kinds.sort((a, b) => Number(b.id === request.preferredKind) - Number(a.id === request.preferredKind));
     for (const kind of kinds) {
@@ -1944,6 +1949,12 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
         setRouteBusy(false);
       } catch (error) {
         if (!isCurrent()) return;
+        if (kind.id === "standard") primaryError = error;
+        if (["standard", "gentle"].includes(kind.id) && ["DistanceExceeded", 154].includes(error.routeCode)) {
+          // Keep the whole route on foot; never substitute a driving route or guessed straight segments.
+          await fetchSuggestedWalkingRoutes(start, end, "standard", request, isCurrent);
+          return;
+        }
         // Extra route types are suggestions; missing ones have no reserved UI slot.
       }
       renderRouteChoices();
@@ -1951,7 +1962,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
     if (!isCurrent()) return;
     const failed = !routeLayer || (automatic && request.replaceExisting);
     message(ui["route-status"], failed
-      ? "ルートを取得できませんでした。目的地や通信状況を確認し、もう一度お試しください。" : "", failed);
+      ? routeErrorMessage(primaryError || new Error("No walking route")) : "", failed);
     if (!routeLayer) setRouteDetailsOpen(true);
   } catch (error) {
     if (isCurrent()) {

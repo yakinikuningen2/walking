@@ -79,11 +79,11 @@ def scenic_point(start, end, map_fetch):
     return min(ranked, key=lambda entry: entry[0])[1] if ranked else None
 
 
-def _request_ors(coordinates, key, green=False):
+def _request_ors(coordinates, key, green=False, long_route=False):
     if not hasattr(_LOCAL, "session"):
         _LOCAL.session = requests.Session()
     body = {"coordinates": [[p["lng"], p["lat"]] for p in coordinates],
-            "preference": "recommended" if green else "shortest", "instructions": True,
+            "preference": "recommended" if green or long_route else "shortest", "instructions": True,
             "language": "en", "units": "m", "radiuses": [50] * len(coordinates)}
     if green:
         body["options"] = {"avoid_features": ["ferries", "fords"], "profile_params": {
@@ -92,14 +92,22 @@ def _request_ors(coordinates, key, green=False):
         with _LOCAL.session.post(ORS_ENDPOINT, json=body,
                                  headers={"Authorization": key, "Accept": "application/geo+json",
                                           "User-Agent": "WalkingMap/1.0"},
-                                 timeout=(5, 25), allow_redirects=False) as response:
+                                 timeout=(5, 60 if long_route else 25), allow_redirects=False) as response:
             if response.status_code in (401, 403):
                 raise RouteError("ORS_AUTH_FAILED", "ORSのAPIキーを確認してください。", 503)
             if response.status_code == 429:
                 raise RouteError("ORS_RATE_LIMIT", "ORSの利用上限に達しました。時間を置いてお試しください。", 429)
-            if response.status_code in (400, 404, 422):
-                raise RouteError("ORS_NO_ROUTE", "この条件で歩けるルートを取得できませんでした。", 422)
             if response.status_code != 200:
+                try:
+                    upstream_code = response.json().get("error", {}).get("code")
+                except (ValueError, AttributeError, TypeError):
+                    upstream_code = None
+                if upstream_code == 2004:
+                    raise RouteError("ORS_LIMIT_EXCEEDED", "ORSの検索上限を超えています。区間を分けて検索してください。", 422)
+                if upstream_code == 2017:
+                    raise RouteError("ORS_COMPUTATION_LIMIT", "ルートの計算量が検索上限を超えました。区間を分けて検索してください。", 422)
+                if response.status_code in (400, 404, 422):
+                    raise RouteError("ORS_NO_ROUTE", "この条件で歩けるルートを取得できませんでした。", 422)
                 raise RouteError("ORS_UNAVAILABLE", "ORSに接続できませんでした。時間を置いてお試しください。")
             return response.json()
     except requests.Timeout:
@@ -163,7 +171,7 @@ def walking_suggestions(payload, map_fetch):
         raise RouteError("INVALID_REQUEST", "検索条件が正しくありません。", 400)
     start, end = point(payload.get("start")), point(payload.get("destination"))
     mode, speed = payload.get("mode"), payload.get("speed_kmh")
-    if mode not in ("scenic", "roundtrip") or not number(speed) or not 2.5 <= speed <= 6.5:
+    if mode not in ("standard", "scenic", "roundtrip") or not number(speed) or not 2.5 <= speed <= 6.5:
         raise RouteError("INVALID_REQUEST", "ルートの種類と歩く速さを確認してください。", 400)
     loop = mode == "roundtrip"
     return_to = point(payload["return_to"]) if loop and "return_to" in payload else start
@@ -176,6 +184,8 @@ def walking_suggestions(payload, map_fetch):
         raise RouteError("POINTS_TOO_CLOSE", "出発地点から30m以上離れた目的地を指定してください。", 400)
     key = os.environ.get("ORS_API_KEY", "").strip()
     if not key:
+        if mode == "standard":
+            raise RouteError("ORS_NOT_CONFIGURED", "通常の検索の距離上限を超えています。長距離検索にはサーバー側のORS_API_KEY設定が必要です。", 503)
         raise RouteError("ORS_NOT_CONFIGURED", "Python側にORS_API_KEYを設定して再起動してください。", 503)
     cache_key = (hash(key), tuple(start.values()), tuple(end.values()), mode, speed, tuple(return_to.values()), reached)
     with _LOCK:
@@ -183,24 +193,26 @@ def walking_suggestions(payload, map_fetch):
         if cached and time.monotonic() - cached[0] < 300:
             return cached[1]
     coordinates = [start, return_to] if reached else [start, end, return_to] if loop else [start, end]
-    base = normalized_route(_request_ors(coordinates, key), coordinates, speed, loop, returning=reached)
+    # The ordinary fallback needs one continuous foot route, without scenic lookups or weightings.
+    base = normalized_route(_request_ors(coordinates, key, long_route=mode == "standard"), coordinates, speed, loop, returning=reached)
     result = {"routes": [{"id": "roundtrip" if loop else "ors_standard", "route": base,
-                          "detail": "出発地点へ戻るルート" if reached else "目的地を経由して出発地点へ戻る往復ルート" if loop else "距離を優先した徒歩ルート"}], "warnings": []}
+                          "detail": "出発地点へ戻るルート" if reached else "目的地を経由して出発地点へ戻る往復ルート" if loop else "" if mode == "standard" else "距離を優先した徒歩ルート"}], "warnings": []}
     if loop:
         result.update(return_to=return_to, destination_reached=reached)
-    landmark = None
-    try:
-        landmark = scenic_point(start, goal, map_fetch)
-    except (requests.RequestException, ValueError, TypeError, KeyError):
-        result["warnings"].append("周辺の見どころ情報を取得できませんでした。")
-    scenic_coordinates = ([start, landmark, return_to] if reached else [start, end, landmark, return_to]
-                          if loop else [start, landmark, end]) if landmark else coordinates
-    try:
-        route = normalized_route(_request_ors(scenic_coordinates, key, green=True), scenic_coordinates, speed, loop, returning=reached)
-        result["routes"].append({"id": "roundtrip_scenic" if loop else "scenic", "route": route,
-                                 "detail": f'{landmark["name"]}を経由' if landmark else "緑や静かな道を優先"})
-    except RouteError as error:
-        result["warnings"].append(error.message)
+    if mode != "standard":
+        landmark = None
+        try:
+            landmark = scenic_point(start, goal, map_fetch)
+        except (requests.RequestException, ValueError, TypeError, KeyError):
+            result["warnings"].append("周辺の見どころ情報を取得できませんでした。")
+        scenic_coordinates = ([start, landmark, return_to] if reached else [start, end, landmark, return_to]
+                              if loop else [start, landmark, end]) if landmark else coordinates
+        try:
+            route = normalized_route(_request_ors(scenic_coordinates, key, green=True), scenic_coordinates, speed, loop, returning=reached)
+            result["routes"].append({"id": "roundtrip_scenic" if loop else "scenic", "route": route,
+                                     "detail": f'{landmark["name"]}を経由' if landmark else "緑や静かな道を優先"})
+        except RouteError as error:
+            result["warnings"].append(error.message)
     with _LOCK:
         if not result["warnings"]:
             if len(_CACHE) >= 32:

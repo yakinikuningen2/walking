@@ -119,6 +119,62 @@ class WalkingRoutesTest(unittest.TestCase):
             self.assertEqual(error.exception.code, "ORS_NOT_CONFIGURED")
             upstream.assert_not_called()
 
+    def test_long_route_requires_server_key_and_ignores_client_key(self):
+        with patch.dict(os.environ, {"ORS_API_KEY": ""}), patch.object(routes, "_request_ors") as upstream:
+            with self.assertRaises(routes.RouteError) as error:
+                routes.walking_suggestions({**self.payload("standard"), "ORS_API_KEY": KEY}, map_response)
+            self.assertEqual(error.exception.code, "ORS_NOT_CONFIGURED")
+            self.assertIn("距離上限", error.exception.message)
+            upstream.assert_not_called()
+
+    def test_long_route_uses_one_foot_request_without_scenic_search(self):
+        start = {"lat": 35.7787, "lng": 139.4966}
+        end = {"lat": 34.3974, "lng": 132.4753}
+        payload = {**self.payload("standard"), "start": start, "destination": end}
+        data = ors_response([start, end])
+        data["features"][0]["properties"]["summary"]["distance"] = 900000
+        with patch.object(routes, "_request_ors", return_value=data) as upstream, \
+             patch.object(routes, "scenic_point") as scenic:
+            result = routes.walking_suggestions(payload, map_response)
+            self.assertEqual(routes.walking_suggestions(payload, map_response), result)
+            upstream.assert_called_once_with([start, end], KEY, long_route=True)
+            scenic.assert_not_called()
+        self.assertEqual([r["id"] for r in result["routes"]], ["ors_standard"])
+        route = result["routes"][0]["route"]
+        self.assertEqual(route["distance"], 900000)
+        self.assertAlmostEqual(route["duration"], 900000 / (4 / 3.6))
+        self.assertEqual(route["legs"][-1]["steps"][-1]["instruction"], "目的地に到着")
+        self.assertEqual(result["warnings"], [])
+        self.assertNotIn(KEY, json.dumps(result))
+
+    def test_long_route_request_uses_recommended_profile_and_longer_timeout(self):
+        session = MagicMock()
+        response = session.post.return_value.__enter__.return_value
+        response.status_code = 200
+        response.json.return_value = ors_response([START, END])
+        with patch.object(routes._LOCAL, "session", session, create=True):
+            routes._request_ors([START, END], KEY, long_route=True)
+        args, kwargs = session.post.call_args
+        self.assertEqual(args[0], routes.ORS_ENDPOINT)
+        self.assertEqual(kwargs["json"]["preference"], "recommended")
+        self.assertNotIn("options", kwargs["json"])
+        self.assertEqual(kwargs["timeout"], (5, 60))
+        self.assertEqual(kwargs["headers"]["Authorization"], KEY)
+        self.assertNotIn(KEY, json.dumps(kwargs["json"]))
+
+    def test_ors_limits_have_safe_distinct_errors(self):
+        for status, code, expected in [(400, 2004, "ORS_LIMIT_EXCEEDED"), (500, 2017, "ORS_COMPUTATION_LIMIT"),
+                                       (404, 2009, "ORS_NO_ROUTE")]:
+            session = MagicMock()
+            response = session.post.return_value.__enter__.return_value
+            response.status_code = status
+            response.json.return_value = {"error": {"code": code, "message": KEY}}
+            with self.subTest(code=code), patch.object(routes._LOCAL, "session", session, create=True), \
+                 self.assertRaises(routes.RouteError) as error:
+                routes._request_ors([START, END], KEY, long_route=True)
+            self.assertEqual(error.exception.code, expected)
+            self.assertNotIn(KEY, error.exception.message)
+
     def test_invalid_input_before_network(self):
         cases = [None, [], {}, {**self.payload(), "start": {"lat": True, "lng": 139}},
                  {**self.payload(), "destination": {"lat": float("nan"), "lng": 139}},
