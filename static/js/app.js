@@ -130,6 +130,7 @@ const MAP_DATA_ENDPOINT = "https://overpass.private.coffee/api/interpreter";
 const DISCOVERY_MAP_ENDPOINTS = [MAP_DATA_ENDPOINT, "https://overpass-api.de/api/interpreter"];
 const DISCOVERY_MAP_TIMEOUT_MS = 60000;
 const DISCOVERY_PROVIDER_DELAY_MS = 4000;
+const DISCOVERY_PARK_TIMEOUT_MS = 4000;
 const discoveryMapProviders = DISCOVERY_MAP_ENDPOINTS.map(() => ({ retryAt: 0 }));
 let preferredDiscoveryMapProvider = 0;
 let lastDiscoveryMapError = null;
@@ -260,6 +261,7 @@ let activeRouteKind = null;
 const natureCache = new Map();
 const convenienceCache = new Map();
 const discoveryMapCache = new Map();
+const discoveryParkCache = new Map();
 let seasonalPlacesCache = null;
 const discoveryGeometryCache = new Map();
 const discoveryContextCache = new Map();
@@ -2702,9 +2704,14 @@ async function fetchDiscoveryContext(places, request) {
   const points = places.slice(0, rural ? 4 : 8).map((place) => ({ lat: place.lat, lng: place.lng,
     radius: rural ? 800 : 400 }))
     .sort((a, b) => a.lat - b.lat || a.lng - b.lng);
-  const key = `bbox:${rural ? "rural-2000:" : ""}${points.map((point) => `${point.radius}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`).join(";")}`;
-  let context = discoveryContextCache.get(key);
-  if (!context || Date.now() - context.at >= 600000) {
+  const key = (point) => `${rural ? "rural-2000" : "nearby-400"}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`;
+  const saved = [], missing = [];
+  for (const point of points) {
+    const context = discoveryContextCache.get(key(point));
+    if (context && Date.now() - context.at < 600000) saved.push(context.elements);
+    else missing.push(point);
+  }
+  if (missing.length) {
     // Look around the walking destination, rather than every edge of a large forest or lake.
     const filters = [
       { tags: '[~"^(landuse|natural|place)$"~"^(residential|retail|commercial|industrial|farmland|farmyard|orchard|vineyard|forest|meadow|wood|grassland|scrub|wetland|water|peak|city|village|hamlet|isolated_dwelling)$"]', radius: rural ? 800 : 400, limit: 80 },
@@ -2713,14 +2720,89 @@ async function fetchDiscoveryContext(places, request) {
     ];
     if (rural) filters.push({ tags: '[~"^(landuse|natural)$"~"^(forest|wood|peak)$"]', radius: 2000, limit: 40 });
     // Keep a separate quota for each place so one busy area cannot hide other places' surroundings.
-    const queries = points.map((point) => filters.map((filter) => `nwr(${discoveryBounds(point, filter.radius)})${filter.tags}->.neighborhood;`
+    const queries = missing.map((point) => filters.map((filter) => `nwr(${discoveryBounds(point, filter.radius)})${filter.tags}->.neighborhood;`
       + `.neighborhood out body center ${filter.limit};`).join("")).join("");
     const query = `[out:json][timeout:10];${queries}`;
-    context = { at: Date.now(), elements: await fetchDiscoveryMapData(query, request, 15000, false) };
-    if (discoveryContextCache.size >= 20) discoveryContextCache.delete(discoveryContextCache.keys().next().value);
-    discoveryContextCache.set(key, context);
+    const elements = await fetchDiscoveryMapData(query, request, 15000, false);
+    for (const point of missing) {
+      const nearby = elements.filter((element) => {
+        const other = discoveryPoint(element);
+        return other && map.distance(point, other) <= (rural ? 2000 : 400);
+      });
+      if (discoveryContextCache.size >= 80) discoveryContextCache.delete(discoveryContextCache.keys().next().value);
+      discoveryContextCache.set(key(point), { at: Date.now(), elements: nearby });
+      saved.push(nearby);
+    }
   }
-  return context.elements;
+  return mergeDiscoveryElements(...saved);
+}
+
+function discoveryParkElements(data) {
+  if (!Array.isArray(data?.features)) throw new Error("Invalid park search response");
+  const types = { N: "node", W: "way", R: "relation" };
+  return data.features.flatMap((feature) => {
+    const p = feature?.properties, coordinates = feature?.geometry?.coordinates;
+    if (p?.osm_key !== "leisure" || !["park", "garden", "nature_reserve"].includes(p.osm_value)
+      || !Object.hasOwn(types, p.osm_type) || !Number.isSafeInteger(p.osm_id) || p.osm_id <= 0
+      || typeof p.name !== "string" || !p.name.trim() || feature?.geometry?.type !== "Point"
+      || !Array.isArray(coordinates) || !validCoordinates(coordinates[1], coordinates[0])) return [];
+    const extra = p.extra && typeof p.extra === "object" && !Array.isArray(p.extra) ? p.extra : {};
+    return [{ type: types[p.osm_type], id: p.osm_id, lat: coordinates[1], lon: coordinates[0], tags: {
+      ...extra, leisure: p.osm_value, name: p.name,
+      "addr:province": p.state, "addr:city": p.city, "addr:suburb": p.district || p.locality,
+      "addr:street": p.street, "addr:housenumber": p.housenumber,
+    } }];
+  });
+}
+
+async function fetchDiscoveryParks(criteria, start, request, onUpdate) {
+  const radius = criteria.minutes * criteria.speed * 1000 / 60 / DISCOVERY_DISTANCE_FACTOR;
+  // Keep exact GPS coordinates local, and recheck results against the actual start/time window.
+  if (radius > 100000 || Math.abs(start.lat) > 75 || Math.abs(start.lng) > 178) return [];
+  const center = { lat: Math.round(start.lat * 500) / 500, lng: Math.round(start.lng * 500) / 500 };
+  const [south, west, north, east] = discoveryBounds(center, radius + 300).split(",");
+  if (Number(west) >= Number(east)) return [];
+  const minRadius = (criteria.minMinutes || 0) * criteria.speed * 1000 / 60 / DISCOVERY_DISTANCE_FACTOR;
+  const targetRadius = minRadius ? (minRadius + radius) / 2 : 0;
+  const offsetLat = targetRadius / 111195;
+  const offsetLng = offsetLat / Math.cos(center.lat * Math.PI / 180);
+  const focuses = minRadius ? [
+    { lat: center.lat, lng: center.lng + offsetLng }, { lat: center.lat + offsetLat, lng: center.lng },
+    { lat: center.lat, lng: center.lng - offsetLng }, { lat: center.lat - offsetLat, lng: center.lng },
+  ] : [center];
+  let elements = [];
+  for (const focus of focuses) {
+    if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const url = new URL(SEARCH_ENDPOINT);
+    url.search = new URLSearchParams({
+      include: "osm.leisure.park,osm.leisure.garden,osm.leisure.nature_reserve",
+      bbox: `${west},${south},${east},${north}`,
+      lat: (Math.round(focus.lat * 500) / 500).toFixed(3), lon: (Math.round(focus.lng * 500) / 500).toFixed(3),
+      limit: "50", lang: "default", location_bias_scale: "0",
+    }).toString();
+    let cached = discoveryParkCache.get(url.href);
+    if (!cached || Date.now() - cached.at >= 600000) {
+      try {
+        // Share the one-second interval with manual place/start searches.
+        while (Date.now() - lastSearchAt < 1000) {
+          await abortableRouteDelay(1000 - (Date.now() - lastSearchAt), request.controller.signal);
+        }
+        if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+        lastSearchAt = Date.now();
+        const found = discoveryParkElements(await fetchRouteJson(url, request, DISCOVERY_PARK_TIMEOUT_MS));
+        if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+        cached = { at: Date.now(), elements: found };
+        if (discoveryParkCache.size >= 20) discoveryParkCache.delete(discoveryParkCache.keys().next().value);
+        discoveryParkCache.set(url.href, cached);
+      } catch (error) {
+        if (request.controller.signal.aborted) throw error;
+        break; // Preserve Overpass as a fallback when Photon is unavailable.
+      }
+    }
+    elements = mergeDiscoveryElements(elements, cached.elements);
+    if (await onUpdate(elements)) break;
+  }
+  return elements;
 }
 
 async function fetchSeasonalPlaces(request) {
@@ -2775,11 +2857,7 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
     }
     return matches;
   };
-  if (kinds.every((key) => DISCOVERY_KINDS[key].seasonal)) {
-    // Fixed local data identifies actual listed spots, rather than assuming every park
-    // or every place named "Sakura" is a viewing spot. Time/range checks stay local.
-    elements = await fetchSeasonalPlaces(request);
-    let places = await assessPlaces();
+  const enrichPlaces = async (places) => {
     if (!["any", "rural"].includes(ambience) && places.length) {
       try { elements = mergeDiscoveryElements(elements, await fetchDiscoveryContext(places, request)); }
       catch (error) {
@@ -2790,6 +2868,21 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
       onUpdate(places);
     }
     return places;
+  };
+  if (kinds.length === 1 && kinds[0] === "park") {
+    let places = [];
+    await fetchDiscoveryParks(criteria, start, request, async (found) => {
+      elements = mergeDiscoveryElements(elements, found);
+      places = await assessPlaces();
+      return places.length >= 5 || request.ambienceUnavailable;
+    });
+    if (places.length >= 5 || request.ambienceUnavailable) return enrichPlaces(places);
+  }
+  if (kinds.every((key) => DISCOVERY_KINDS[key].seasonal)) {
+    // Fixed local data identifies actual listed spots, rather than assuming every park
+    // or every place named "Sakura" is a viewing spot. Time/range checks stay local.
+    elements = await fetchSeasonalPlaces(request);
+    return enrichPlaces(await assessPlaces());
   }
   while (true) {
     if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -2850,16 +2943,7 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
       places = await assessPlaces();
       if (ambience === "rural" && request.ambienceUnavailable) return places;
     }
-    if (!["any", "rural"].includes(ambience) && places.length) {
-      try {
-        elements = mergeDiscoveryElements(elements, await fetchDiscoveryContext(places, request));
-      } catch (error) {
-        if (request.controller.signal.aborted) throw error;
-        request.ambienceUnavailable = true;
-      }
-      places = discoveryCandidates(elements, criteria, start, 24);
-      onUpdate(places);
-    }
+    places = await enrichPlaces(places);
     if (radius >= maxRadius || (places.length >= 5
       && (!preferredKinds.length || places.some((place) => preferredKinds.includes(place.kindId)))
       && (["any", "rural"].includes(ambience) || places.some((place) => place.ambienceNote) || request.ambienceUnavailable))) return places;
