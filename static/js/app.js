@@ -130,7 +130,7 @@ const MAP_DATA_ENDPOINT = "https://overpass.private.coffee/api/interpreter";
 const DISCOVERY_MAP_ENDPOINTS = [MAP_DATA_ENDPOINT, "https://overpass-api.de/api/interpreter"];
 const DISCOVERY_MAP_TIMEOUT_MS = 60000;
 const DISCOVERY_PROVIDER_DELAY_MS = 4000;
-const DISCOVERY_PARK_TIMEOUT_MS = 4000;
+const DISCOVERY_PARK_TIMEOUT_MS = 8000;
 const discoveryMapProviders = DISCOVERY_MAP_ENDPOINTS.map(() => ({ retryAt: 0 }));
 let preferredDiscoveryMapProvider = 0;
 let lastDiscoveryMapError = null;
@@ -1619,10 +1619,21 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
   try {
     // Live Server also sends long map queries in the body when the Python relay is offline.
     const mapQuery = DISCOVERY_MAP_ENDPOINTS.includes(url.origin + url.pathname) && url.searchParams.get("data");
-    const response = await fetchMapProxy(url, controller.signal, timeoutMs)
-      || await fetch(mapQuery ? new URL(url.origin + url.pathname) : url, mapQuery
+    const direct = () => fetch(mapQuery ? new URL(url.origin + url.pathname) : url, mapQuery
         ? { method: "POST", body: new URLSearchParams({ data: mapQuery }), signal: controller.signal }
         : { signal: controller.signal });
+    let response = await fetchMapProxy(url, controller.signal, timeoutMs);
+    if (!response) response = await direct();
+    else if (mapQuery && [429, 502, 503, 504].includes(response.status)) {
+      // A Render-to-provider failure need not mean the browser cannot reach that provider.
+      // Keep the original error if the direct attempt also fails; share the same timeout.
+      try {
+        const alternative = await direct();
+        if (alternative.ok) response = alternative;
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+      }
+    }
     let data;
     try { data = await response.json(); }
     catch (error) { error.httpStatus = response.status; throw error; }
@@ -2755,6 +2766,33 @@ function discoveryParkElements(data) {
   });
 }
 
+async function fetchDiscoveryParkData(url, request) {
+  try {
+    return discoveryParkElements(await fetchRouteJson(url, request, DISCOVERY_PARK_TIMEOUT_MS));
+  } catch (error) {
+    if (request.controller.signal.aborted || !MAP_PROXY_ENDPOINT) throw error;
+  }
+  // A mobile connection or content blocker may prevent the browser's direct lookup.
+  // The same rounded query can still reach the same provider through our Python server.
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (request.controller.signal.aborted) abort();
+  request.controller.signal.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(abort, 10000);
+  try {
+    const response = await fetch(new URL("/api/parks", MAP_PROXY_ENDPOINT), {
+      method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bbox: url.searchParams.get("bbox").split(",").map(Number),
+        lat: Number(url.searchParams.get("lat")), lon: Number(url.searchParams.get("lon")) }),
+    });
+    if (!response.ok || response.headers.get("X-Walking-Map") !== "1") throw new Error("Park relay unavailable");
+    return discoveryParkElements(await response.json());
+  } finally {
+    clearTimeout(timer);
+    request.controller.signal.removeEventListener("abort", abort);
+  }
+}
+
 async function fetchDiscoveryParks(criteria, start, request, onUpdate) {
   const radius = criteria.minutes * criteria.speed * 1000 / 60 / DISCOVERY_DISTANCE_FACTOR;
   // Keep exact GPS coordinates local, and recheck results against the actual start/time window.
@@ -2789,7 +2827,7 @@ async function fetchDiscoveryParks(criteria, start, request, onUpdate) {
         }
         if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
         lastSearchAt = Date.now();
-        const found = discoveryParkElements(await fetchRouteJson(url, request, DISCOVERY_PARK_TIMEOUT_MS));
+        const found = await fetchDiscoveryParkData(url, request);
         if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
         cached = { at: Date.now(), elements: found };
         if (discoveryParkCache.size >= 20) discoveryParkCache.delete(discoveryParkCache.keys().next().value);
@@ -3005,6 +3043,7 @@ async function fetchDiscoverySuggestions(request) {
       if (!isCurrent()) return;
       results = highElevation ? places.filter((place) => validDiscoveryElevation(place.elevation)) : places;
       renderDiscoveryResults(results, request);
+      if (results.length) message(ui["discovery-status"], `候補 ${Math.min(5, results.length)}件`);
     });
     if (highElevation && isCurrent()) {
       results = await fetchDiscoveryElevations(places, request);

@@ -32,9 +32,10 @@ function setup() {
   let now = 1000000;
   const calls = [], mapCalls = [];
   const context = vm.createContext({
-    URL, URLSearchParams, AbortController, DOMException, Math, Number, Object, Map, Set,
+    URL, URLSearchParams, AbortController, DOMException, Math, Number, Object, Map, Set, setTimeout, clearTimeout,
     Date: class extends Date { static now() { return now; } },
-    SEARCH_ENDPOINT: 'https://photon.komoot.io/api/', DISCOVERY_PARK_TIMEOUT_MS: 4000,
+    SEARCH_ENDPOINT: 'https://photon.komoot.io/api/', DISCOVERY_PARK_TIMEOUT_MS: 8000,
+    MAP_PROXY_ENDPOINT: null,
     DISCOVERY_MAP_TIMEOUT_MS: 60000, DISCOVERY_PROVIDER_DELAY_MS: 4000,
     DISCOVERY_MAP_ENDPOINTS: [], lastSearchAt: -Infinity,
     discoveryMapCache: new Map(), discoveryParkCache: new Map(), discoveryContextCache: new Map(),
@@ -78,7 +79,7 @@ test('6h30 park search returns only valid 6–7h candidates without waiting for 
   assert.ok(result.every(p => p.duration >= 360 * 60 && p.duration <= 420 * 60));
   assert.ok(result.every(p => !p.free && !p.toilets && !p.benches));
   assert.equal(updates.length, 1);
-  assert.equal(calls[0].timeout, 4000);
+  assert.equal(calls[0].timeout, 8000);
   const url = calls[0].url;
   assert.equal(url.searchParams.getAll('include').length, 1, 'category alternatives must be OR, not AND');
   assert.equal(url.searchParams.get('include'), 'osm.leisure.park,osm.leisure.garden,osm.leisure.nature_reserve');
@@ -139,6 +140,77 @@ test('cancelled searches cannot show or cache a late Photon response', async () 
   assert.equal(updates, 0);
   assert.equal(c.discoveryParkCache.size, 0);
   assert.equal(mapCalls.length, 0);
+});
+
+test('a blocked direct park search can succeed through the Python relay', async () => {
+  const { context: c, calls, mapCalls, request } = setup();
+  c.MAP_PROXY_ENDPOINT = 'https://walking.example/api/overpass';
+  c.photon = async () => { throw new TypeError('blocked'); };
+  const relayed = [];
+  c.fetch = async (url, options) => {
+    relayed.push({ url: url.href, options });
+    return { ok: true, headers: { get: () => '1' }, json: async () => ({ features }) };
+  };
+  const result = await c.findDiscoveryPlaces(criteria, start, request());
+  assert.ok(result.length >= 5);
+  assert.equal(calls.length, 1);
+  assert.equal(relayed.length, 1);
+  assert.equal(relayed[0].url, 'https://walking.example/api/parks');
+  const body = JSON.parse(relayed[0].options.body);
+  assert.deepEqual(Object.keys(body).sort(), ['bbox', 'lat', 'lon']);
+  assert.notEqual(body.lat, start.lat);
+  assert.equal(mapCalls.length, 0, 'no expensive full-area fallback when the relay succeeds');
+});
+
+test('a missing or unrelated relay preserves the original search fallback', async () => {
+  const { context: c, mapCalls, request } = setup();
+  c.MAP_PROXY_ENDPOINT = 'https://walking.example/api/overpass';
+  c.photon = async () => { throw new TypeError('blocked'); };
+  c.fetch = async () => ({ ok: true, headers: { get: () => null }, json: async () => ({ features }) });
+  const result = await c.findDiscoveryPlaces(criteria, start, request());
+  assert.ok(result.length >= 5);
+  assert.equal(mapCalls.length, 1);
+  assert.equal(c.discoveryParkCache.size, 0);
+});
+
+test('cancelling during a relayed lookup discards the late response', async () => {
+  const { context: c, mapCalls, request } = setup();
+  c.MAP_PROXY_ENDPOINT = 'https://walking.example/api/overpass';
+  const req = request();
+  c.photon = async () => { throw new TypeError('blocked'); };
+  c.fetch = async (_url, options) => {
+    req.controller.abort();
+    assert.equal(options.signal.aborted, true);
+    return { ok: true, headers: { get: () => '1' }, json: async () => ({ features }) };
+  };
+  await assert.rejects(c.findDiscoveryPlaces(criteria, start, req), { name: 'AbortError' });
+  assert.equal(c.discoveryParkCache.size, 0);
+  assert.equal(mapCalls.length, 0);
+});
+
+test('Overpass relay gateway failures allow a direct lookup within the same timeout', async () => {
+  const c = vm.createContext({ URL, URLSearchParams, AbortController, DOMException, setTimeout, clearTimeout,
+    DISCOVERY_MAP_ENDPOINTS: ['https://overpass.private.coffee/api/interpreter'] });
+  vm.runInContext(source.slice(source.indexOf('async function fetchRouteJson'), source.indexOf('async function waitForRouteTurn')), c);
+  let directCalls = 0;
+  c.fetchMapProxy = async () => ({ status: 504, ok: false, json: async () => ({ error: 'timeout', code: 'MapTimeout' }) });
+  c.fetch = async (url, options) => {
+    directCalls++;
+    assert.equal(url.href, 'https://overpass.private.coffee/api/interpreter');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.body.get('data'), 'query');
+    return { status: 200, ok: true, json: async () => ({ elements: [] }) };
+  };
+  const url = new URL('https://overpass.private.coffee/api/interpreter?data=query');
+  const result = await c.fetchRouteJson(url, { controller: new AbortController() }, 1000);
+  assert.equal(result.elements.length, 0);
+  assert.equal(directCalls, 1);
+  c.fetchMapProxy = async () => ({ status: 503, ok: false, json: async () => ({ error: 'busy', code: 'MapBusy' }) });
+  c.fetch = async () => { throw new TypeError('offline'); };
+  await assert.rejects(c.fetchRouteJson(url, { controller: new AbortController() }, 1000), e => e.routeCode === 'MapBusy');
+  c.fetchMapProxy = async () => ({ status: 400, ok: false, json: async () => ({ error: 'bad query', code: 'MapQuery' }) });
+  c.fetch = async () => { throw new Error('invalid queries must not be retried'); };
+  await assert.rejects(c.fetchRouteJson(url, { controller: new AbortController() }, 1000), e => e.routeCode === 'MapQuery');
 });
 
 test('rural candidates still require surrounding data and reject dense urban parks', async () => {

@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import argparse
 import json
 import mimetypes
+from math import isfinite
 import os
 import socket
 import time
@@ -24,11 +25,13 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.private.coffee/api/interpreter",
     "https://overpass-api.de/api/interpreter",
 )
+PARK_SEARCH_ENDPOINT = "https://photon.komoot.io/api/"
 USER_AGENT = "WalkingMap/1.0 (https://github.com/yakinikuningen2/walking)"
 CACHE_TTL = 600
 CACHE_LIMIT = 32
 _CACHE = OrderedDict()
 _CACHE_LOCK = Lock()
+_PARK_CACHE = OrderedDict()
 _SESSIONS = local()
 
 
@@ -56,6 +59,55 @@ class WalkingServer(ThreadingHTTPServer):
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()
+
+
+def park_data(payload):
+    """Relay only the approved rounded park search, never arbitrary URLs or categories."""
+    if not isinstance(payload, dict) or set(payload) != {"bbox", "lat", "lon"}:
+        raise RouteError("ParkQuery", "公園の検索範囲が正しくありません。", 400)
+    bounds, lat, lon = payload["bbox"], payload["lat"], payload["lon"]
+    def valid(value):
+        return type(value) in (int, float) and isfinite(value)
+
+    if not isinstance(bounds, list) or len(bounds) != 4 or not all(valid(v) for v in bounds) or not valid(lat) or not valid(lon):
+        raise RouteError("ParkQuery", "公園の検索範囲が正しくありません。", 400)
+    west, south, east, north = bounds
+    if not (-180 <= west < east <= 180 and -90 <= south < north <= 90
+            and north - south <= 2 and east - west <= 8 and south <= lat <= north and west <= lon <= east):
+        raise RouteError("ParkQuery", "公園の検索範囲が正しくありません。", 400)
+    lat, lon = round(lat * 500) / 500, round(lon * 500) / 500
+    key = (tuple(bounds), lat, lon)
+    with _CACHE_LOCK:
+        cached = _PARK_CACHE.get(key)
+        if cached and time.monotonic() - cached[0] < CACHE_TTL:
+            _PARK_CACHE.move_to_end(key)
+            return cached[1]
+    if not hasattr(_SESSIONS, "session"):
+        _SESSIONS.session = requests.Session()
+        _SESSIONS.session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
+    params = {"include": "osm.leisure.park,osm.leisure.garden,osm.leisure.nature_reserve",
+              "bbox": ",".join(f"{value:.6f}" for value in bounds),
+              "lat": f"{lat:.3f}", "lon": f"{lon:.3f}", "limit": "50",
+              "lang": "default", "location_bias_scale": "0"}
+    try:
+        with _SESSIONS.session.get(PARK_SEARCH_ENDPOINT, params=params, timeout=(3, 5), allow_redirects=False) as response:
+            if response.status_code == 429:
+                raise RouteError("ParkBusy", "公園の検索先が混み合っています。", 503)
+            if response.status_code != 200:
+                raise RouteError("ParkUnavailable", "公園の検索先に接続できませんでした。", 502)
+            data = response.json()
+        if not isinstance(data, dict) or not isinstance(data.get("features"), list) or len(data["features"]) > 100:
+            raise ValueError("Invalid park data")
+    except requests.Timeout:
+        raise RouteError("ParkTimeout", "公園の検索先の応答に時間がかかっています。", 504) from None
+    except (requests.RequestException, ValueError):
+        raise RouteError("ParkUnavailable", "公園の情報を取得できませんでした。", 502) from None
+    with _CACHE_LOCK:
+        _PARK_CACHE[key] = (time.monotonic(), data)
+        _PARK_CACHE.move_to_end(key)
+        while len(_PARK_CACHE) > CACHE_LIMIT:
+            _PARK_CACHE.popitem(last=False)
+    return data
 
 
 def map_data(query, provider=0, timeout_ms=60000):
@@ -125,7 +177,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
             pass  # The browser may have cancelled this search.
 
     def do_OPTIONS(self):
-        if urlsplit(self.path).path not in ("/api/overpass", "/api/walking-routes"):
+        if urlsplit(self.path).path not in ("/api/overpass", "/api/walking-routes", "/api/parks"):
             self.send_json({"error": "Not found"}, 404)
             return
         self.send_response(204)
@@ -172,7 +224,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/overpass", "/api/walking-routes"):
+        if path not in ("/api/overpass", "/api/walking-routes", "/api/parks"):
             self.send_json({"error": "Not found"}, 404)
             return
         origin = self.headers.get("Origin", "")
@@ -181,9 +233,17 @@ class WalkingHandler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > (8192 if path == "/api/walking-routes" else 262144):
+            if length <= 0 or length > (8192 if path in ("/api/walking-routes", "/api/parks") else 262144):
                 raise ValueError("Invalid body size")
             payload = json.loads(self.rfile.read(length))
+            if path == "/api/parks":
+                try:
+                    self.send_json(park_data(payload))
+                except RouteError as error:
+                    self.send_json({"error": error.message, "code": error.code}, error.status)
+                except Exception:
+                    self.send_json({"error": "公園の情報を取得できませんでした。", "code": "ParkUnavailable"}, 502)
+                return
             if path == "/api/walking-routes":
                 try:
                     self.send_json(walking_suggestions(payload, map_data))
