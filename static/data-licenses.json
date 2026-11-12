@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "checked": "2026-11-12",
+  "program": "本アプリ独自のプログラムには、現在リポジトリ全体の利用許諾を定めるLICENSEファイルがありません。下記のデータ・ライブラリのライセンスを、プログラム全体へ適用するものではありません。",
+  "datasets": [
+    {
+      "id": "railway",
+      "name": "国土数値情報・鉄道データ 2025年度版（加工済み駅索引）",
+      "provider": "国土交通省",
+      "sourceUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2025.html",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "files": ["stations-jp-2025-v1.json", "stations-jp-2025-v1.json.gz"],
+      "modified": "2025年12月31日時点の駅区間を中点に変換し、公式グループコードで集約。路線・運営会社を保持した9,046組の駅索引を作成。gzip版も同じ内容。",
+      "attribution": "国土数値情報（鉄道データ・2025年度）（国土交通省）を加工して作成"
+    },
+    {
+      "id": "seasonal",
+      "name": "桜・紅葉の名所候補",
+      "provider": "Wikipedia contributors / Wikidata contributors",
+      "sourceUrl": "https://ja.wikipedia.org/wiki/日本さくら名所100選",
+      "additionalSources": ["https://ja.wikipedia.org/wiki/日本紅葉の名所100選", "https://www.wikidata.org/wiki/Wikidata:Licensing"],
+      "license": "CC BY-SA 4.0（Wikipedia由来の編集・分類）／CC0 1.0（Wikidataの構造化データ）",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "files": ["seasonal-places.json"],
+      "modified": "本文・写真は収録せず、地点名・座標・所在地・分類を抽出して編集。Wikipedia由来の編集データはCC BY-SA 4.0で再提供。個別出典を各地点に保持。再配布条件が確認できないGO TOKYO由来の分類・地点は公開用データから除外。",
+      "attribution": "© Wikipedia contributors（CC BY-SA 4.0）、Wikidata contributors（CC0 1.0）。個別記事と著者履歴の案内はJSONの出典を参照。"
+    },
+    {
+      "id": "route-access",
+      "name": "秋津駅の通行除外範囲・駅外側の入口",
+      "provider": "OpenStreetMap contributors / 本アプリで加工",
+      "sourceUrl": "https://www.openstreetmap.org/way/1252371411",
+      "license": "ODbL 1.0（データベース）",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "files": ["route-access.json"],
+      "modified": "通路形状・座標を参考に小さい除外範囲と入口候補を選定。西武鉄道の構内案内は事実確認用とし、画像・本文は収録していない。",
+      "attribution": "© OpenStreetMap contributors。加工済みデータベースは上記JSONとしてODbL 1.0で公開。個別コンテンツはDbCL 1.0。"
+    }
+  ],
+  "services": [
+    {
+      "name": "背景地図・施設検索・徒歩ルートの基礎地図",
+      "provider": "OpenStreetMap contributors（Photon / Overpass / Valhalla / openrouteservice経由を含む）",
+      "sourceUrl": "https://www.openstreetmap.org/copyright",
+      "license": "ODbL 1.0。APIソフトウェアのライセンスとは別。",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "modified": "検索・距離判定・経路表示に利用。全国抽出DBや背景タイルはリポジトリに同梱せず、検索結果・キャッシュは一時的に利用。派生DBの公開時はODbLの再提供条件を別途適用。"
+    },
+    {
+      "name": "Leaflet 1.9.4",
+      "provider": "Volodymyr Agafonkin / CloudMade / Leaflet contributors",
+      "sourceUrl": "https://github.com/Leaflet/Leaflet/tree/v1.9.4",
+      "license": "BSD-2-Clause",
+      "licenseUrl": "https://github.com/Leaflet/Leaflet/blob/v1.9.4/LICENSE",
+      "modified": "CDNから原ファイルを読み込み。本アプリにはライブラリ本体を同梱していない。"
+    }
+  ]
+}

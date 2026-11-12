@@ -192,6 +192,8 @@ class WalkingHandler(BaseHTTPRequestHandler):
             return
         if path in ("/", "/index.html", "/templates/index.html"):
             file = ROOT / ("templates/index.html" if path.startswith("/templates/") else "index.html")
+        elif path in ("/README.md", "/THIRD_PARTY_NOTICES.md", "/DATA_RESEARCH.md"):
+            file = ROOT / path.lstrip("/")
         elif path.startswith("/static/"):
             from urllib.parse import unquote
             file = (ROOT / unquote(path.lstrip("/"))).resolve()
@@ -204,9 +206,21 @@ class WalkingHandler(BaseHTTPRequestHandler):
         if not file.is_file():
             self.send_json({"error": "Not found"}, 404)
             return
-        body = file.read_bytes()
+        station_index = file == ROOT / "static" / "stations-jp-2025-v1.json"
+        compressed = file.with_suffix(file.suffix + ".gz")
+        use_gzip = False
+        if station_index and compressed.is_file():
+            for token in self.headers.get("Accept-Encoding", "").lower().split(","):
+                encoding, *parameters = token.strip().split(";")
+                try:
+                    quality = float(next((p.strip()[2:] for p in parameters if p.strip().startswith("q=")), "1"))
+                except ValueError:
+                    quality = 0
+                if encoding == "gzip" and quality > 0:
+                    use_gzip = True
+        body = (compressed if use_gzip else file).read_bytes()
         content_type = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
-        if file.suffix == ".html":
+        if file.suffix == ".html" and file.name == "index.html":
             # Pages served here use this server even with a custom --port.
             body = body.replace(b"</head>", b'<meta name="walking-map-api" content="/api/overpass"></head>', 1)
         if content_type.startswith("text/") or file.suffix == ".js":
@@ -214,7 +228,11 @@ class WalkingHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable" if station_index else "no-cache")
+        if station_index:
+            self.send_header("Vary", "Accept-Encoding")
+        if use_gzip:
+            self.send_header("Content-Encoding", "gzip")
         self.end_headers()
         if self.command != "HEAD":
             self.write_body(body)

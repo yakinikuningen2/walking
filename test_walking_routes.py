@@ -29,6 +29,37 @@ def map_response(*_args):
 
 
 class WalkingRoutesTest(unittest.TestCase):
+    def test_paid_station_passage_is_retried_and_never_returned_if_provider_ignores_avoidance(self):
+        start = {"lat": 35.77859, "lng": 139.496533}
+        end = {"lat": 35.778435, "lng": 139.496471}
+        blocked = ors_response([start, end])
+        outside = ors_response([start, end])
+        outside["features"][0]["geometry"]["coordinates"].insert(1, [139.4987, 35.7781])
+        outside["features"][0]["properties"]["way_points"] = [0, 2]
+        self.assertTrue(routes.crosses_paid_area(blocked["features"][0]["geometry"]["coordinates"]))
+        self.assertFalse(routes.crosses_paid_area(outside["features"][0]["geometry"]["coordinates"]))
+        with patch.object(routes, "_request_ors", side_effect=[blocked, outside]) as upstream:
+            safe = routes._public_ors([start, end], KEY)
+            self.assertEqual(upstream.call_count, 2)
+            self.assertTrue(upstream.call_args.kwargs["avoid_paid"])
+            routes.normalized_route(safe, [start, end], 4)
+        with patch.object(routes, "_request_ors", return_value=blocked):
+            with self.assertRaises(routes.RouteError) as error:
+                routes.normalized_route(routes._public_ors([start, end], KEY), [start, end], 4)
+            self.assertEqual(error.exception.code, "PAID_AREA_ROUTE")
+
+    def test_paid_area_avoidance_preserves_green_options_and_keeps_credentials_out_of_body(self):
+        session = MagicMock()
+        response = session.post.return_value.__enter__.return_value
+        response.status_code = 200
+        response.json.return_value = ors_response([START, END])
+        with patch.object(routes._LOCAL, "session", session, create=True):
+            routes._request_ors([START, END], KEY, green=True, avoid_paid=True)
+        body = session.post.call_args.kwargs["json"]
+        self.assertEqual(body["options"]["avoid_polygons"]["coordinates"], [[ring] for ring in routes.paid_area_rings()])
+        self.assertIn("profile_params", body["options"])
+        self.assertNotIn(KEY, json.dumps(body))
+
     def test_local_binding_and_cli_override(self):
         with patch.dict(os.environ, {}, clear=True):
             options = app.server_options([])

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "name": "秋津駅の通行除外範囲と駅外側の入口",
+  "provider": "OpenStreetMap contributors / 本アプリで加工",
+  "license": "ODbL 1.0",
+  "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "contentsLicenseUrl": "https://opendatacommons.org/licenses/dbcl/1-0/",
+  "attribution": "© OpenStreetMap contributors. OpenStreetMapの通路形状・座標を参考に、回避範囲と入口候補を加工。",
+  "modified": "駅全体ではなく跨線橋を横切る小範囲を抽出し、入口の座標を選定。西武鉄道の構内案内は事実確認用で、画像・本文は同梱しない。",
+  "areas": [
+    {
+      "id": "akitsu-paid-footbridge",
+      "name": "秋津駅の改札内跨線橋",
+      "ring": [[139.49646, 35.77849], [139.49656, 35.77849], [139.49656, 35.77855], [139.49646, 35.77855], [139.49646, 35.77849]],
+      "sources": ["https://www.openstreetmap.org/way/1252371411", "https://www.seiburailway.jp/railway/station/akitsu/"],
+      "checked": "2026-11-12"
+    }
+  ],
+  "stations": [
+    {
+      "name": "秋津",
+      "lat": 35.7786,
+      "lng": 139.4966,
+      "entrances": [{"lat": 35.7787403, "lng": 139.4969149}, {"lat": 35.7782347, "lng": 139.4967673}]
+    }
+  ]
+}

@@ -1,8 +1,11 @@
 """Server-side walking suggestions. ORS credentials never leave Python."""
 
 from collections import OrderedDict
+from functools import lru_cache
 from math import asin, cos, isfinite, radians, sin, sqrt
+from pathlib import Path
 from threading import Lock, local
+import json
 import os
 import time
 
@@ -79,7 +82,43 @@ def scenic_point(start, end, map_fetch):
     return min(ranked, key=lambda entry: entry[0])[1] if ranked else None
 
 
-def _request_ors(coordinates, key, green=False, long_route=False):
+@lru_cache(maxsize=1)
+def paid_area_rings():
+    data = json.loads((Path(__file__).parent / "static" / "route-access.json").read_text(encoding="utf-8"))
+    rings = [area["ring"] for area in data["areas"]]
+    if data.get("version") != 1 or len(rings) > 50 or any(
+            not isinstance(ring, list) or not 4 <= len(ring) <= 100 or ring[0] != ring[-1]
+            or any(not isinstance(p, list) or len(p) != 2 or not number(p[0]) or not number(p[1])
+                   or not -180 <= p[0] <= 180 or not -90 <= p[1] <= 90 for p in ring) for ring in rings):
+        raise ValueError("Invalid route access data")
+    return rings
+
+
+def crosses_paid_area(shape):
+    if not isinstance(shape, list) or not all(isinstance(p, list) and len(p) >= 2
+            and number(p[0]) and number(p[1]) for p in shape):
+        return False  # normalized_route separately rejects invalid geometry.
+
+    def cross(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def intersects(a, b, c, d):
+        return (max(a[0], b[0]) >= min(c[0], d[0]) and max(c[0], d[0]) >= min(a[0], b[0])
+                and max(a[1], b[1]) >= min(c[1], d[1]) and max(c[1], d[1]) >= min(a[1], b[1])
+                and cross(a, b, c) * cross(a, b, d) <= 0 and cross(c, d, a) * cross(c, d, b) <= 0)
+
+    def inside(p, ring):
+        found = False
+        for a, b in zip(ring, ring[1:]):
+            if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]:
+                found = not found
+        return found
+
+    return any(inside(a, ring) or inside(b, ring) or any(intersects(a, b, c, d) for c, d in zip(ring, ring[1:]))
+               for ring in paid_area_rings() for a, b in zip(shape, shape[1:]))
+
+
+def _request_ors(coordinates, key, green=False, long_route=False, avoid_paid=False):
     if not hasattr(_LOCAL, "session"):
         _LOCAL.session = requests.Session()
     body = {"coordinates": [[p["lng"], p["lat"]] for p in coordinates],
@@ -88,6 +127,9 @@ def _request_ors(coordinates, key, green=False, long_route=False):
     if green:
         body["options"] = {"avoid_features": ["ferries", "fords"], "profile_params": {
             "weightings": {"green": {"factor": 0.9}, "quiet": {"factor": 0.7}}}}
+    if avoid_paid:
+        body.setdefault("options", {})["avoid_polygons"] = {"type": "MultiPolygon",
+                                                           "coordinates": [[ring] for ring in paid_area_rings()]}
     try:
         with _LOCAL.session.post(ORS_ENDPOINT, json=body,
                                  headers={"Authorization": key, "Accept": "application/geo+json",
@@ -114,6 +156,19 @@ def _request_ors(coordinates, key, green=False, long_route=False):
         raise RouteError("ORS_TIMEOUT", "ルートの取得がタイムアウトしました。もう一度お試しください。", 504) from None
     except (requests.RequestException, ValueError):
         raise RouteError("ORS_UNAVAILABLE", "ルートの情報を取得できませんでした。") from None
+
+
+def _public_ors(coordinates, key, green=False, long_route=False):
+    data = _request_ors(coordinates, key, **({"green": True} if green else {"long_route": long_route}))
+    try:
+        shape = data["features"][0]["geometry"]["coordinates"]
+    except (TypeError, KeyError, IndexError):
+        return data
+    # Avoid-area options can lower hosted distance limits. Only request them when
+    # the returned shape actually crosses a known paid passage; never display that shape.
+    if crosses_paid_area(shape):
+        data = _request_ors(coordinates, key, green=green, long_route=long_route, avoid_paid=True)
+    return data
 
 
 def normalized_route(data, coordinates, speed, roundtrip=False, returning=False):
@@ -160,9 +215,15 @@ def normalized_route(data, coordinates, speed, roundtrip=False, returning=False)
             if not steps:
                 raise ValueError()
             legs.append({"steps": steps})
+        if crosses_paid_area(shape):
+            raise RouteError("PAID_AREA_ROUTE", "改札内の通路を避けた徒歩ルートを取得できませんでした。", 422)
         return {"distance": meters, "duration": meters / (speed / 3.6),
                 "geometry": {"type": "LineString", "coordinates": [c[:2] for c in shape]}, "legs": legs}
-    except (KeyError, IndexError, TypeError, ValueError, RouteError):
+    except RouteError as error:
+        if error.code == "PAID_AREA_ROUTE":
+            raise
+        raise RouteError("ORS_INVALID_RESPONSE", "歩行可能なルートの形状を確認できませんでした。") from None
+    except (KeyError, IndexError, TypeError, ValueError):
         raise RouteError("ORS_INVALID_RESPONSE", "歩行可能なルートの形状を確認できませんでした。") from None
 
 
@@ -194,7 +255,7 @@ def walking_suggestions(payload, map_fetch):
             return cached[1]
     coordinates = [start, return_to] if reached else [start, end, return_to] if loop else [start, end]
     # The ordinary fallback needs one continuous foot route, without scenic lookups or weightings.
-    base = normalized_route(_request_ors(coordinates, key, long_route=mode == "standard"), coordinates, speed, loop, returning=reached)
+    base = normalized_route(_public_ors(coordinates, key, long_route=mode == "standard"), coordinates, speed, loop, returning=reached)
     result = {"routes": [{"id": "roundtrip" if loop else "ors_standard", "route": base,
                           "detail": "出発地点へ戻るルート" if reached else "目的地を経由して出発地点へ戻る往復ルート" if loop else "" if mode == "standard" else "距離を優先した徒歩ルート"}], "warnings": []}
     if loop:
@@ -208,7 +269,7 @@ def walking_suggestions(payload, map_fetch):
         scenic_coordinates = ([start, landmark, return_to] if reached else [start, end, landmark, return_to]
                               if loop else [start, landmark, end]) if landmark else coordinates
         try:
-            route = normalized_route(_request_ors(scenic_coordinates, key, green=True), scenic_coordinates, speed, loop, returning=reached)
+            route = normalized_route(_public_ors(scenic_coordinates, key, green=True), scenic_coordinates, speed, loop, returning=reached)
             result["routes"].append({"id": "roundtrip_scenic" if loop else "scenic", "route": route,
                                      "detail": f'{landmark["name"]}を経由' if landmark else "緑や静かな道を優先"})
         except RouteError as error:

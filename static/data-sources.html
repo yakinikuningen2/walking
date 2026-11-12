@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>出典・ライセンス | 散歩アプリ</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { max-width: 880px; margin: 0 auto; padding: 20px 16px 40px; background: #fff; color: #000; font: 14px/1.8 system-ui, sans-serif; }
+    h1 { font-size: 23px; } h2 { margin-top: 28px; font-size: 18px; }
+    h3 { margin: 22px 0 6px; font-size: 16px; }
+    p { margin: 6px 0; } a { color: #000; overflow-wrap: anywhere; text-underline-offset: 2px; }
+    a:focus { outline: none; } dl { margin: 0; } dt { margin-top: 8px; font-weight: 600; } dd { margin: 0; overflow-wrap: anywhere; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+  </style>
+</head>
+<body>
+  <h1>出典・ライセンス</h1>
+  <nav><a href="../README.md">README</a><a href="../THIRD_PARTY_NOTICES.md">外部データの利用条件</a><a href="../DATA_RESEARCH.md">追加候補の調査結果</a></nav>
+  <p>確認日：2026年11月12日</p>
+  <h2>プログラムとデータ</h2><p id="program"></p>
+  <h2>同梱データ</h2><div id="datasets"></div>
+  <h2>外部サービス・ライブラリ</h2><div id="services"></div>
+  <p id="status" role="status"></p>
+  <script>
+    const field = (list, label, value) => {
+      const term = document.createElement('dt'), description = document.createElement('dd');
+      term.textContent = label;
+      if (value instanceof Node) description.append(value); else description.textContent = value;
+      list.append(term, description);
+    };
+    const link = (url, label = url) => {
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.textContent = label; return anchor;
+    };
+    const render = (container, entries) => {
+      for (const entry of entries) {
+        const section = document.createElement('section'), heading = document.createElement('h3'), details = document.createElement('dl');
+        heading.textContent = entry.name; section.append(heading, details);
+        field(details, '提供元', entry.provider);
+        field(details, '取得元', link(entry.sourceUrl));
+        field(details, 'ライセンス', link(entry.licenseUrl, entry.license));
+        field(details, '加工・利用方法', entry.modified);
+        if (entry.attribution) field(details, '出典表記', entry.attribution);
+        if (entry.files) {
+          const files = document.createElement('span');
+          entry.files.forEach((file, i) => { if (i) files.append(' ／ '); files.append(link(file, file)); });
+          field(details, '同梱ファイル', files);
+        }
+        if (entry.additionalSources) {
+          const sources = document.createElement('span');
+          entry.additionalSources.forEach((url, i) => { if (i) sources.append(' ／ '); sources.append(link(url)); });
+          field(details, 'その他の取得元', sources);
+        }
+        container.append(section);
+      }
+    };
+    fetch('data-licenses.json').then(response => { if (!response.ok) throw new Error(); return response.json(); }).then(data => {
+      document.getElementById('program').textContent = data.program;
+      render(document.getElementById('datasets'), data.datasets);
+      render(document.getElementById('services'), data.services);
+    }).catch(() => { document.getElementById('status').textContent = '一覧を読み込めませんでした。READMEまたは外部データの利用条件を確認してください。'; });
+  </script>
+</body>
+</html>

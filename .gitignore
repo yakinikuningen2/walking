@@ -4,3 +4,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+/data-raw/
+/static/images/search_simple.png
+/static/images/地図マーカーのアイコン素材4.png

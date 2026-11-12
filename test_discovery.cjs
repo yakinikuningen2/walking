@@ -35,10 +35,10 @@ function setup() {
     URL, URLSearchParams, AbortController, DOMException, Math, Number, Object, Map, Set, setTimeout, clearTimeout,
     Date: class extends Date { static now() { return now; } },
     SEARCH_ENDPOINT: 'https://photon.komoot.io/api/', DISCOVERY_PARK_TIMEOUT_MS: 8000,
-    MAP_PROXY_ENDPOINT: null,
+    MAP_PROXY_ENDPOINT: null, discoveryRequest: null,
     DISCOVERY_MAP_TIMEOUT_MS: 60000, DISCOVERY_PROVIDER_DELAY_MS: 4000,
     DISCOVERY_MAP_ENDPOINTS: [], lastSearchAt: -Infinity,
-    discoveryMapCache: new Map(), discoveryParkCache: new Map(), discoveryContextCache: new Map(),
+    discoveryMapCache: new Map(), discoveryParkCache: new Map(), discoveryRandomCache: new Map(), discoveryContextCache: new Map(),
     discoveryGeometryCache: new Map(), discoveryElevationCache: new Map(),
     map: { distance }, ui: { 'discovery-status': {} }, message() {},
     validCoordinates: (lat, lng) => typeof lat === 'number' && Number.isFinite(lat) && Math.abs(lat) <= 90
@@ -57,6 +57,7 @@ function setup() {
   vm.runInContext(source.slice(source.indexOf('function discoveryText'), source.indexOf('function renderDiscoveryResults')), context);
   context.photon = async () => ({ features });
   context.mapData = async query => query.includes('.neighborhood') ? [] : elements();
+  context.originalFetchDiscoveryMapData = context.fetchDiscoveryMapData;
   context.fetchDiscoveryMapData = async (query, request) => {
     mapCalls.push(query);
     return context.mapData(query, request);
@@ -251,4 +252,292 @@ test('surroundings failures do not confirm a rural candidate or poison the cache
   assert.equal(result.length, 0);
   assert.equal(req.ambienceUnavailable, true);
   assert.equal(c.discoveryContextCache.size, 0);
+});
+
+test('four directions cover 90-degree sectors while legacy diagonal searches remain readable', () => {
+  const { context: c } = setup();
+  const directions = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
+  for (const [index, direction] of directions.entries()) {
+    const bearing = index * 45;
+    const halfWidth = index % 2 === 0 ? 45 : 22.5;
+    const point = c.discoveryOffset(start, 10000, bearing);
+    assert.ok(c.discoveryDirectionMatches(start, point, direction));
+    assert.equal(c.discoveryDirectionMatches(start, c.discoveryOffset(start, 10000, bearing + halfWidth + 1), direction), false);
+    assert.ok(c.discoveryDirectionMatches(start, c.discoveryOffset(start, 10000, bearing - halfWidth), direction));
+    assert.ok(c.discoveryDirectionMatches(start, c.discoveryOffset(start, 10000, bearing + halfWidth - 1), direction));
+  }
+  assert.ok(c.discoveryDirectionMatches(start, c.discoveryOffset(start, 10000, 359), 'n'));
+  assert.equal(c.discoveryDirectionMatches(start, start, 'n'), false);
+  assert.equal(c.discoveryDirectionMatches(start, features[0], 'invalid'), false);
+  assert.ok(c.discoveryDirectionMatches({ lat: 0, lng: 179.9 }, { lat: 0, lng: -179.9 }, 'e'));
+  assert.ok(c.discoveryDirectionMatches({ lat: 0, lng: -179.9 }, { lat: 0, lng: 179.9 }, 'w'));
+});
+
+test('sector bounding boxes include the whole selected sector without collecting the opposite side', () => {
+  const { context: c } = setup();
+  for (const origin of [start, { lat: 70, lng: -45 }, { lat: -40, lng: 170 }]) {
+    for (const [index, direction] of ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].entries()) {
+      const bounds = c.discoveryDirectionalBounds(origin, 80000, direction).split(',').map(Number);
+      const halfWidth = index % 2 === 0 ? 45 : 22.5;
+      for (const delta of [-halfWidth, -15, 0, 15, halfWidth]) {
+        for (const radius of [1, 40000, 80000]) {
+          const p = c.discoveryOffset(origin, radius, index * 45 + delta);
+          assert.ok(p.lat >= bounds[0] && p.lat <= bounds[2] && p.lng >= bounds[1] && p.lng <= bounds[3],
+            `${direction} sector point must be inside its lookup bounds`);
+        }
+      }
+    }
+  }
+  const west = c.discoveryDirectionalBounds(start, 20000, 'w').split(',').map(Number);
+  assert.ok(west[3] < start.lng + .01);
+});
+
+test('park search focuses on the requested direction and keeps its cache separate', async () => {
+  const { context: c, calls, request } = setup();
+  await c.findDiscoveryPlaces(criteria, start, request());
+  c.photon = async () => ({ features: Array.from({ length: 6 }, (_, i) => {
+    const p = c.discoveryOffset(start, 20000, 255 + i * 6);
+    return { ...feature(100 + i), geometry: { type: 'Point', coordinates: [p.lng, p.lat] } };
+  }) });
+  const west = { ...criteria, direction: 'w' };
+  const result = await c.findDiscoveryPlaces(west, start, request(west));
+  assert.equal(calls.length, 2, 'unrestricted and west-only queries must not share cached responses');
+  assert.ok(Number(calls[1].url.searchParams.get('lon')) < start.lng);
+  assert.equal(result.length, 6);
+  assert.ok(result.every(p => c.discoveryDirectionMatches(start, p, 'w')));
+});
+
+test('Overpass fallback also limits both the query bounds and returned candidates to the selected direction', async () => {
+  const { context: c, mapCalls, request } = setup();
+  c.photon = async () => { throw new Error('offline'); };
+  const west = { ...criteria, direction: 'w' };
+  const result = await c.findDiscoveryPlaces(west, start, request(west));
+  assert.ok(result.length > 0);
+  assert.ok(result.every(p => c.discoveryDirectionMatches(start, p, 'w')));
+  const bounds = mapCalls[0].match(/nwr\(([-\d.,]+)\)/)[1].split(',').map(Number);
+  assert.ok(bounds[3] < start.lng + .01);
+});
+
+test('seasonal places use the same direction relative to the configured start', async () => {
+  const { context: c, calls, mapCalls, request } = setup();
+  c.fetchSeasonalPlaces = async () => [90, 270].map((bearing, index) => {
+    const p = c.discoveryOffset(start, 20000, bearing);
+    return { type: 'seasonal', id: `listed-${index}`, lat: p.lat, lon: p.lng,
+      tags: { name: `桜の名所${index}` }, seasons: ['cherry_blossom'] };
+  });
+  const west = { ...criteria, kind: 'cherry_blossom', direction: 'w' };
+  const result = await c.findDiscoveryPlaces(west, start, request(west));
+  assert.equal(result.length, 1);
+  assert.equal(result[0].name, '桜の名所1');
+  assert.equal(calls.length, 0);
+  assert.equal(mapCalls.length, 0);
+});
+
+test('history keeps undisplayed candidates and remains compatible with older five-place entries', () => {
+  const { context: c } = setup();
+  vm.runInContext(source.match(/^const DISCOVERY_HISTORY_(?:KEY|LIMIT) = .*$/gm).join('\n'), c);
+  vm.runInContext(source.slice(source.indexOf('function loadDiscoveryHistory'), source.indexOf('function rememberDiscoverySearch')), c);
+  c.validWalkingSpeed = speed => Number.isFinite(speed) && speed >= 2.5 && speed <= 6.5;
+  const places = Array.from(c.discoveryCandidates(elements(), criteria, start, 250));
+  const entry = { id: 'current', at: 1000000, start, criteria, places, elapsedSeconds: 1.2, visibleCount: 5 };
+  c.localStorage = { getItem: () => JSON.stringify({ version: 1, searches: [entry,
+    { ...entry, id: 'legacy', places: places.slice(0, 5), visibleCount: undefined },
+    { ...entry, id: 'invalid', visibleCount: 1000 }] }) };
+  const history = c.loadDiscoveryHistory();
+  assert.equal(history.length, 2);
+  assert.equal(history[0].places.length, 6, 'the sixth candidate must survive saving/loading');
+  assert.equal(history[0].visibleCount, 5);
+  assert.equal(history[1].places.length, 5);
+});
+
+test('random suggestions use only time and speed, probe separate kinds and select beyond the nearest result', async () => {
+  const { context: c, request } = setup();
+  c.Math = Object.create(Math);
+  c.Math.random = () => .999999;
+  const input = { ...criteria, kind: 'random', ambience: 'rural', direction: 'n', highElevation: true, keyword: '山' };
+  const normalized = c.randomDiscoveryCriteria({ minMinutes: 360, minutes: 420 }, 4);
+  assert.deepEqual(JSON.parse(JSON.stringify(normalized)), {
+    minMinutes: 360, minutes: 420, kind: 'random', ambience: 'any', direction: 'any', highElevation: false, keyword: '', speed: 4,
+  });
+  const tried = [], pool = [{ key: 'near' }, { key: 'middle' }, { key: 'far' }], updates = [];
+  c.findDiscoveryPlaces = async (selected, origin) => {
+    tried.push(selected.kind);
+    assert.equal(origin, start);
+    assert.equal(selected.ambience, 'any');
+    assert.equal(selected.direction, 'any');
+    assert.equal(selected.highElevation, false);
+    assert.equal(selected.keyword, '');
+    assert.equal(selected.minMinutes, 360);
+    assert.equal(selected.minutes, 420);
+    assert.equal(selected.speed, 4);
+    return tried.length < 3 ? [] : pool;
+  };
+  const result = await c.findRandomDiscoveryPlaces(input, start, request(input), places => updates.push(places));
+  assert.deepEqual(tried.slice(0, 3), ['mountain', 'forest', 'waterside']);
+  assert.equal(new Set(tried).size, tried.length);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].key, 'far');
+  assert.equal(updates.length, 1);
+  assert.equal(pool.length, 3, 'selection must not mutate the cached candidate pool');
+});
+
+test('random search checks every supported kind at most once when the time window has no matches', async () => {
+  const { context: c, request } = setup();
+  const tried = [];
+  c.findDiscoveryPlaces = async selected => { tried.push(selected.kind); return []; };
+  const result = await c.findRandomDiscoveryPlaces(criteria, start, request({ kind: 'random' }));
+  assert.equal(result.length, 0);
+  assert.equal(new Set(tried).size, tried.length);
+  assert.ok(tried.includes('park') && tried.includes('mountain') && tried.includes('cafe') && tried.includes('cherry_blossom'));
+  assert.ok(!tried.some(kind => ['any', 'places', 'random'].includes(kind)));
+});
+
+test('random search discards late results on cancellation and never starts a cancelled lookup', async () => {
+  const { context: c, request } = setup();
+  const req = request({ kind: 'random' });
+  let calls = 0, updates = 0;
+  c.findDiscoveryPlaces = async () => { calls++; req.controller.abort(); return [{ key: 'late' }]; };
+  await assert.rejects(c.findRandomDiscoveryPlaces(criteria, start, req, () => updates++), { name: 'AbortError' });
+  assert.equal(calls, 1);
+  assert.equal(updates, 0);
+  await assert.rejects(c.findRandomDiscoveryPlaces(criteria, start, req), { name: 'AbortError' });
+  assert.equal(calls, 1);
+});
+
+test('one valid park is enough for a random suggestion without extra map or surroundings lookups', async () => {
+  const { context: c, calls, mapCalls, request } = setup();
+  const random = c.randomDiscoveryCriteria({ minMinutes: 360, minutes: 420 }, 4);
+  c.photon = async () => ({ features: [feature(501, 390), feature(502, 30), feature(503, 500)] });
+  const result = await c.findDiscoveryPlaces({ ...random, kind: 'park' }, start, request(random));
+  assert.equal(result.length, 1);
+  assert.ok(result[0].duration >= 360 * 60 && result[0].duration <= 420 * 60);
+  assert.equal(calls.length, 1);
+  assert.equal(mapCalls.length, 0);
+});
+
+test('a stalled first kind does not block a fast second kind, and outstanding probes are cancelled', async () => {
+  const { context: c, request } = setup();
+  const pending = [], pool = c.discoveryCandidates(elements(), criteria, start, 250);
+  let active = 0, peak = 0;
+  c.findDiscoveryPlaces = async (selected, origin, probe) => {
+    active++; peak = Math.max(peak, active);
+    pending.push(probe);
+    if (pending.length === 2) { active--; return pool; }
+    return new Promise((resolve) => probe.controller.signal.addEventListener('abort', () => {
+      active--; resolve(pool); // A late response from the losing lookup must be discarded.
+    }, { once: true }));
+  };
+  const updates = [];
+  const result = await c.findRandomDiscoveryPlaces(criteria, start, request({ kind: 'random' }), places => updates.push(places));
+  assert.equal(result.length, 1);
+  assert.equal(peak, 2);
+  assert.equal(pending.length, 2);
+  assert.ok(pending.every(probe => probe.controller.signal.aborted));
+  assert.equal(updates.length, 1);
+  assert.equal(active, 0);
+});
+
+test('repeat random draws reuse the complete pool but recheck time, speed, location and expiry', async () => {
+  const { context: c, request, advance } = setup();
+  const random = c.randomDiscoveryCriteria({ minMinutes: 360, minutes: 420 }, 4);
+  const pool = c.discoveryCandidates(elements(), criteria, start, 250);
+  let lookups = 0;
+  c.findDiscoveryPlaces = async () => { lookups++; return pool; };
+  await c.findRandomDiscoveryPlaces(random, start, request(random));
+  const firstLookups = lookups;
+  assert.equal(c.discoveryRandomCache.size, pool.length);
+  const shifted = { lat: start.lat + .0001, lng: start.lng };
+  const result = await c.findRandomDiscoveryPlaces(random, shifted, request(random));
+  assert.equal(lookups, firstLookups, 'a second draw must not contact providers');
+  assert.ok(Math.abs(result[0].directDistance - distance(shifted, result[0])) < .001);
+  assert.ok(result[0].duration >= 360 * 60 && result[0].duration <= 420 * 60);
+  assert.equal(c.cachedRandomDiscoveryPlaces({ ...random, speed: 2.5 }, start).length, 0);
+  assert.equal(c.cachedRandomDiscoveryPlaces({ ...random, minMinutes: 0, minutes: 60 }, start).length, 0);
+  assert.equal(c.cachedRandomDiscoveryPlaces(random, { lat: 34, lng: 135 }).length, 0);
+  advance(600001);
+  assert.equal(c.cachedRandomDiscoveryPlaces(random, start).length, 0);
+  assert.equal(c.discoveryRandomCache.size, 0);
+});
+
+test('a random probe has a finite budget even if its data source ignores cancellation', async () => {
+  const { context: c, request } = setup();
+  const timers = [];
+  c.setTimeout = (callback, ms) => { const timer = { callback, ms }; timers.push(timer); return timer; };
+  c.clearTimeout = timer => { timer.cleared = true; };
+  let signal;
+  c.findDiscoveryPlaces = async (criteria, origin, probe) => { signal = probe.controller.signal; return new Promise(() => {}); };
+  const pending = c.probeRandomDiscoveryKind('forest', criteria, start, request({ kind: 'random' }));
+  assert.equal(timers[0].ms, 8000);
+  timers[0].callback();
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(signal.aborted, true);
+  assert.equal(timers[0].cleared, true);
+});
+
+test('failed random probes remain an incomplete search rather than a false empty result', async () => {
+  const { context: c, request } = setup();
+  c.findDiscoveryPlaces = async () => { throw Object.assign(new Error('busy'), { routeCode: 'MapBusy' }); };
+  await assert.rejects(c.findRandomDiscoveryPlaces(criteria, start, request({ kind: 'random' })), { routeCode: 'MapBusy' });
+  assert.equal(c.discoveryRandomCache.size, 0);
+});
+
+test('small random map samples cannot replace the full normal-search cache or retry indefinitely', async () => {
+  const { context: c, request } = setup();
+  const cafe = { ...criteria, kind: 'cafe' }, queries = [];
+  c.fetchDiscoveryMapData = async (...args) => {
+    queries.push(args);
+    return elements().map(element => ({ ...element, tags: { name: element.tags.name, amenity: 'cafe' } }));
+  };
+  await c.findDiscoveryPlaces(cafe, start, { ...request({ kind: 'random' }), randomProbe: true });
+  assert.match(queries[0][0], /timeout:5/);
+  assert.match(queries[0][0], /center 60;/);
+  assert.equal(queries[0][2], 6000);
+  assert.equal(queries[0][3], false);
+  assert.equal(queries[0][4].ignoreCooldown, true);
+  await c.findDiscoveryPlaces(cafe, start, request(cafe));
+  assert.equal(queries.length, 2, 'a complete normal search must fetch its own full sample');
+  assert.match(queries[1][0], /timeout:30/);
+  assert.match(queries[1][0], /center 250;/);
+});
+
+test('progress distinguishes pending data and verified candidates without repeated announcements', () => {
+  const { context: c, request, advance } = setup();
+  const req = request(), updates = [];
+  c.discoveryRequest = req;
+  c.message = (target, text) => { target.textContent = text; updates.push(text); };
+  c.setDiscoveryProgress(req, '候補を取得中…');
+  assert.equal(updates.at(-1), '候補を取得中…');
+  advance(11000);
+  c.renderDiscoveryProgress(req);
+  assert.ok(updates.at(-1).includes('応答待ち'));
+  const count = updates.length;
+  c.renderDiscoveryProgress(req);
+  assert.equal(updates.length, count, 'unchanged status must not repeat aria-live announcements');
+  req.places = [{}, {}, {}];
+  c.setDiscoveryProgress(req, '周辺情報を確認中…');
+  assert.equal(updates.at(-1), '候補 3件・周辺情報を確認中…');
+  c.discoveryRequest = request();
+  c.setDiscoveryProgress(req, 'old request');
+  assert.equal(updates.at(-1), '候補 3件・周辺情報を確認中…');
+});
+
+test('unavailable providers show retry waiting instead of claiming no candidates exist', async () => {
+  const { context: c, request } = setup();
+  const req = request();
+  c.discoveryRequest = req;
+  c.DISCOVERY_MAP_ENDPOINTS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass-api.de/api/interpreter'];
+  c.discoveryMapProviders = [{ retryAt: 0 }, { retryAt: 0 }];
+  c.preferredDiscoveryMapProvider = 0;
+  c.lastDiscoveryMapError = null;
+  c.message = (target, text) => { target.textContent = text; };
+  c.fetchRouteJson = async () => { throw Object.assign(new Error('busy'), { routeCode: 'MapBusy', httpStatus: 503 }); };
+  c.abortableRouteDelay = async (ms) => {
+    if (ms >= 10000) {
+      assert.ok(c.ui['discovery-status'].textContent.includes('再試行待ち'));
+      assert.ok(!c.ui['discovery-status'].textContent.includes('候補なし'));
+      req.controller.abort();
+      throw new DOMException('Aborted', 'AbortError');
+    }
+  };
+  await assert.rejects(c.originalFetchDiscoveryMapData('query', req), { name: 'AbortError' });
 });

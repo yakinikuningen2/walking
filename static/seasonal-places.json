@@ -1,12 +1,10 @@
 {
   "version": 1,
-  "updated": "2026-11-06",
-  "attribution": "地点名・分類：日本さくらの会、Wikipedia各記事、GO TOKYO。座標：Wikipedia各記事・Wikidata（CC0）。記事本文は収録せず、掲載地点の事実情報のみ使用。",
+  "updated": "2026-11-12",
+  "attribution": "Wikipedia contributors（CC BY-SA 4.0）。一部座標：Wikidata contributors（構造化データCC0 1.0）。個別出典は各地点のcoordinateSourceとsourcesを参照。",
   "sources": {
     "cherry_list": "https://ja.wikipedia.org/wiki/%E6%97%A5%E6%9C%AC%E3%81%95%E3%81%8F%E3%82%89%E5%90%8D%E6%89%80100%E9%81%B8",
     "autumn_list": "https://ja.wikipedia.org/wiki/%E6%97%A5%E6%9C%AC%E7%B4%85%E8%91%89%E3%81%AE%E5%90%8D%E6%89%80100%E9%81%B8",
-    "sakura_association": "https://www.sakuranokai.or.jp/information/",
-    "tokyo_autumn": "https://www.gotokyo.org/jp/story/guide/autumn-leaves-forecast/",
     "wikidata": "https://www.wikidata.org/wiki/Wikidata:Licensing"
   },
   "places": [
@@ -257,12 +255,10 @@
       "lng": 139.7097222,
       "address": "東京都新宿区",
       "seasons": [
-        "cherry_blossom",
-        "autumn_leaves"
+        "cherry_blossom"
       ],
       "sources": [
-        "cherry_list",
-        "tokyo_autumn"
+        "cherry_list"
       ],
       "coordinateSource": "https://ja.wikipedia.org/wiki/%E6%96%B0%E5%AE%BF%E5%BE%A1%E8%8B%91"
     },
@@ -273,12 +269,10 @@
       "lng": 139.77111,
       "address": "東京都台東区",
       "seasons": [
-        "cherry_blossom",
-        "autumn_leaves"
+        "cherry_blossom"
       ],
       "sources": [
-        "cherry_list",
-        "tokyo_autumn"
+        "cherry_list"
       ],
       "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B8%8A%E9%87%8E%E6%81%A9%E8%B3%9C%E5%85%AC%E5%9C%92"
     },
@@ -303,12 +297,10 @@
       "lng": 139.57147,
       "address": "東京都武蔵野市",
       "seasons": [
-        "cherry_blossom",
-        "autumn_leaves"
+        "cherry_blossom"
       ],
       "sources": [
-        "cherry_list",
-        "tokyo_autumn"
+        "cherry_list"
       ],
       "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BA%95%E3%81%AE%E9%A0%AD%E6%81%A9%E8%B3%9C%E5%85%AC%E5%9C%92"
     },
@@ -1084,8 +1076,7 @@
         "autumn_leaves"
       ],
       "sources": [
-        "autumn_list",
-        "tokyo_autumn"
+        "autumn_list"
       ],
       "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%9B%BD%E5%96%B6%E6%98%AD%E5%92%8C%E8%A8%98%E5%BF%B5%E5%85%AC%E5%9C%92"
     },
@@ -1099,8 +1090,7 @@
         "autumn_leaves"
       ],
       "sources": [
-        "autumn_list",
-        "tokyo_autumn"
+        "autumn_list"
       ],
       "coordinateSource": "https://ja.wikipedia.org/wiki/%E9%AB%98%E5%B0%BE%E5%B1%B1"
     },
@@ -1567,48 +1557,6 @@
       "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%B9%9D%E9%87%8D%E5%B1%B1"
     },
     {
-      "id": "102037",
-      "name": "代々木公園",
-      "lat": 35.671975,
-      "lng": 139.697685,
-      "address": "東京都",
-      "seasons": [
-        "autumn_leaves"
-      ],
-      "sources": [
-        "tokyo_autumn"
-      ],
-      "coordinateSource": "https://ja.wikipedia.org/wiki/%E4%BB%A3%E3%80%85%E6%9C%A8%E5%85%AC%E5%9C%92"
-    },
-    {
-      "id": "286979",
-      "name": "六義園",
-      "lat": 35.73306,
-      "lng": 139.74667,
-      "address": "東京都",
-      "seasons": [
-        "autumn_leaves"
-      ],
-      "sources": [
-        "tokyo_autumn"
-      ],
-      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%85%AD%E7%BE%A9%E5%9C%92"
-    },
-    {
-      "id": "131329",
-      "name": "小石川後楽園",
-      "lat": 35.7051111,
-      "lng": 139.7498889,
-      "address": "東京都",
-      "seasons": [
-        "autumn_leaves"
-      ],
-      "sources": [
-        "tokyo_autumn"
-      ],
-      "coordinateSource": "https://ja.wikipedia.org/wiki/%E5%B0%8F%E7%9F%B3%E5%B7%9D%E5%BE%8C%E6%A5%BD%E5%9C%92"
-    },
-    {
       "id": "537654",
       "name": "千秋公園",
       "lat": 39.72196,
@@ -1901,34 +1849,15 @@
         "autumn_list"
       ],
       "coordinateSource": "https://www.wikidata.org/wiki/Q11515310"
-    },
-    {
-      "id": "253338",
-      "name": "明治神宮外苑",
-      "lat": 35.6775,
-      "lng": 139.7183333,
-      "address": "東京都",
-      "seasons": [
-        "autumn_leaves"
-      ],
-      "sources": [
-        "tokyo_autumn"
-      ],
-      "coordinateSource": "https://www.wikidata.org/wiki/Q6631448"
-    },
-    {
-      "id": "175779",
-      "name": "浜離宮恩賜庭園",
-      "lat": 35.66,
-      "lng": 139.762,
-      "address": "東京都",
-      "seasons": [
-        "autumn_leaves"
-      ],
-      "sources": [
-        "tokyo_autumn"
-      ],
-      "coordinateSource": "https://www.wikidata.org/wiki/Q1033333"
     }
-  ]
+  ],
+  "reviewed": "2026-11-12",
+  "license": "CC BY-SA 4.0（Wikipedia由来の編集・分類）、CC0 1.0（Wikidataの構造化データ）",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "modified": "地点名・所在地・分類・座標を抽出・編集。記事本文・写真なし。GO TOKYOだけに由来する地点・分類を除外。Wikipedia由来の編集部分をCC BY-SA 4.0で再提供。",
+  "authors": "各Wikipedia記事のcontributors。著者は記事URLの履歴表示（末尾に?action=historyを追加）で確認できます。Wikidataの座標は各項目の履歴を参照。",
+  "classificationRevisions": {
+    "cherry_list": "https://ja.wikipedia.org/w/index.php?oldid=106602947",
+    "autumn_list": "https://ja.wikipedia.org/w/index.php?oldid=106765823"
+  }
 }
