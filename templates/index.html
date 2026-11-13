@@ -37,7 +37,7 @@
     </div>
     <div id="discovery-screen" class="discovery-screen" role="region" aria-labelledby="discovery-heading" hidden>
       <div class="discovery-panel">
-        <div class="discovery-heading"><h2 id="discovery-heading">目的地を探す</h2><button id="close-discovery" type="button">閉じる</button><p class="discovery-elapsed"><span id="discovery-search-label">条件検索</span>：<span id="discovery-elapsed-label">経過時間</span> <span id="discovery-elapsed" role="timer" aria-live="off">0秒</span></p><p id="discovery-status" class="status" role="status" aria-live="polite"></p></div>
+        <div class="discovery-heading"><div class="discovery-drag-handle" aria-hidden="true"></div><h2 id="discovery-heading">目的地を探す</h2><button id="close-discovery" type="button">閉じる</button><p class="discovery-elapsed"><span id="discovery-search-label">条件検索</span>：<span id="discovery-elapsed-label">経過時間</span> <span id="discovery-elapsed" role="timer" aria-live="off">0秒</span></p><p id="discovery-status" class="status" role="status" aria-live="polite"></p></div>
         <div id="discovery-content">
           <section class="destination-start-search" aria-label="スタート地点の選択">
             <div class="start-point-row"><span>スタート地点</span><button id="start-name" type="button" aria-label="スタート地点の検索を閉じる" aria-controls="start-picker">現在地</button><button id="change-start" type="button" aria-label="スタート地点を検索" aria-expanded="false" aria-controls="start-picker">検索</button><button id="pick-start-on-map" type="button">地図で指定</button></div>
@@ -69,8 +69,8 @@
             <div class="discovery-fields">
               <div><label for="discovery-kind">場所の種類</label><select id="discovery-kind" required>
                 <option value="" disabled selected>条件を検索</option>
-                <option value="places">散歩先</option>
-                <optgroup label="自然"><option value="mountain">山</option><option value="forest">森・林</option><option value="waterside">川辺・湖畔</option><option value="coast">海辺・浜辺</option><option value="park">公園・緑地</option></optgroup>
+                <option value="any">こだわらない</option>
+                <optgroup label="自然"><option value="mountain">山</option><option value="forest">森・林</option><option value="waterside">川辺・湖畔</option><option value="coast">海辺・浜辺・港</option><option value="park">公園・緑地</option></optgroup>
                 <optgroup label="季節の名所"><option value="cherry_blossom">桜の名所</option><option value="autumn_leaves">紅葉の名所</option></optgroup>
                 <optgroup label="街歩き・観光"><option value="neighborhood">街並み・集落</option><option value="sightseeing">景色・観光</option><option value="shrine">神社・寺院</option><option value="culture">美術館・博物館</option></optgroup>
                 <optgroup label="飲食"><option value="cafe">カフェ</option><option value="restaurant">食事</option></optgroup>
@@ -85,10 +85,10 @@
               <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
             </fieldset>
             <p id="discovery-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
-            <div class="settings-actions"><button id="discovery-random" type="button">ランダムに探す</button></div>
+            <div class="settings-actions"><button id="discovery-random-cancel" type="button" disabled>中止</button><button id="discovery-random" type="button">ランダムに探す</button></div>
             <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
             <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 森" />
-            <div class="settings-actions"><button id="discovery-cancel" type="button" hidden>中止</button><button id="discovery-submit" type="submit">条件に合う場所を探す</button></div>
+            <div class="settings-actions"><button id="discovery-cancel" type="button" disabled>中止</button><button id="discovery-submit" type="submit">条件に合う場所を探す</button></div>
           </form>
           <ul id="discovery-results" class="place-list" aria-label="希望に近い目的地"></ul>
           <button id="discovery-more" class="discovery-more" type="button" aria-controls="discovery-results" hidden>もっと見る</button>

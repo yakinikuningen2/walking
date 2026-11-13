@@ -541,3 +541,295 @@ test('unavailable providers show retry waiting instead of claiming no candidates
   };
   await assert.rejects(c.originalFetchDiscoveryMapData('query', req), { name: 'AbortError' });
 });
+
+test('an empty full-range search returns after one query and reuses its confirmed empty cache', async () => {
+  const { context: c, request, mapCalls, advance } = setup();
+  c.mapData = async () => [];
+  const short = { ...criteria, kind: 'cafe', minMinutes: 0, minutes: 60 };
+  assert.equal((await c.findDiscoveryPlaces(short, start, request(short))).length, 0);
+  assert.equal(mapCalls.length, 1, 'no small-radius lookup followed by an extra expansion');
+  assert.equal((await c.findDiscoveryPlaces(short, start, request(short))).length, 0);
+  assert.equal(mapCalls.length, 1, 'a successful empty response is cacheable');
+  advance(600001);
+  await c.findDiscoveryPlaces(short, start, request(short));
+  assert.equal(mapCalls.length, 2);
+});
+
+test('unspecified kind searches different place categories while keeping walking-time and access limits', async () => {
+  const { context: c, request, mapCalls } = setup();
+  c.photon = async () => ({ features: [] });
+  const pool = elements().slice(0, 4).map((element, i) => ({ ...element, type: 'node',
+    tags: i === 0 ? { leisure: 'park', name: '公園' }
+      : i === 1 ? { amenity: 'cafe', name: 'カフェ' }
+        : i === 2 ? { natural: 'peak', name: '山' }
+          : { amenity: 'cafe', name: '非公開', access: 'private' } }));
+  pool.push({ type: 'node', id: 999, lat: start.lat, lon: start.lng, tags: { amenity: 'cafe', name: '時間外' } });
+  c.mapData = async query => pool.filter(element => query.includes(element.tags.amenity || element.tags.natural || element.tags.leisure));
+  const broad = { ...criteria, kind: 'any' };
+  const found = await c.findDiscoveryPlaces(broad, start, request(broad));
+  assert.deepEqual(Array.from(found, place => place.name).sort(), ['カフェ', '公園', '山'].sort());
+  assert.ok(mapCalls.some(query => query.includes('cafe')));
+  assert.ok(mapCalls.some(query => query.includes('park')));
+  assert.ok(mapCalls.some(query => query.includes('peak')));
+  assert.ok(mapCalls.every(query => !query.includes('cafe') || !query.includes('peak')), 'heavy all-kind query is split');
+  assert.equal(vm.runInContext('DISCOVERY_KINDS.any.label', c), 'こだわらない');
+});
+
+test('6h unspecified search streams parks before the other batches finish and keeps 5h30–6h30 bounds', async () => {
+  const { context: c, request, calls, mapCalls } = setup();
+  const sixHours = { ...criteria, kind: 'any', minMinutes: 330, minutes: 390 };
+  c.photon = async () => ({ features: [...features.map((_, i) => feature(i + 1, 360, i * Math.PI / 3)), feature(90, 20), feature(91, 440)] });
+  const extra = elements([feature(200, 360), feature(201, 360)]).map((element, index) => ({ ...element, type: 'node',
+    tags: index === 0 ? { amenity: 'place_of_worship', religion: 'shinto', name: '神社' }
+      : { tourism: 'viewpoint', name: '展望台' } }));
+  let releaseBatch;
+  c.mapData = async query => {
+    if (query.includes('cafe')) return new Promise(resolve => { releaseBatch = () => resolve(extra); });
+    return [];
+  };
+  const started = performance.now();
+  const req = request(sixHours);
+  const updates = [];
+  let finished = false;
+  const pending = c.runDiscoveryTask(req, () => c.findDiscoveryPlaces(sixHours, start, req, places => updates.push(places)))
+    .then(places => { finished = true; return places; });
+  await new Promise(setImmediate);
+  assert.equal(finished, false);
+  assert.ok(updates.some(places => places.some(place => place.kindId === 'park')), 'parks are selectable while the batch is pending');
+  releaseBatch();
+  const found = await pending;
+  assert.ok(performance.now() - started < 1000);
+  assert.equal(found.length, 8); assert.equal(calls.length, 1);
+  assert.equal(new Set(found.slice(0, 5).map(place => place.kindId)).size, 3);
+  assert.equal(mapCalls.length, 6); assert.match(mapCalls[0], /cafe/);
+  assert.match(mapCalls[0], /place_of_worship/); assert.match(mapCalls[0], /viewpoint/);
+  assert.ok(found.every(place => place.duration >= 330 * 60 && place.duration <= 390 * 60));
+  const before = calls.length;
+  await c.findDiscoveryPlaces(sixHours, start, request(sixHours));
+  assert.equal(calls.length, before, 'repeat search uses the park cache');
+});
+
+test('many early parks stay selectable while other kinds are pending, rather than ending the search', async () => {
+  const { context: c, request } = setup();
+  let finishCafe;
+  const parks = Array.from({ length: 10 }, (_, i) => ({ key: `park/${i}`, kindId: 'park', duration: 100 + i, preferenceScore: 0 }));
+  const updates = [], tried = [];
+  c.findDiscoveryPlaces = async (selected, origin, child, onUpdate) => {
+    tried.push(selected.kind);
+    if (selected.kind === 'park') { onUpdate(parks); return parks; }
+    if (selected.kind === 'cafe') return new Promise(resolve => { finishCafe = resolve; });
+    return [{ key: 'shrine/1', kindId: 'shrine', duration: 1000, preferenceScore: 0 }];
+  };
+  let finished = false;
+  const broad = { ...criteria, kind: 'any' };
+  const found = c.findAnyDiscoveryPlaces(broad, start, request(broad), places => updates.push(places)).then(places => { finished = true; return places; });
+  await new Promise(setImmediate);
+  assert.equal(finished, false, 'two kinds are not enough even when parks alone exceed five');
+  assert.ok(updates.some(places => places.some(place => place.kindId === 'park')), 'early candidates remain usable');
+  finishCafe([{ key: 'cafe/1', kindId: 'cafe', duration: 2000, preferenceScore: 0 }]);
+  const result = await found;
+  assert.equal(new Set(result.slice(0, 5).map(place => place.kindId)).size, 3);
+  assert.ok(tried.includes('shrine'));
+});
+
+test('unspecified ordering keeps diverse kinds before truncation, more pages and history; specific kinds keep original ranking', () => {
+  const { context: c } = setup();
+  const pool = Array.from({ length: 260 }, (_, i) => ({ key: `park/${i}`, kindId: 'park', duration: i, distance: i, preferenceScore: 0 }));
+  pool.push(...['cafe', 'mountain', 'shrine'].flatMap(kindId => Array.from({ length: 3 }, (_, i) => ({
+    key: `${kindId}/${i}`, kindId, duration: 1000 + i, distance: 1000 + i, preferenceScore: 0,
+  }))));
+  const broad = { ...criteria, kind: 'any' };
+  const mixed = c.sortDiscoveryPlaces(pool, broad);
+  assert.equal(mixed.length, 250);
+  assert.equal(new Set(mixed.slice(0, 5).map(place => place.kindId)).size, 4);
+  assert.equal(new Set(mixed.slice(5, 10).map(place => place.kindId)).size, 4);
+  assert.equal(mixed.filter(place => place.kindId === 'cafe').length, 3);
+  assert.deepEqual(c.sortDiscoveryPlaces(mixed, broad).map(place => place.key), mixed.map(place => place.key), 'rendering or restoring must preserve diversity');
+  assert.deepEqual(Array.from(mixed.filter(place => place.kindId === 'park').slice(0, 3), place => place.duration), [0, 1, 2]);
+  assert.ok(c.sortDiscoveryPlaces(pool, criteria).slice(0, 5).every(place => place.kindId === 'park'), 'a specific-kind search keeps the original ordering');
+});
+
+test('unspecified search limits concurrent kinds, keeps filters and advances past stalled kinds within eight seconds', async () => {
+  const { context: c, request } = setup();
+  const timers = [], pending = [], updates = [];
+  c.setTimeout = (callback, ms) => { const timer = { callback, ms }; timers.push(timer); return timer; };
+  c.clearTimeout = timer => { timer.cleared = true; };
+  const input = { ...criteria, kind: 'any', ambience: 'rural', direction: 'w', highElevation: true, keyword: '山' };
+  let active = 0, maxActive = 0;
+  c.findDiscoveryPlaces = (selected, origin, child, onUpdate) => {
+    assert.equal(selected.ambience, 'rural'); assert.equal(selected.direction, 'w');
+    assert.equal(selected.highElevation, true); assert.equal(selected.minMinutes, input.minMinutes);
+    active++; maxActive = Math.max(maxActive, active);
+    child.controller.signal.addEventListener('abort', () => { active--; }, { once: true });
+    pending.push({ child, onUpdate }); return new Promise(() => {});
+  };
+  const req = request(input);
+  const found = c.findAnyDiscoveryPlaces(input, start, req, places => updates.push(places));
+  await new Promise(setImmediate);
+  assert.equal(pending.length, 2); assert.equal(timers[0].ms, 8000);
+  timers[0].callback(); await new Promise(setImmediate);
+  assert.equal(pending.length, 3, 'a timeout starts the next kind');
+  req.controller.abort(); await assert.rejects(found, { name: 'AbortError' });
+  pending.forEach(item => item.onUpdate([{ key: 'late' }]));
+  assert.equal(updates.length, 0); assert.equal(maxActive, 2);
+  assert.ok(timers.every(timer => timer.cleared));
+});
+
+test('unspecified search distinguishes unavailable kinds from confirmed empty results and caches only successful responses', async () => {
+  const { context: c, request, mapCalls, calls } = setup();
+  c.photon = async () => ({ features: [] });
+  c.mapData = async () => { throw Object.assign(new Error('busy'), { routeCode: 'MapBusy' }); };
+  const broad = { ...criteria, kind: 'any' };
+  await assert.rejects(c.findDiscoveryPlaces(broad, start, request(broad)), { routeCode: 'MapBusy' });
+  assert.equal(c.discoveryMapCache.size, 0);
+  c.mapData = async () => [];
+  const firstCalls = mapCalls.length;
+  assert.equal((await c.findDiscoveryPlaces(broad, start, request(broad))).length, 0);
+  assert.equal(mapCalls.length - firstCalls, 7, 'empty point kinds are confirmed in three batches, plus park and three geometry kinds');
+  assert.equal(calls.length, 1, 'an empty Photon bounding box is not retried with three more ranking focuses');
+  const before = mapCalls.length;
+  assert.equal((await c.findDiscoveryPlaces(broad, start, request(broad))).length, 0);
+  assert.equal(mapCalls.length, before);
+});
+
+test('unspecified search continues all kinds beyond three kinds and five candidates, publishing each completed kind', async () => {
+  const { context: c, request } = setup();
+  c.prefetchDiscoveryKinds = async () => {};
+  const tried = [], updates = [];
+  c.findDiscoveryPlaces = async selected => {
+    tried.push(selected.kind);
+    return [{ key: selected.kind, kindId: selected.kind, preferenceScore: 0, duration: 100 }];
+  };
+  const broad = { ...criteria, kind: 'any' };
+  const found = await c.findAnyDiscoveryPlaces(broad, start, request(broad), places => updates.push(places.length));
+  assert.equal(new Set(tried).size, 13);
+  assert.equal(found.length, 13);
+  assert.ok(updates.includes(1)); assert.ok(updates.includes(5)); assert.equal(updates.at(-1), 13);
+});
+
+test('cancelling a point-kind batch discards a late response without caching it', async () => {
+  const { context: c, request } = setup();
+  let finish;
+  c.mapData = async () => new Promise(resolve => { finish = resolve; });
+  const broad = { ...criteria, kind: 'any' }, req = request(broad);
+  const pending = c.prefetchDiscoveryKinds(['cafe', 'shrine', 'sightseeing'], broad, start, req);
+  req.controller.abort(); finish(elements());
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(c.discoveryMapCache.size, 0);
+});
+
+test('direct Overpass runtime errors cannot become a false empty result', async () => {
+  const { context: c, request } = setup();
+  const req = request(); req.deadlineAt = c.Date.now() + 8000;
+  c.DISCOVERY_MAP_ENDPOINTS = ['https://one.example/interpreter'];
+  c.discoveryMapProviders = [{ retryAt: 0 }]; c.preferredDiscoveryMapProvider = 0; c.lastDiscoveryMapError = null;
+  c.fetchRouteJson = async () => ({ elements: [], remark: 'runtime error: Query timed out' });
+  await assert.rejects(c.originalFetchDiscoveryMapData('query', req), /Incomplete/);
+  assert.equal(c.discoveryMapCache.size, 0);
+});
+
+test('seasonal keywords in unspecified search retain local data without external lookups', async () => {
+  const { context: c, request, calls, mapCalls } = setup();
+  const broad = { ...criteria, kind: 'any', keyword: '桜' };
+  c.fetchSeasonalPlaces = async () => elements().map(element => ({ ...element, seasons: ['cherry_blossom'] }));
+  assert.ok((await c.findDiscoveryPlaces(broad, start, request(broad))).length > 0);
+  assert.equal(calls.length, 0); assert.equal(mapCalls.length, 0);
+});
+
+test('removed legacy walking-place option restores as unspecified while preserving historical candidates', () => {
+  const { context: c } = setup();
+  for (const file of ['index.html', 'templates/index.html']) {
+    const html = readFileSync(join(__dirname, file), 'utf8');
+    assert.doesNotMatch(html, /<option value="places">/); assert.match(html, /<option value="any">こだわらない/);
+  }
+  c.ui = new Proxy({}, { get: (obj, key) => obj[key] ||= {} });
+  c.updateDiscoveryTimeRange = () => {}; c.renderDiscoveryResults = places => { c.restored = places; };
+  c.discoveryDisplayedCount = () => 1;
+  vm.runInContext(source.slice(source.indexOf('function restoreDiscoverySearch('), source.indexOf('function finishDiscoverySearch(')), c);
+  c.restoreDiscoverySearch({ id: 'old', criteria: { ...criteria, kind: 'places' }, places: [{ key: 'saved' }], elapsedSeconds: 1 }, false);
+  assert.equal(c.ui['discovery-kind'].value, 'any'); assert.equal(c.restored[0].key, 'saved');
+  assert.equal(vm.runInContext('DISCOVERY_SEARCH_TIMEOUT_MS', c), 60000);
+});
+
+test('a bounded search reports busy providers after both fail without waiting for automatic retries', async () => {
+  const { context: c, request } = setup();
+  const req = request(); req.deadlineAt = c.Date.now() + 15000;
+  c.DISCOVERY_MAP_ENDPOINTS = ['https://one.example/interpreter', 'https://two.example/interpreter'];
+  c.discoveryMapProviders = [{ retryAt: 0 }, { retryAt: 0 }];
+  c.preferredDiscoveryMapProvider = 0; c.lastDiscoveryMapError = null;
+  const attempts = [], waits = [];
+  c.fetchRouteJson = async (url, request, timeout) => {
+    attempts.push(timeout); throw Object.assign(new Error('busy'), { routeCode: 'MapBusy', httpStatus: 503 });
+  };
+  c.abortableRouteDelay = async ms => { waits.push(ms); };
+  await assert.rejects(c.originalFetchDiscoveryMapData('query', req), { routeCode: 'MapBusy' });
+  assert.equal(attempts.length, 2);
+  assert.ok(attempts.every(ms => ms <= 15000));
+  assert.ok(waits.every(ms => ms <= 1000), 'no 30-second retry delay');
+});
+
+test('search deadline stops a source that ignores abort, while normal completion cancels the timer', async () => {
+  const { context: c, request } = setup();
+  const stalled = request();
+  await assert.rejects(c.runDiscoveryTask(stalled, () => new Promise(() => {}), 15), { name: 'AbortError' });
+  assert.equal(stalled.timedOut, true); assert.equal(stalled.controller.signal.aborted, true);
+  const complete = request();
+  assert.deepEqual(await c.runDiscoveryTask(complete, async () => [], 15), []);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(complete.controller.signal.aborted, false);
+});
+
+test('UI distinguishes a complete empty result from a deadline, keeps partial candidates and discards late callbacks', async () => {
+  const { context: c, request } = setup();
+  vm.runInContext(source.slice(source.indexOf('async function fetchDiscoverySuggestions('),
+    source.indexOf('ui["open-discovery"].addEventListener')), c);
+  c.message = (target, text) => { target.textContent = text; };
+  c.finishDiscoverySearch = () => {};
+  c.showDiscoveryResults = () => {};
+  c.setDiscoveryBusy = value => { c.busy = value; };
+  c.renderDiscoveryResults = (places, req) => { req.places = places; req.visibleCount = 5; };
+  const original = c.runDiscoveryTask;
+  c.runDiscoveryTask = (req, work) => original(req, work, 15);
+  const empty = request(); c.discoveryRequest = empty; c.findDiscoveryPlaces = async () => [];
+  await c.fetchDiscoverySuggestions(empty);
+  assert.match(c.ui['discovery-status'].textContent, /検索完了.*候補なし/);
+  let late;
+  const stalled = request(); c.discoveryRequest = stalled;
+  c.findDiscoveryPlaces = (criteria, start, req, onUpdate) => { late = onUpdate; return new Promise(() => {}); };
+  await c.fetchDiscoverySuggestions(stalled);
+  assert.match(c.ui['discovery-status'].textContent, /検索未完了.*タイムアウト/);
+  assert.equal(c.busy, false);
+  const status = c.ui['discovery-status'].textContent;
+  late([{ key: 'late' }]); assert.equal(c.ui['discovery-status'].textContent, status);
+  assert.equal(stalled.places, undefined);
+  const partial = request(); c.discoveryRequest = partial;
+  c.findDiscoveryPlaces = (criteria, start, req, onUpdate) => { onUpdate([{ key: 'known' }]); return new Promise(() => {}); };
+  await c.fetchDiscoverySuggestions(partial);
+  assert.match(c.ui['discovery-status'].textContent, /候補 1件.*時間切れ/);
+  assert.equal(partial.places[0].key, 'known');
+});
+
+test('sea search includes harbours, fishing ports and marinas, retains beaches and filters restricted or water-centre points', async () => {
+  const { context: c, request, mapCalls } = setup();
+  c.L = { latLng: (lat, lng) => ({ lat, lng }), CRS: { EPSG3857: {
+    projection: { R: 6378137 }, project: p => ({ x: p.lng, y: p.lat }),
+  } } };
+  const point = elements()[0].center;
+  const tags = [{ harbour: 'yes' }, { harbour: 'fishing' }, { leisure: 'marina' },
+    { landuse: 'harbour' }, { landuse: 'port' }, { industrial: 'port' }, { natural: 'beach' },
+    { harbour: 'yes', access: 'private' }, { leisure: 'marina', foot: 'no' },
+    { harbour: 'no' }, { water: 'harbour' }, { leisure: 'marina', natural: 'water' }];
+  const nodes = tags.map((tag, i) => ({ type: 'node', id: i + 100, lat: point.lat, lon: point.lon,
+    tags: { ...tag, name: `海辺${i}` } }));
+  c.mapData = async () => nodes;
+  const sea = { ...criteria, kind: 'coast' };
+  const found = await c.findDiscoveryPlaces(sea, start, request(sea));
+  assert.deepEqual(Array.from(found, p => p.osmId).sort((a, b) => a - b), [100, 101, 102, 103, 104, 105, 106]);
+  assert.match(mapCalls[0], /harbour/); assert.match(mapCalls[0], /marina/);
+  assert.match(mapCalls[0], /industrial/); assert.match(mapCalls[0], /beach\|coastline/);
+  assert.ok(c.discoveryPreferences({ ...sea, keyword: '港' }).kinds.has('coast'));
+  assert.ok(c.discoveryPreferences({ ...sea, keyword: '漁港' }).kinds.has('coast'));
+  assert.equal(c.discoveryCandidates(nodes, { ...sea, direction: 'w' }, start).length, 0);
+  const far = { ...nodes[0], lat: start.lat, lon: start.lng };
+  assert.equal(c.discoveryCandidates([far], sea, start).length, 0, 'walking-time limits remain enforced');
+});

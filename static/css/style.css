@@ -52,6 +52,10 @@ button:disabled { opacity: .6; cursor: wait; }
 #discovery-content { flex: 1 1 auto; min-height: 0; padding: 12px 20px 18px; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 12px; }
 .discovery-screen.keyboard-open { --discovery-bottom-gap: 12px; --discovery-top-gap: 12px; z-index: 1110 !important; }
 .discovery-screen:focus-within { z-index: 1110 !important; }
+.discovery-screen { transform: translateX(-50%) translate(var(--discovery-drag-x, 0px), var(--discovery-drag-y, 0px)); }
+.discovery-heading { position: relative; }
+.discovery-drag-handle { position: absolute; top: 0; left: calc(50% - 48px); width: 96px; height: 16px; touch-action: none; user-select: none; cursor: grab; }
+.discovery-drag-handle::before { position: absolute; top: 5px; left: calc(50% - 16px); width: 32px; height: 3px; border-radius: 2px; background: #aaa; content: ""; }
 .discovery-heading h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .discovery-heading button { padding: 0; border-radius: 0; background: transparent; color: #000; font-size: 12px; font-weight: 400; text-decoration: underline; text-underline-offset: 2px; }
 .discovery-elapsed { grid-column: 1 / -1; margin: 0; font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; }
