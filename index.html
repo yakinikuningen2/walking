@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>散歩アプリ</title>
     <link
       rel="stylesheet"
@@ -13,9 +13,10 @@
     <link rel="stylesheet" href="static/css/style.css" />
   </head>
   <body>
+    <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5Z"/><path d="M9 3v16M15 5v16"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol><symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4V3Z"/></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-.6 2.2-2 .9-2.1-.6-2 3.5 1.5 1.7v2.6L2.3 15l2 3.5 2.1-.6 2 .9L9 21h4l.6-2.2 2-.9 2.1.6 2-3.5-1.5-1.7v-2.6L19.7 9l-2-3.5-2.1.6-2-.9L13 3H9Z"/><circle cx="11" cy="12" r="3"/></symbol><symbol id="i-leaf" viewBox="0 0 24 24"><path d="M20 3C9 2 3 7 4 14c1 8 17 8 16-11Z"/><path d="M3 21 15 9M8 16v-5M12 12h5"/></symbol><symbol id="i-location" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M22 12h-3M12 22v-3M2 12h3"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="m12 3 7 18-7-4-7 4 7-18Z"/></symbol><symbol id="i-walk" viewBox="0 0 24 24"><circle cx="14" cy="4" r="2"/><path d="m10 21 3-7-4-3 2-4 4 4 4 1M5 13l3-3M9 11l-2 6-3 4M13 14l5 7"/></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol><symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18M8 3v6M16 9v6M10 15v6"/></symbol><symbol id="i-mountain" viewBox="0 0 24 24"><path d="m2 20 7-13 4 7 3-5 6 11H2Z"/><path d="m6 13 3 2 3-2"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></symbol><symbol id="i-tree" viewBox="0 0 24 24"><path d="m12 3-7 9h3l-4 6h16l-4-6h3l-7-9ZM12 18v4"/></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M19 10c0 5-7 12-7 12S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2 7M3 5v6h6M12 7v5l4 2"/></symbol><symbol id="i-link" viewBox="0 0 24 24"><path d="m10 14 4-4M8 16l-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M14 8l2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.9)"/></symbol></defs></svg>
     <div id="setup-screen" class="setup-screen" role="region" aria-labelledby="setup-heading" hidden>
       <form id="walking-settings-form" class="walking-settings">
-        <div class="walking-settings-heading"><h1 id="setup-heading">歩く速さ</h1><button id="close-walking-settings" type="button">閉じる</button></div>
+        <div class="walking-settings-heading"><div class="sheet-grip" aria-hidden="true"></div><div><span class="section-label">設定</span><h1 id="setup-heading">歩く速さ</h1></div><div class="heading-actions"><button class="sheet-expand icon-button" type="button" aria-label="設定を展開" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-chevron"></use></svg></button><button id="close-walking-settings" class="icon-button" type="button" aria-label="設定を閉じる"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-close"></use></svg></button></div></div>
         <div id="walking-settings-content">
           <fieldset class="speed-options">
             <legend class="sr-only">速さを選ぶ</legend>
@@ -37,37 +38,42 @@
     </div>
     <div id="discovery-screen" class="discovery-screen" role="region" aria-labelledby="discovery-heading" hidden>
       <div class="discovery-panel">
-        <div class="discovery-heading"><div class="discovery-drag-handle" aria-hidden="true"></div><h2 id="discovery-heading">目的地を探す</h2><button id="close-discovery" type="button">閉じる</button><p class="discovery-elapsed"><span id="discovery-search-label">条件検索</span>：<span id="discovery-elapsed-label">経過時間</span> <span id="discovery-elapsed" role="timer" aria-live="off">0秒</span></p><p id="discovery-status" class="status" role="status" aria-live="polite"></p></div>
+        <div class="discovery-heading"><div class="discovery-drag-handle sheet-grip" aria-hidden="true"></div><div><span class="section-label">散歩先を探す</span><h2 id="discovery-heading">どこへ歩こう？</h2></div><div class="heading-actions"><button class="sheet-expand icon-button" type="button" aria-label="検索画面を展開" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-chevron"></use></svg></button><button id="close-discovery" class="icon-button" type="button" aria-label="検索画面を閉じる"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-close"></use></svg></button></div><p class="discovery-elapsed"><span id="discovery-search-label">条件検索</span>：<span id="discovery-elapsed-label">経過時間</span> <span id="discovery-elapsed" role="timer" aria-live="off">0秒</span></p><p id="discovery-status" class="status" role="status" aria-live="polite"></p></div>
         <div id="discovery-content">
+          <section class="destination-name-search" aria-labelledby="destination-name-heading">
+            <h3 id="destination-name-heading" class="destination-search-title">目的地</h3>
+            <label class="sr-only" for="destination-search-input">場所の名前・住所</label>
+            <form id="destination-search-form" class="search-form" role="search">
+              <input id="destination-search-input" type="search" placeholder="駅・公園・住所・キーワード" maxlength="200" />
+              <button id="destination-search-button" type="button" aria-label="名前・住所で検索" title="名前・住所で検索"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-search"></use></svg></button>
+            </form>
+            <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
+            <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
+          </section>
           <section class="destination-start-search" aria-label="スタート地点の選択">
             <div class="start-point-row"><span>スタート地点</span><button id="start-name" type="button" aria-label="スタート地点の検索を閉じる" aria-controls="start-picker">現在地</button><button id="change-start" type="button" aria-label="スタート地点を検索" aria-expanded="false" aria-controls="start-picker">検索</button><button id="pick-start-on-map" type="button">地図で指定</button></div>
             <div id="start-picker" class="start-picker" hidden>
               <label class="sr-only" for="start-search-input">スタート地点の名前・住所</label>
               <form id="start-search-form" class="search-form" role="search">
                 <input id="start-search-input" type="search" placeholder="スタート地点の名前・住所" maxlength="200" />
-                <button id="start-search-button" type="button" aria-label="スタート地点を検索" title="検索"></button>
+                <button id="start-search-button" type="button" aria-label="スタート地点を検索" title="検索"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-search"></use></svg></button>
               </form>
               <p id="start-search-status" class="status" role="status" aria-live="polite"></p>
               <ul id="start-search-results" class="place-list" aria-label="スタート地点の検索結果"></ul>
               <button id="use-current-start" class="start-current-reset" type="button" hidden>現在地に戻す</button>
             </div>
           </section>
-          <section class="destination-name-search" aria-labelledby="destination-name-heading">
-            <h3 id="destination-name-heading" class="destination-search-title">名前・住所で検索</h3>
-            <label class="sr-only" for="destination-search-input">場所の名前・住所</label>
-            <form id="destination-search-form" class="search-form" role="search">
-              <input id="destination-search-input" type="search" placeholder="目的地の名前・住所" maxlength="200" />
-              <button id="destination-search-button" type="button" aria-label="名前・住所で検索" title="名前・住所で検索"></button>
-            </form>
-            <p id="destination-search-status" class="status" role="status" aria-live="polite"></p>
-            <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
-          </section>
           <section class="destination-condition-search" aria-labelledby="destination-condition-heading">
-            <h3 id="destination-condition-heading" class="destination-search-title">条件から探す</h3>
+            <h3 id="destination-condition-heading" class="destination-search-title">散歩の条件</h3>
           <details id="discovery-history" class="discovery-history" hidden><summary>検索履歴</summary><ul id="discovery-history-list" class="place-list" aria-label="過去の条件検索"></ul></details>
           <form id="discovery-form" aria-labelledby="destination-condition-heading">
-            <div class="discovery-fields">
-              <div><label for="discovery-kind">場所の種類</label><select id="discovery-kind" required>
+            <fieldset class="discovery-time">
+              <legend>片道の歩く時間</legend>
+              <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
+            </fieldset>
+            <p id="discovery-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
+            <div class="time-presets" role="group" aria-label="歩く時間の目安"><button type="button" data-minutes="30">30分</button><button type="button" data-minutes="60">1時間</button><button type="button" data-minutes="120">2時間</button></div>
+            <div class="discovery-kind-field"><div><label for="discovery-kind">場所の種類</label><select id="discovery-kind" required>
                 <option value="" disabled selected>条件を検索</option>
                 <option value="any">こだわらない</option>
                 <optgroup label="自然"><option value="mountain">山</option><option value="forest">森・林</option><option value="waterside">川辺・湖畔</option><option value="coast">海辺・浜辺・港</option><option value="park">公園・緑地</option></optgroup>
@@ -75,21 +81,16 @@
                 <optgroup label="街歩き・観光"><option value="neighborhood">街並み・集落</option><option value="sightseeing">景色・観光</option><option value="shrine">神社・寺院</option><option value="culture">美術館・博物館</option></optgroup>
                 <optgroup label="飲食"><option value="cafe">カフェ</option><option value="restaurant">食事</option></optgroup>
                 <optgroup label="買い物"><option value="convenience">コンビニ</option><option value="shopping">買い物</option></optgroup>
-              </select></div>
-              <div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div>
-              <div><label for="discovery-direction">方角</label><select id="discovery-direction"><option value="any">指定しない</option><option value="n">北</option><option value="e">東</option><option value="s">南</option><option value="w">西</option></select></div>
-            </div>
-            <label class="discovery-elevation"><input id="discovery-high-elevation" type="checkbox" />標高が高め</label>
-            <fieldset class="discovery-time">
-              <legend>歩ける時間（片道）</legend>
-              <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
-            </fieldset>
-            <p id="discovery-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
-            <div class="settings-actions"><button id="discovery-random-cancel" type="button" disabled>中止</button><button id="discovery-random" type="button">ランダムに探す</button></div>
+              </select></div></div>
+            <div class="kind-presets" role="group" aria-label="場所の種類"><button type="button" data-kind="park" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-tree"></use></svg>公園</button><button type="button" data-kind="mountain" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-mountain"></use></svg>山</button><button type="button" data-kind="autumn_leaves" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-leaf"></use></svg>紅葉</button><button type="button" data-kind="shrine" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-pin"></use></svg>神社・寺院</button></div>
+            <details id="advanced-conditions" class="advanced-conditions"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-filter"></use></svg>詳細な条件<span id="advanced-count"></span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-chevron"></use></svg></summary><div class="advanced-content"><div class="discovery-fields"><div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div><div><label for="discovery-direction">方角</label><select id="discovery-direction"><option value="any">指定しない</option><option value="n">北</option><option value="e">東</option><option value="s">南</option><option value="w">西</option></select></div></div><label class="discovery-elevation"><input id="discovery-high-elevation" type="checkbox" />標高が高め</label>
             <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
             <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 森" />
-            <div class="settings-actions"><button id="discovery-cancel" type="button" disabled>中止</button><button id="discovery-submit" type="submit">条件に合う場所を探す</button></div>
+            </div></details>
+            <div class="settings-actions random-actions"><button id="discovery-random-cancel" type="button" disabled>中止</button><button id="discovery-random" type="button">ランダムに探す</button></div>
+            <div class="settings-actions primary-search-actions"><button id="discovery-cancel" type="button" disabled>中止</button><button id="discovery-submit" type="submit" class="primary-button">条件に合う場所を探す</button></div>
           </form>
+          <div class="results-heading"><h3>散歩先の候補</h3><span id="discovery-count" aria-live="off">0件</span></div>
           <ul id="discovery-results" class="place-list" aria-label="希望に近い目的地"></ul>
           <button id="discovery-more" class="discovery-more" type="button" aria-controls="discovery-results" hidden>もっと見る</button>
           </section>
@@ -97,14 +98,20 @@
       </div>
     </div>
     <div class="app-shell" hidden>
-      <button id="panel-toggle" class="panel-toggle" type="button" aria-controls="search-panel" aria-expanded="false" aria-label="場所を登録：開く" title="右に引っ張ると開きます"><span class="panel-label">場所を登録</span><span class="panel-chevron" aria-hidden="true">›</span></button>
+      <nav class="main-navigation" aria-label="メインメニュー">
+        <a class="app-brand" href="#" aria-label="散歩アプリ・地図"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-leaf"></use></svg><span>散歩アプリ</span></a>
+        <div class="navigation-items"><button type="button" data-view="map" aria-controls="map"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-map"></use></svg><span>地図</span></button><button type="button" data-view="search" aria-controls="discovery-screen"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-search"></use></svg><span>探す</span></button><button type="button" data-view="saved" aria-controls="search-panel"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-bookmark"></use></svg><span>登録地点</span></button><button type="button" data-view="settings" aria-controls="setup-screen"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-settings"></use></svg><span>設定</span></button></div>
+        <a class="sources-link" href="static/data-sources.html" target="_blank" rel="noopener"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-link"></use></svg><span>出典</span></a>
+      </nav>
+      <button id="panel-toggle" class="panel-toggle" hidden type="button" aria-controls="search-panel" aria-expanded="false" aria-label="場所を登録：開く" title="右に引っ張ると開きます"><span class="panel-label">場所を登録</span><span class="panel-chevron" aria-hidden="true">›</span></button>
       <aside id="search-panel" class="sidebar" aria-label="場所の検索と散歩の記録" aria-hidden="true" inert>
+        <div class="sidebar-heading"><div class="sheet-grip" aria-hidden="true"></div><div><span class="section-label">記録</span><h2>登録地点</h2></div><div class="heading-actions"><button class="sheet-expand icon-button" type="button" aria-label="登録地点を展開" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-chevron"></use></svg></button><button id="close-registration" class="icon-button" type="button" aria-label="登録地点を閉じる"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-close"></use></svg></button></div></div>
         <div class="sidebar-content">
           <section aria-label="場所の検索">
             <label class="search-label" for="search-input">場所を検索</label>
             <form id="search-form" class="search-form" role="search">
               <input id="search-input" type="search" placeholder="場所の名前・住所" maxlength="200" />
-              <button id="search-button" type="button" aria-label="検索" title="検索"></button>
+              <button id="search-button" type="button" aria-label="検索" title="検索"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-search"></use></svg></button>
             </form>
             <p id="search-status" class="status" role="status" aria-live="polite"></p>
             <ul id="search-results" class="place-list" aria-label="検索結果"></ul>
@@ -130,7 +137,7 @@
           <p id="visit-status" class="status" role="status" aria-live="polite"></p>
           <button id="undo-delete" type="button" class="secondary" hidden>削除を取り消す</button>
           <section aria-label="保存した場所">
-            <span id="visit-count" class="count">0件</span>
+            <div class="results-heading"><h3>保存した場所</h3><span id="visit-count" class="count">0件</span></div>
             <p id="visits-empty" class="sr-only">記録なし</p>
             <ul id="visits-list" class="place-list" aria-label="保存した場所"></ul>
           </section>
@@ -144,11 +151,11 @@
         <button id="edit-walking-settings" type="button" class="secondary" aria-expanded="false" aria-controls="setup-screen">歩く速さ</button>
       </div>
       <div class="nearby-convenience-controls">
-        <div class="nearby-convenience-actions"><label class="sr-only" for="nearby-kind">近くで探す場所</label><select id="nearby-kind"><option value="convenience">コンビニ</option><option value="station">駅</option></select><button id="nearby-convenience" type="button" aria-label="近くのコンビニを探す" aria-describedby="nearby-convenience-status">探す</button><button id="clear-nearby-convenience" type="button" aria-label="コンビニの表示を消す" hidden>消す</button></div>
+        <div class="nearby-convenience-actions"><span class="nearby-label">近くの</span><label class="sr-only" for="nearby-kind">近くで探す場所</label><select id="nearby-kind"><option value="convenience">コンビニ</option><option value="station">駅</option></select><button id="nearby-convenience" type="button" aria-label="近くのコンビニを探す" aria-describedby="nearby-convenience-status">探す</button><button id="clear-nearby-convenience" type="button" aria-label="コンビニの表示を消す" hidden>消す</button></div>
         <p id="nearby-convenience-status" class="status" role="status" aria-live="polite"></p>
       </div>
       <button id="open-discovery" class="discovery-toggle" type="button" aria-expanded="false" aria-controls="discovery-screen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 3v6M16 9v6M10 15v6" stroke-width="3"/></svg>目的地を探す</button>
-      <div class="map-legend" role="note" aria-label="地点の凡例">
+      <details class="legend-control"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-map"></use></svg>凡例</summary>      <div class="map-legend" role="note" aria-label="地点の凡例">
         <span class="legend-item"><span class="legend-dot registered" aria-hidden="true"></span>登録地点</span>
         <span class="legend-item"><span class="legend-dot selected" aria-hidden="true"></span>選択地点</span>
         <span id="location-legend" class="legend-item" hidden><span class="legend-dot current" aria-hidden="true"></span>現在地</span>
@@ -156,6 +163,7 @@
         <span id="destination-legend" class="legend-item" hidden><span class="legend-dot destination" aria-hidden="true"></span>目的地</span>
         <span id="convenience-legend" class="legend-item" hidden><span class="legend-dot convenience" aria-hidden="true"></span><span id="nearby-legend-label">コンビニ</span></span>
       </div>
+</details>
       <div class="location-controls">
         <button id="toggle-route-details" class="route-details-toggle" type="button" aria-expanded="true" aria-controls="route-details-content" hidden>詳細を閉じる</button>
         <div id="route-details-content" class="route-details-content">
@@ -193,5 +201,6 @@
       crossorigin=""
     ></script>
     <script src="static/js/app.js"></script>
+    <script src="static/js/ui.js"></script>
   </body>
 </html>

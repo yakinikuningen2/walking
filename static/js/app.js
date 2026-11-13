@@ -2247,7 +2247,7 @@ function beginWalkingRoute(mode) {
   walkingRouteMode = mode;
   routeEnabled = true;
   if (starting) {
-    const compact = window.matchMedia("(max-width: 680px), (max-height: 480px)").matches;
+    const compact = window.matchMedia("(max-width: 840px), (max-height: 480px)").matches;
     setRouteDetailsOpen(!compact, compact);
   }
   if (searchedStart || (mode !== "standard" && getStartPoint())) {
@@ -4013,6 +4013,5 @@ map.on("click", ({ latlng }) => {
   selectPlace(place, null, false);
 });
 renderVisits();
-if (savedWalkingSpeed) openMap();
-else openWalkingSettings();
+openMap();
 requestCurrentLocation({ initial: true });
