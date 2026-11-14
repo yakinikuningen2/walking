@@ -2,7 +2,7 @@
 (() => {
   const mobile = window.matchMedia("(max-width: 840px), (max-width: 1080px) and (max-height: 480px)");
   const navigation = [...document.querySelectorAll("[data-view]")];
-  const screens = { search: ui["discovery-screen"], saved: searchPanel, settings: ui["setup-screen"] };
+  const screens = { search: ui["discovery-screen"], saved: searchPanel, tour: document.getElementById("tour-screen"), settings: ui["setup-screen"] };
   let currentView = ui["setup-screen"].hidden ? "map" : "settings";
   let layoutFrame = null;
 
@@ -50,7 +50,7 @@
   }
 
   function syncNavigation() {
-    const visible = { search: !screens.search.hidden, saved: panelIsOpen(), settings: !screens.settings.hidden };
+    const visible = { search: !screens.search.hidden, saved: panelIsOpen(), tour: !screens.tour.hidden, settings: !screens.settings.hidden };
     if (!visible[currentView]) currentView = Object.keys(visible).find((key) => visible[key]) || "map";
     document.body.dataset.view = currentView;
     document.body.classList.toggle("workspace-open", currentView !== "map");
@@ -66,6 +66,7 @@
     if (view !== "saved" && panelIsOpen()) setPanelOpen(false, false);
     if (view !== "search" && !screens.search.hidden) setDiscoveryOpen(false, false);
     if (view !== "settings" && !screens.settings.hidden) closeWalkingSettings(false);
+    if (view !== "tour" && !screens.tour.hidden) WalkingTour.close();
   }
 
   function openView(view) {
@@ -74,6 +75,7 @@
     if (view === "search" && screens.search.hidden) setDiscoveryOpen(true, false);
     if (view === "saved" && !panelIsOpen()) setPanelOpen(true, false);
     if (view === "settings" && screens.settings.hidden) openWalkingSettings();
+    if (view === "tour" && screens.tour.hidden) WalkingTour.open();
     syncNavigation();
   }
 
@@ -86,6 +88,7 @@
     setPanelOpen(false, false);
     navigation.find((button) => button.dataset.view === "saved").focus({ preventScroll: true });
   });
+  document.getElementById("close-tour").addEventListener("click", () => openView("map"));
 
   // Existing entry points (markers, start selection, settings and Escape) also
   // update the navigation. Observe state rather than replacing their handlers.
@@ -94,13 +97,14 @@
     for (const record of records) {
       if (record.target === screens.search && !screens.search.hidden) opened = "search";
       if (record.target === screens.settings && !screens.settings.hidden) opened = "settings";
+      if (record.target === screens.tour && !screens.tour.hidden) opened = "tour";
       if (record.target === appShell && panelIsOpen() && !String(record.oldValue).includes("panel-open")) opened = "saved";
     }
     if (opened) { closePeers(opened); currentView = opened; }
     syncNavigation();
   });
   panels.observe(appShell, { attributes: true, attributeFilter: ["class"], attributeOldValue: true });
-  for (const screen of [screens.search, screens.settings]) panels.observe(screen, { attributes: true, attributeFilter: ["hidden"] });
+  for (const screen of [screens.search, screens.settings, screens.tour]) panels.observe(screen, { attributes: true, attributeFilter: ["hidden"] });
 
   function setExpanded(screen, expanded) {
     screen.classList.toggle("is-expanded", expanded);
@@ -141,6 +145,10 @@
     for (const name of ["pointercancel", "lostpointercapture"]) grip.addEventListener(name, () => { drag = null; });
   }
 
+  const advancedConditions = document.getElementById("advanced-conditions");
+  advancedConditions.addEventListener("toggle", () => {
+    advancedConditions.querySelector(".advanced-toggle-label").textContent = advancedConditions.open ? "閉じる" : "開く";
+  });
   function syncPresets() {
     const minutes = Number(ui["discovery-hours"].value) * 60 + Number(ui["discovery-minutes"].value);
     for (const button of document.querySelectorAll("[data-minutes]")) {
@@ -224,4 +232,89 @@
   window.addEventListener("resize", refreshMapSize);
   map.zoomControl?.setPosition("topright");
   openView("map");
+
+  const guide = document.getElementById("onboarding-guide");
+  const guidePages = [...guide.querySelectorAll("[data-onboarding-page]")];
+  const guideDots = [...guide.querySelectorAll("[data-onboarding-go]")];
+  const guideNext = document.getElementById("finish-onboarding");
+  const guidePrevious = document.getElementById("previous-onboarding");
+  const guideHint = document.getElementById("onboarding-hint");
+  const onboardingKey = "walking.onboarding.v1";
+  const onboardingHintKey = "walking.onboarding-hint.v1";
+  let guidePage = 0;
+  let guideHintSeen = onboardingSeen(onboardingHintKey);
+  function onboardingSeen(key = onboardingKey) {
+    try { if (localStorage.getItem(key) === "seen") return true; } catch { /* Storage can be unavailable in private contexts. */ }
+    try { return sessionStorage.getItem(key) === "seen"; } catch { return false; }
+  }
+  function rememberOnboarding(key = onboardingKey) {
+    try { localStorage.setItem(key, "seen"); return; } catch { /* Keep the app usable when persistent storage is blocked. */ }
+    try { sessionStorage.setItem(key, "seen"); } catch { /* The guide can still be dismissed in this page. */ }
+  }
+  function showGuidePage(index) {
+    guidePage = Math.max(0, Math.min(index, guidePages.length - 1));
+    guidePages.forEach((page, i) => { page.hidden = i !== guidePage; });
+    guideDots.forEach((dot, i) => {
+      if (i === guidePage) dot.setAttribute("aria-current", "step");
+      else dot.removeAttribute("aria-current");
+    });
+    guidePrevious.disabled = guidePage === 0;
+    guideNext.textContent = guidePage === guidePages.length - 1 ? "地図を開く" : "次へ";
+    guide.querySelector(".onboarding-content").scrollTop = 0;
+    if (guidePrevious.disabled && document.activeElement === guidePrevious) guideNext.focus({ preventScroll: true });
+  }
+  function showOnboarding() {
+    guideHint.hidden = true;
+    openView("map");
+    showGuidePage(0);
+    guide.hidden = false;
+    if (!guide.open) guide.showModal();
+    rememberOnboarding();
+  }
+  function hideOnboarding() {
+    if (guide.hidden) return;
+    guide.close();
+    guide.hidden = true;
+    if (!guideHintSeen) {
+      guideHint.hidden = false;
+      guideHintSeen = true;
+      rememberOnboarding(onboardingHintKey);
+    }
+    navigation.find(button => button.dataset.view === "map").focus({ preventScroll: true });
+  }
+  document.getElementById("close-onboarding").addEventListener("click", hideOnboarding);
+  guideNext.addEventListener("click", () => {
+    if (guidePage === guidePages.length - 1) hideOnboarding();
+    else showGuidePage(guidePage + 1);
+  });
+  guidePrevious.addEventListener("click", () => showGuidePage(guidePage - 1));
+  for (const dot of guideDots) dot.addEventListener("click", () => showGuidePage(Number(dot.dataset.onboardingGo)));
+  guide.addEventListener("cancel", event => { event.preventDefault(); hideOnboarding(); });
+  guide.addEventListener("keydown", event => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      showGuidePage(guidePage + (event.key === "ArrowRight" ? 1 : -1));
+    }
+  });
+  // Swiping changes only the guide's page; Leaflet keeps its own touch handling.
+  const guideContent = guide.querySelector(".onboarding-content");
+  let swipeStart = null;
+  guideContent.addEventListener("touchstart", event => {
+    swipeStart = event.touches.length === 1 ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : null;
+  }, { passive: true });
+  guideContent.addEventListener("touchcancel", () => { swipeStart = null; }, { passive: true });
+  guideContent.addEventListener("touchend", event => {
+    if (swipeStart && event.changedTouches.length === 1 && event.touches.length === 0) {
+      const dx = event.changedTouches[0].clientX - swipeStart.x;
+      const dy = event.changedTouches[0].clientY - swipeStart.y;
+      if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) showGuidePage(guidePage + (dx < 0 ? 1 : -1));
+    }
+    swipeStart = null;
+  }, { passive: true });
+  document.getElementById("show-onboarding").addEventListener("click", showOnboarding);
+  document.getElementById("close-onboarding-hint").addEventListener("click", () => { guideHint.hidden = true; });
+  for (const button of navigation) button.addEventListener("click", () => { guideHint.hidden = true; });
+  document.querySelector(".app-brand").addEventListener("click", () => { guideHint.hidden = true; });
+  if (!onboardingSeen()) showOnboarding();
 })();

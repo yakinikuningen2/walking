@@ -161,6 +161,8 @@ let mapProxyRetryAt = 0;
 const DISCOVERY_DISTANCE_FACTOR = 1.3;
 const DISCOVERY_PAGE_SIZE = 5;
 const DISCOVERY_RESULT_LIMIT = 250;
+const DISCOVERY_ANY_TARGET = 100;
+const DISCOVERY_ANY_FAST_WINDOW_MS = 1000;
 const DISCOVERY_RANDOM_PROBE_TIMEOUT_MS = 8000;
 const DISCOVERY_SEARCH_TIMEOUT_MS = 60000;
 const DISCOVERY_KIND_TIMEOUT_MS = 8000;
@@ -225,6 +227,7 @@ const ui = Object.fromEntries([
   "place-editor", "selected-address", "visit-form", "visit-name", "visit-date",
   "visit-note", "save-button", "cancel-selection", "visit-status", "undo-delete",
   "visits-list", "visits-empty", "visit-count",
+  "visit-walk-fields", "visit-walk-confirmed", "visit-walk-values", "visit-walk-source", "visit-distance", "visit-duration", "copy-route-walk", "walk-stats-month", "walk-stats",
   "location-button", "follow-location", "location-status", "location-legend",
   "nearby-scope", "nearby-route-option", "nearby-kind", "nearby-convenience", "clear-nearby-convenience", "nearby-convenience-status", "convenience-legend", "nearby-legend-label",
   "route-detours-button", "nearby-results-panel", "nearby-results", "nearby-results-count", "nearby-more",
@@ -629,7 +632,8 @@ function loadVisits() {
         || typeof visit.name !== "string" || !visit.name.trim() || visit.name.length > 120
         || typeof visit.note !== "string" || visit.note.length > 1000
         || typeof visit.address !== "string" || !validDate(visit.date)
-        || !validCoordinates(visit.lat, visit.lng)) throw new Error("Invalid record");
+        || !validCoordinates(visit.lat, visit.lng)
+        || (visit.walk !== undefined && !WalkingFeatures.validWalk(visit.walk))) throw new Error("Invalid record");
       ids.add(visit.id);
     }
     return data.visits;
@@ -763,6 +767,7 @@ function setStartPoint(place, { moveMap = true } = {}) {
   setStartPickerOpen(false);
   if (moveMap) focusPlace(searchedStart, { keepZoom: true });
   startPointChanged();
+  document.dispatchEvent(new CustomEvent("walking:start-selected", { detail: { ...searchedStart } }));
 }
 
 function stopStartMapSelection(reopen = false) {
@@ -2129,7 +2134,7 @@ function routeCrossesRestrictedArea(points, rings) {
   });
 }
 
-async function calculateWalkingRoute(start, end, kind, speed, request, via = null) {
+async function calculateWalkingRoute(start, end, kind, speed, request, via = null, avoidPolygons = []) {
   const access = await loadRouteAccess(request);
   await waitForRouteTurn(request);
   const point = (place, type = "break") => ({ lat: place.lat, lon: place.lng, type, search_cutoff: 100 });
@@ -2140,7 +2145,7 @@ async function calculateWalkingRoute(start, end, kind, speed, request, via = nul
   const url = new URL(ROUTE_ENDPOINT);
   url.searchParams.set("json", JSON.stringify({
     locations, costing: "pedestrian", format: "osrm", shape_format: "geojson",
-    exclude_polygons: access.areas.map((area) => area.ring),
+    exclude_polygons: [...access.areas.map((area) => area.ring), ...avoidPolygons],
     directions_options: { language: "ja-JP", units: "kilometers" },
     costing_options: { pedestrian: {
       walking_speed: speed, use_hills: kind === "gentle" ? 0 : 0.5,
@@ -2474,6 +2479,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
 
 function beginWalkingRoute(mode) {
   if (!destination || ui["route-button"].disabled) return;
+  if (typeof WalkingTour !== "undefined") WalkingTour.deactivate();
   const starting = !routeEnabled;
   if (mode !== walkingRouteMode) {
     roundTripOrigin = mode === "roundtrip" && routeContext ? { ...routeContext.start } : null;
@@ -2536,6 +2542,14 @@ function selectPlace(place, visit = null, moveMap = true) {
   ui["visit-name"].value = place.name;
   ui["visit-date"].value = visit ? visit.date : localDate();
   ui["visit-note"].value = visit ? visit.note : "";
+  const walk = visit?.walk;
+  ui["visit-walk-confirmed"].checked = !!walk;
+  ui["visit-walk-values"].hidden = !walk;
+  ui["visit-walk-fields"].open = !!walk;
+  ui["visit-walk-source"].value = walk?.source || "manual";
+  ui["visit-distance"].value = walk?.distanceMeters != null ? walk.distanceMeters / 1000 : "";
+  ui["visit-duration"].value = walk?.durationSeconds != null ? walk.durationSeconds / 60 : "";
+  for (const id of ["visit-distance", "visit-duration"]) ui[id].disabled = !walk;
   ui["save-button"].textContent = visit ? "更新" : "保存";
   selectionMarker = L.circleMarker([place.lat, place.lng], {
     radius: 10, color: "#fff", weight: 3, fillColor: "#d69a32",
@@ -2556,6 +2570,7 @@ function renderVisits() {
     const popup = document.createElement("div");
     popup.append(textElement("strong", visit.name), textElement("p", `訪問日：${visit.date}`));
     if (visit.note) popup.append(textElement("p", visit.note, "popup-note"));
+    if (visit.walk) popup.append(textElement("p", walkRecordLabel(visit.walk), "place-detail"));
     popup.append(destinationButton(visit));
     const marker = L.circleMarker([visit.lat, visit.lng], {
       radius: 8, color: "#fff", weight: 2, fillColor: "#28694f",
@@ -2578,6 +2593,7 @@ function renderVisits() {
     button.addEventListener("click", () => { focusPlace(visit); marker.openPopup(); });
     item.append(button);
     if (visit.note) item.append(textElement("p", visit.note, "visit-note"));
+    if (visit.walk) item.append(textElement("p", walkRecordLabel(visit.walk), "walk-record-detail"));
     const actions = document.createElement("div");
     actions.className = "visit-actions";
     const edit = textElement("button", "編集", "secondary");
@@ -2598,7 +2614,54 @@ function renderVisits() {
     item.append(actions);
     ui["visits-list"].append(item);
   }
+  renderWalkStatistics();
 }
+
+function walkRecordLabel(walk) {
+  const distance = walk.distanceMeters === null ? "距離未入力" : routeDistance(walk.distanceMeters);
+  const duration = walk.durationSeconds === null ? "時間未入力" : `${Math.round(walk.durationSeconds / 60 * 10) / 10}分`;
+  return `${walk.source === "route" ? "ルート推定" : "本人入力の実績"} · ${distance} ／ ${duration}`;
+}
+
+function renderWalkStatistics() {
+  const month = ui["walk-stats-month"].value || localDate().slice(0, 7);
+  ui["walk-stats-month"].value = month;
+  const stats = WalkingFeatures.monthlyStats(visits, month);
+  const list = document.createElement("dl");
+  for (const [label, value] of [["散歩回数", `${stats.count}回`],
+    ["距離・本人入力", `${(stats.manual.distance / 1000).toLocaleString("ja-JP", { maximumFractionDigits: 2 })} km`],
+    ["距離・ルート推定", `${(stats.route.distance / 1000).toLocaleString("ja-JP", { maximumFractionDigits: 2 })} km`],
+    ["時間・本人入力", `${Math.round(stats.manual.duration / 60)}分`],
+    ["時間・ルート推定", `${Math.round(stats.route.duration / 60)}分`]]) {
+    const row = document.createElement("div");
+    row.append(textElement("dt", label), textElement("dd", value));
+    list.append(row);
+  }
+  ui["walk-stats"].replaceChildren(list, textElement("p", stats.count
+    ? `距離未入力 ${stats.missingDistance}件・時間未入力 ${stats.missingDuration}件`
+    : "「実際に散歩した記録として保存」を選んだ記録を集計します。", "walk-help"));
+}
+ui["walk-stats-month"].addEventListener("change", renderWalkStatistics);
+ui["visit-walk-confirmed"].addEventListener("change", () => {
+  const confirmed = ui["visit-walk-confirmed"].checked;
+  ui["visit-walk-values"].hidden = !confirmed;
+  for (const id of ["visit-distance", "visit-duration"]) ui[id].disabled = !confirmed;
+});
+ui["copy-route-walk"].addEventListener("click", () => {
+  const route = routeChoices.get(activeRouteKind)?.route;
+  const last = route?.points?.at(-1);
+  const point = last && { lat: last[0], lng: last[1] };
+  // Never attach a previous destination's route to an unrelated visit.
+  if (!selectedPlace || !route || !WalkingFeatures.validWalk({ version: 1, confirmed: true, source: "route", distanceMeters: route.distance, durationSeconds: route.duration })
+    || WalkingFeatures.meters(point, selectedPlace) > 300) {
+    message(ui["visit-status"], "この場所までのルートを表示してから入力してください。", true);
+    return;
+  }
+  ui["visit-walk-source"].value = "route";
+  ui["visit-distance"].value = Math.round(route.distance) / 1000;
+  ui["visit-duration"].value = Math.round(route.duration / 6) / 10;
+  message(ui["visit-status"], "ルート検索の推定値を入力しました。歩いた記録は「保存」で登録できます。");
+});
 
 function japaneseCountry(properties) {
   const code = typeof properties.countrycode === "string"
@@ -2624,7 +2687,11 @@ function photonPlaces(data) {
     const key = `${lat},${lng},${name}`;
     if (seen.has(key)) return [];
     seen.add(key);
-    return [{ name, address, lat, lng }];
+    const tags = typeof p.osm_key === "string" ? { [p.osm_key]: p.osm_value } : {};
+    const kindId = Object.keys(DISCOVERY_KINDS).find(key => DISCOVERY_KINDS[key].tags && discoveryKindMatches(tags, key));
+    const kindLabel = kindId ? DISCOVERY_KINDS[kindId].label : p.osm_key === "railway" && ["station", "halt"].includes(p.osm_value) ? "駅" : "場所";
+    return [{ name, address, lat, lng, ...(kindId ? { kindId } : {}), kindLabel,
+      ...(typeof p.description === "string" ? { description: p.description.slice(0, 300) } : {}) }];
   }).slice(0, SEARCH_LIMIT);
 }
 
@@ -3172,6 +3239,8 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
       ...(natural ? { accessNote: String(access.note || "徒歩アクセス未確認").slice(0, 180), accessStatus: access.status,
         accessAnchor: { type: access.anchorType, id: access.anchorId }, naturalUnnamed: !!access.unnamed } : {}),
       kindId, kindLabel: kind.label, osmType: element.type, osmId: element.id });
+    const description = tags["description:ja"] || tags.description;
+    if (typeof description === "string") places[places.length - 1].description = description.slice(0, 300);
   }
   return places.sort((a, b) => compareDiscoveryElevation(a, b, preferences.highElevation)
     || b.preferenceScore - a.preferenceScore || a.directDistance - b.directDistance).slice(0, limit);
@@ -3773,6 +3842,7 @@ async function prefetchDiscoveryKinds(kinds, criteria, start, request) {
 }
 
 async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () => {}) {
+  const fastWindowEnds = Date.now() + DISCOVERY_ANY_FAST_WINDOW_MS;
   const preferences = discoveryPreferences(criteria);
   const available = discoverySearchKinds(criteria, preferences);
   // Keep seasonal keywords on the local-data path.
@@ -3785,7 +3855,7 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
     || order.indexOf(a) - order.indexOf(b));
   const jobs = [];
   for (const kind of kinds) {
-    const batchable = kind !== "park" && !DISCOVERY_KINDS[kind].geometry;
+    const batchable = kind !== "park" && !DISCOVERY_KINDS[kind].geometry && !DISCOVERY_KINDS[kind].seasonal;
     const previous = jobs.at(-1);
     if (batchable && previous?.batchable && previous.kinds.length < 3) previous.kinds.push(kind);
     else jobs.push({ kinds: [kind], batchable });
@@ -3797,6 +3867,28 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
   const byKind = new Map();
   const combined = (pool = byKind) => sortDiscoveryPlaces(
     [...new Map([...pool.values()].flat().map((place) => [place.key, place])).values()], criteria);
+  let acceptedCount = 0;
+  let enoughTimer = null;
+  const stopWhenEnough = () => {
+    if (controller.signal.aborted || acceptedCount < DISCOVERY_ANY_TARGET) return;
+    request.sufficientResults = true;
+    // Stop this search group, not the user's request: collected candidates are a success.
+    controller.abort();
+  };
+  const publish = (kind, places) => {
+    if (controller.signal.aborted) return;
+    byKind.set(kind, places);
+    const candidates = combined();
+    acceptedCount = candidates.filter(place => !preferences.highElevation || validDiscoveryElevation(place.elevation)).length;
+    onUpdate(candidates);
+    if (controller.signal.aborted || acceptedCount < DISCOVERY_ANY_TARGET) return;
+    const remaining = fastWindowEnds - Date.now();
+    if (remaining <= 0) stopWhenEnough();
+    else if (enoughTimer === null) enoughTimer = setTimeout(() => { enoughTimer = null; stopWhenEnough(); }, remaining);
+  };
+  let resolveStopped;
+  const stopped = new Promise(resolve => { resolveStopped = resolve; });
+  controller.signal.addEventListener("abort", resolveStopped, { once: true });
   let nextJob = 0, lastError = null;
   setDiscoveryProgress(request, "候補を取得中…");
   const worker = async () => {
@@ -3815,12 +3907,10 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
             if (child.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
             const found = await findDiscoveryPlaces({ ...criteria, kind }, start, child, (places) => {
               if (controller.signal.aborted || child.controller.signal.aborted) return;
-              byKind.set(kind, places);
-              onUpdate(combined());
+              publish(kind, places);
             });
             if (controller.signal.aborted || child.controller.signal.aborted) return;
-            byKind.set(kind, found);
-            onUpdate(combined());
+            publish(kind, found);
           }
         }, Math.min(DISCOVERY_KIND_TIMEOUT_MS, remaining));
       } catch (error) {
@@ -3839,7 +3929,7 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
   };
   try {
     if (DISCOVERY_LOCAL_SOURCES.length) {
-      const localKinds = kinds.filter((kind) => kind === "shrine" || DISCOVERY_LOCAL_SOURCES.some((source) => source.kinds.includes(kind)));
+      const localKinds = kinds.filter((kind) => kind === "shrine" || DISCOVERY_KINDS[kind].seasonal || DISCOVERY_LOCAL_SOURCES.some((source) => source.kinds.includes(kind)));
       const matched = new Set();
       let nextLocal = 0;
       const localWorker = async () => {
@@ -3853,29 +3943,31 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
             const places = await runDiscoveryTask(child,
               () => findDiscoveryPlaces({ ...criteria, kind }, start, child, (places) => {
                 if (controller.signal.aborted || child.controller.signal.aborted || !places.length) return;
-                byKind.set(kind, places); onUpdate(combined());
+                publish(kind, places);
               }), Math.min(DISCOVERY_KIND_TIMEOUT_MS, remaining));
             if (!controller.signal.aborted && !child.controller.signal.aborted && places.length) {
               request.ambienceUnavailable ||= child.ambienceUnavailable;
-              matched.add(kind); byKind.set(kind, places); onUpdate(combined());
+              matched.add(kind); publish(kind, places);
             }
           } catch { /* The normal lookup below handles missing parts and unconfirmed conditions. */ }
           finally { controller.signal.removeEventListener("abort", cancel); child.controller.abort(); }
         }
       };
       // Publish local categories first; an unavailable external category cannot hold them up.
-      await Promise.all([localWorker(), localWorker()]);
+      await Promise.race([Promise.all([localWorker(), localWorker()]), stopped]);
       for (const job of jobs) job.kinds = job.kinds.filter((kind) => !matched.has(kind));
     }
     // A heavy forest/shoreline lookup must not hold up parks or other point categories.
     // Park searches retain the faster Photon path; all exact filters still run locally.
-    await Promise.all([worker(), worker()]);
+    if (!controller.signal.aborted) await Promise.race([Promise.all([worker(), worker()]), stopped]);
     if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
     const places = combined();
     if (!places.length && lastError) throw lastError;
     if (lastError) request.kindsUnavailable = true;
     return places;
   } finally {
+    if (enoughTimer !== null) clearTimeout(enoughTimer);
+    controller.signal.removeEventListener("abort", resolveStopped);
     controller.abort();
     request.controller.signal.removeEventListener("abort", abort);
   }
@@ -4060,6 +4152,45 @@ function discoveryNaturalPlaceReady(place) {
     && place.accessNote.length > 0 && place.accessNote.length <= 180 && validCoordinates(place.lat, place.lng);
 }
 
+function appendCandidateEvidence(button, place) {
+  const badge = document.createElement("span");
+  badge.className = "place-kind-icon";
+  badge.setAttribute("aria-hidden", "true");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  for (const [key, value] of Object.entries({ class: "icon", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round" })) svg.setAttribute(key, value);
+  const use = document.createElementNS(svg.namespaceURI, "use");
+  const icon = { park: "tree", forest: "tree", mountain: "mountain", cherry_blossom: "leaf", autumn_leaves: "leaf", culture: "bookmark" }[place.kindId] || "pin";
+  use.setAttribute("href", `#i-${icon}`);
+  svg.append(use); badge.append(svg); button.prepend(badge);
+  if (typeof place.description === "string" && place.description) button.append(textElement("span", place.description.slice(0, 300), "candidate-description"));
+}
+
+function updateCandidateActions(item, place) {
+  let actions = item.querySelector(".candidate-actions");
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.className = "candidate-actions";
+    for (const label of ["ルート確認", "地点登録"]) {
+      const button = textElement("button", label);
+      button.type = "button";
+      actions.append(button);
+    }
+    item.append(actions);
+  }
+  const [route, save] = actions.children;
+  const natural = ["forest", "waterside", "coast"].includes(place.kindId);
+  route.disabled = natural && !discoveryNaturalPlaceReady(place);
+  route.setAttribute("aria-label", `${place.name}へのルート確認`);
+  save.setAttribute("aria-label", `${place.name}を地点登録`);
+  route.onclick = () => {
+    setDiscoveryOpen(false, false);
+    setDestination(place);
+    beginWalkingRoute("standard");
+  };
+  // Open the existing editor. Selecting a candidate never records a visit.
+  save.onclick = () => { setDiscoveryOpen(false, false); selectPlace(place); };
+}
+
 function renderDiscoveryResults(results, request) {
   const list = ui["discovery-results"];
   const highElevation = discoveryPreferences(request.criteria).highElevation;
@@ -4089,6 +4220,7 @@ function renderDiscoveryResults(results, request) {
     const natural = ["forest", "waterside", "coast"].includes(place.kindId);
     if (natural) content.append(textElement("span", place.accessNote || "以前の候補・徒歩アクセスを再検索してください", "place-detail natural-access-note"));
     if (place.address) content.append(textElement("span", place.address, "place-detail"));
+    appendCandidateEvidence(content, place);
     content.append(textElement("span", natural && !discoveryNaturalPlaceReady(place) ? "徒歩アクセスの再検索が必要" : "目的地に指定", "discovery-result-action"));
     if (!button) {
       const item = document.createElement("li");
@@ -4105,6 +4237,8 @@ function renderDiscoveryResults(results, request) {
     };
     button.disabled = natural && !discoveryNaturalPlaceReady(place);
     const item = button.closest("li") || button.parentElement;
+    item.classList.add("candidate-card");
+    updateCandidateActions(item, place);
     if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
   }
 }
@@ -4141,7 +4275,8 @@ async function fetchDiscoverySuggestions(request) {
         if (results.length) renderDiscoveryProgress(request);
       });
       if (highElevation && isCurrent()) {
-        results = await fetchDiscoveryElevations(found, request);
+        results = request.sufficientResults ? found.filter(place => validDiscoveryElevation(place.elevation))
+          : await fetchDiscoveryElevations(found, request);
         if (!isCurrent() || request.controller.signal.aborted) return found;
         renderDiscoveryResults(results, request);
       }
@@ -4152,6 +4287,7 @@ async function fetchDiscoverySuggestions(request) {
         : request.elevationUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・標高の取得に一部失敗しました。`
           : request.kindsUnavailable || request.natureUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・一部を取得できませんでした。`
             : request.natureLimited ? `候補 ${discoveryDisplayedCount(request)}件・範囲と件数を制限して確認`
+            : request.sufficientResults ? `候補 ${results.length}件・検索終了`
             : `検索完了・候補 ${discoveryDisplayedCount(request)}件`
       : highElevation && places.length ? request.elevationUnavailable ? "標高を取得できず、検索できませんでした。" : "標高を確認できる場所は見つかりませんでした。"
         : rural && request.ambienceUnavailable ? "周辺情報を取得できず、検索できませんでした。"
@@ -4264,6 +4400,17 @@ function renderSearch(places, context = placeSearch) {
     const button = placeButton(place, place.address, "result-button");
     button.addEventListener("click", () => context.onSelect(place));
     item.append(button);
+    if (context !== startSearch) {
+      item.className = "candidate-card";
+      button.classList.add("candidate-select");
+      const start = getStartPoint();
+      const directDistance = start ? map.distance([start.lat, start.lng], [place.lat, place.lng]) : null;
+      const distance = directDistance === null ? null : directDistance * DISCOVERY_DISTANCE_FACTOR;
+      const duration = distance === null ? null : distance / (currentWalkingSpeed().kmh / 3.6);
+      button.append(textElement("span", `${place.kindLabel || "場所"}${distance === null ? " ／ 出発地点未設定" : ` ／ 約${routeDistance(distance)}・徒歩約${routeDuration(duration)}（距離からの推定）`}`, "candidate-metrics"));
+      appendCandidateEvidence(button, { ...place, directDistance, distance, duration });
+      updateCandidateActions(item, place);
+    }
     context.results.append(item);
   }
   message(context.status, places.length
@@ -4400,8 +4547,19 @@ ui["visit-form"].addEventListener("submit", (event) => {
   const editing = selectedVisitId !== null;
   const id = selectedVisitId || (crypto.randomUUID
     ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const visit = { id, name, date, note, address: selectedPlace.address,
+  let walk;
+  try {
+    walk = WalkingFeatures.walkFromInput({ confirmed: ui["visit-walk-confirmed"].checked, source: ui["visit-walk-source"].value,
+      distanceKm: ui["visit-distance"].value, minutes: ui["visit-duration"].value });
+  } catch {
+    message(ui["visit-status"], "散歩距離・時間は0以上の数値で入力してください。", true);
+    return;
+  }
+  const previous = editing ? visits.find(entry => entry.id === id) : null;
+  const visit = { ...previous, id, name, date, note, address: selectedPlace.address || "",
     lat: selectedPlace.lat, lng: selectedPlace.lng };
+  if (walk) visit.walk = walk;
+  else delete visit.walk;
   const next = editing ? visits.map((entry) => entry.id === id ? visit : entry) : [...visits, visit];
   if (!persistVisits(next)) return;
   lastDeleted = null;

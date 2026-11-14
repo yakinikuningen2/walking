@@ -32,6 +32,7 @@ function setup() {
   let now = 1000000;
   const calls = [], mapCalls = [];
   const context = vm.createContext({
+    WalkingFeatures: require('./static/js/walk-features.js'),
     URL, URLSearchParams, AbortController, DOMException, Math, Number, Object, Map, Set, setTimeout, clearTimeout,
     Date: class extends Date { static now() { return now; } },
     SEARCH_ENDPOINT: 'https://photon.komoot.io/api/', DISCOVERY_PARK_TIMEOUT_MS: 8000,
@@ -106,6 +107,19 @@ test('each actual local category can find its own records without external APIs,
   }
 });
 
+test('saved mood metadata cannot apply a hidden category filter or ranking after its removal', () => {
+  const { context: c } = setup();
+  const base = { ...criteria, kind: 'any' };
+  const expectedKinds = Array.from(c.discoverySearchKinds(base, c.discoveryPreferences(base)));
+  const a = { ...start, key: 'near', kindId: 'park', preferenceScore: 0, duration: 300, distance: 400 };
+  const b = { ...a, lat: start.lat + .01, key: 'far', duration: 600, distance: 800 };
+  for (const mood of ['nature', 'relax', 'new', 'long', 'photo', 'free']) {
+    const input = { ...base, mood, moodSeed: 42 };
+    assert.deepEqual(Array.from(c.discoverySearchKinds(input, c.discoveryPreferences(input))), expectedKinds);
+    assert.equal(c.sortDiscoveryPlaces([b, a], input)[0].key, 'near');
+  }
+});
+
 test('local source metadata, foreign coordinates, categories and duplicate IDs are checked before use', () => {
   const { context: c } = setup(); enableBundledIndexes(c);
   const original = JSON.parse(readFileSync(join(__dirname,'static/discovery-wikidata-jp-2026-11-13-v1/park.json'),'utf8'));
@@ -167,6 +181,101 @@ test('unspecified search publishes several local kinds before waiting for unbund
   await assert.rejects(pending,{name:'AbortError'});
   waiting.forEach(r=>r([]));await new Promise(setImmediate);
   assert.equal(updates.length,count);
+});
+
+test('100 accepted unspecified candidates after the fast window finish successfully without waiting for stalled providers', async () => {
+  const { context:c, request, advance } = setup();
+  c.prefetchDiscoveryKinds = async () => {};
+  const pending = [], updates = [];
+  c.findDiscoveryPlaces = (selected, origin, child, onUpdate) => {
+    pending.push({ kind:selected.kind, child, onUpdate });
+    return new Promise(() => {}); // Deliberately ignores abort.
+  };
+  const input = { ...criteria, kind:'any' }, req = request(input);
+  const found = c.findAnyDiscoveryPlaces(input,start,req,p=>updates.push(p));
+  await new Promise(setImmediate); assert.equal(pending.length,2);
+  advance(1100);
+  const parks = Array.from({length:100},(_,i)=>({key:`park/${i}`,kindId:'park',duration:23000+i,distance:20000+i,preferenceScore:0}));
+  pending[0].onUpdate(parks);
+  const result = await found;
+  assert.equal(result.length,100); assert.equal(req.sufficientResults,true);
+  assert.equal(req.controller.signal.aborted,false); assert.notEqual(req.timedOut,true); assert.notEqual(req.kindsUnavailable,true);
+  assert.ok(pending.every(p=>p.child.controller.signal.aborted));
+  const count=updates.length; pending[1].onUpdate([{key:'late',kindId:'cafe',duration:0,preferenceScore:0}]);
+  await new Promise(setImmediate); assert.equal(updates.length,count); assert.equal(pending.length,2);
+});
+
+test('the initial one-second window keeps extra candidates and cancels outstanding lookups when the window ends', async () => {
+  const { context:c, request, advance } = setup();
+  const timers=[],pending=[];
+  c.setTimeout=(callback,ms)=>{const timer={callback,ms};timers.push(timer);return timer;};
+  c.clearTimeout=timer=>{timer.cleared=true;};
+  c.prefetchDiscoveryKinds=async()=>{};
+  c.findDiscoveryPlaces=(selected,origin,child,onUpdate)=>{pending.push({kind:selected.kind,child,onUpdate});return new Promise(()=>{});};
+  const input={...criteria,kind:'any'},req=request(input);
+  let completed=false;
+  const found=c.findAnyDiscoveryPlaces(input,start,req).then(places=>{completed=true;return places;});
+  await new Promise(setImmediate);
+  const places=(kind,count)=>Array.from({length:count},(_,i)=>({key:`${kind}/${i}`,kindId:kind,duration:23000+i,distance:20000+i,preferenceScore:0}));
+  pending[0].onUpdate(Array.from({length:150},()=>places('park',1)[0]));
+  assert.ok(!timers.some(t=>t.ms===1000),'duplicate keys must not meet the target');
+  pending[0].onUpdate(places('park',130)); advance(300); pending[1].onUpdate(places('cafe',80));
+  await new Promise(setImmediate); assert.equal(completed,false);
+  const fast=timers.filter(t=>t.ms===1000);assert.equal(fast.length,1);
+  advance(700);fast[0].callback();
+  const result=await found;assert.equal(result.length,210);assert.equal(req.sufficientResults,true);
+  assert.equal(new Set(result.slice(0,5).map(p=>p.kindId)).size,2);
+  assert.ok(timers.filter(t=>t.ms===8000).every(t=>t.cleared));
+});
+
+test('fewer candidates finish normally without a forced one-second delay', async () => {
+  const {context:c,request}=setup();const timers=[];
+  c.setTimeout=(callback,ms)=>{const timer={callback,ms};timers.push(timer);return timer;};
+  c.clearTimeout=timer=>{timer.cleared=true;};c.prefetchDiscoveryKinds=async()=>{};
+  c.findDiscoveryPlaces=async selected=>selected.kind==='park'
+    ? Array.from({length:60},(_,i)=>({key:`park/${i}`,kindId:'park',duration:23000+i,distance:i,preferenceScore:0})):[];
+  const input={...criteria,kind:'any'},req=request(input);
+  const result=await c.findAnyDiscoveryPlaces(input,start,req);
+  assert.equal(result.length,60);assert.notEqual(req.sufficientResults,true);
+  assert.ok(!timers.some(t=>t.ms===1000));assert.ok(timers.every(t=>t.cleared));
+});
+
+test('unknown elevations cannot trigger early success, and a user cancellation still discards late callbacks', async () => {
+  for(const cancel of [false,true]){
+    const {context:c,request,advance}=setup(),pending=[],timers=[],updates=[];
+    c.setTimeout=(callback,ms)=>{const timer={callback,ms};timers.push(timer);return timer;};
+    c.clearTimeout=timer=>{timer.cleared=true;};c.prefetchDiscoveryKinds=async()=>{};
+    c.findDiscoveryPlaces=(selected,origin,child,onUpdate)=>{pending.push({child,onUpdate});return new Promise(()=>{});};
+    const input={...criteria,kind:'any',highElevation:!cancel},req=request(input);
+    const found=c.findAnyDiscoveryPlaces(input,start,req,p=>updates.push(p));await new Promise(setImmediate);
+    const pool=Array.from({length:130},(_,i)=>({key:`park/${i}`,kindId:'park',duration:23000+i,distance:i,preferenceScore:0,elevation:null}));
+    pending[0].onUpdate(pool);
+    if(cancel){
+      assert.ok(timers.some(t=>t.ms===1000));req.controller.abort();await assert.rejects(found,{name:'AbortError'});
+      assert.notEqual(req.sufficientResults,true);assert.ok(timers.every(t=>t.cleared));
+    }else{
+      assert.ok(!timers.some(t=>t.ms===1000));advance(1100);
+      pending[0].onUpdate(pool.map(p=>({...p,elevation:200})));
+      assert.equal((await found).length,130);assert.equal(req.sufficientResults,true);
+    }
+    const count=updates.length;pending[0].onUpdate(pool);assert.equal(updates.length,count);
+  }
+});
+
+test('early completion preserves all confirmed elevation candidates and does not start further elevation requests', async () => {
+  const {context:c,request}=setup();
+  vm.runInContext(source.slice(source.indexOf('async function fetchDiscoverySuggestions('),source.indexOf('ui["open-discovery"].addEventListener')),c);
+  c.message=(target,text,error=false)=>{target.textContent=text;target.error=error;};
+  c.finishDiscoverySearch=()=>{};c.showDiscoveryResults=()=>{};c.setDiscoveryBusy=value=>{c.busy=value;};
+  c.renderDiscoveryResults=(places,req)=>{req.places=places;req.visibleCount=5;};
+  c.fetchDiscoveryElevations=async()=>{throw Error('must not look up more elevations');};
+  c.findDiscoveryPlaces=async(_criteria,_start,req,onUpdate)=>{
+    const places=Array.from({length:130},(_,i)=>({key:`park/${i}`,elevation:200}));
+    req.sufficientResults=true;onUpdate(places);return [...places,{key:'unknown',elevation:null}];
+  };
+  const req=request({kind:'any',highElevation:true});c.discoveryRequest=req;await c.fetchDiscoverySuggestions(req);
+  assert.equal(req.places.length,130);assert.match(c.ui['discovery-status'].textContent,/130件.*検索終了/);
+  assert.equal(c.ui['discovery-status'].error,false);assert.equal(c.busy,false);
 });
 
 test('six-hour shrine search uses actual bundled candidates and preserves time, direction and speed', async () => {

@@ -32,7 +32,7 @@
             <p id="custom-speed-help" class="sr-only">時速2.5〜6.5 kmを0.1刻みで調整できます。</p>
           </fieldset>
           <p id="settings-status" class="status" role="status" aria-live="polite"></p>
-          <div class="settings-actions"><button id="open-map" class="open-map-button" type="submit">保存</button></div>
+          <div class="settings-actions"><button id="show-onboarding" type="button">使い方を見る</button><button id="open-map" class="open-map-button" type="submit">保存</button></div>
         </div>
       </form>
     </div>
@@ -83,7 +83,7 @@
                 <optgroup label="買い物"><option value="convenience">コンビニ</option><option value="shopping">買い物</option></optgroup>
               </select></div></div>
             <div class="kind-presets" role="group" aria-label="場所の種類"><button type="button" data-kind="park" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-tree"></use></svg>公園</button><button type="button" data-kind="mountain" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-mountain"></use></svg>山</button><button type="button" data-kind="autumn_leaves" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-leaf"></use></svg>紅葉</button><button type="button" data-kind="shrine" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-pin"></use></svg>神社・寺院</button></div>
-            <details id="advanced-conditions" class="advanced-conditions"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-filter"></use></svg>詳細な条件<span id="advanced-count"></span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-chevron"></use></svg></summary><div class="advanced-content"><div class="discovery-fields"><div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div><div><label for="discovery-direction">方角</label><select id="discovery-direction"><option value="any">指定しない</option><option value="n">北</option><option value="e">東</option><option value="s">南</option><option value="w">西</option></select></div></div><label class="discovery-elevation"><input id="discovery-high-elevation" type="checkbox" />標高が高め</label>
+            <details id="advanced-conditions" class="advanced-conditions"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-filter"></use></svg>詳細な条件<span id="advanced-count"></span><span class="advanced-toggle-label" aria-hidden="true">開く</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-chevron"></use></svg></summary><div class="advanced-content"><div class="discovery-fields"><div><label for="discovery-ambience">雰囲気</label><select id="discovery-ambience"><option value="any">こだわらない</option><option value="urban">都会寄り</option><option value="rural">田舎寄り</option><option value="nature">自然が多い</option></select></div><div><label for="discovery-direction">方角</label><select id="discovery-direction"><option value="any">指定しない</option><option value="n">北</option><option value="e">東</option><option value="s">南</option><option value="w">西</option></select></div></div><label class="discovery-elevation"><input id="discovery-high-elevation" type="checkbox" />標高が高め</label>
             <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
             <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 森" />
             </div></details>
@@ -97,10 +97,35 @@
         </div>
       </div>
     </div>
+    <div id="tour-screen" class="tour-screen" role="region" aria-labelledby="tour-heading" hidden>
+      <div class="tour-panel">
+        <div class="tour-heading"><div class="sheet-grip" aria-hidden="true"></div><div><span class="section-label">散歩コース</span><h2 id="tour-heading">周遊</h2></div><div class="heading-actions"><button class="sheet-expand icon-button" type="button" aria-label="周遊画面を展開" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><use href="#i-chevron"></use></svg></button><button id="close-tour" class="icon-button" type="button" aria-label="周遊画面を閉じる"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><use href="#i-close"></use></svg></button></div></div>
+        <div id="tour-content">
+          <form id="tour-form">
+            <label>出発地点</label><p id="tour-start-name" class="tour-start-name">現在地</p><div class="tour-start-actions"><button id="tour-use-current" type="button">現在地を使う</button><button id="tour-change-start" type="button">検索・地図で指定</button></div>
+            <div class="tour-fields"><div><label for="tour-hours">散歩時間</label><div class="tour-time"><input id="tour-hours" type="number" min="0" step="1" value="1" aria-label="周遊時間の時間" required /><span>時間</span><input id="tour-minutes" type="number" min="0" max="59" step="1" value="0" aria-label="周遊時間の分" required /><span>分</span></div></div></div>
+            <label for="tour-speed">歩く速さ <output id="tour-speed-value" for="tour-speed">4.0 km/h</output></label><input id="tour-speed" type="range" min="2.5" max="6.5" step="0.1" value="4" />
+            <label for="tour-theme">コースのテーマ</label><select id="tour-theme"><option value="any">おまかせ</option><option value="nature">自然を楽しむ</option><option value="history">歴史・神社巡り</option><option value="town">街並みを楽しむ</option><option value="food">カフェ・グルメ巡り</option><option value="unfamiliar">知らない場所を探す</option></select>
+            <label for="tour-direction">方角</label><select id="tour-direction"><option value="any">指定しない</option><option value="n">北</option><option value="e">東</option><option value="s">南</option><option value="w">西</option></select>
+            <label class="tour-check"><input id="tour-return" type="checkbox" checked />出発地点に戻る</label><p class="tour-help">徒歩の移動時間で作成します。施設で過ごす時間は含みません。</p>
+            <div class="tour-generate-actions"><button id="tour-cancel" type="button" disabled>中止</button><button id="tour-generate" type="submit" class="primary-button">コースを作る</button></div>
+          </form>
+          <p id="tour-status" class="status" role="status" aria-live="polite"></p>
+          <section id="tour-course" class="tour-course" aria-labelledby="tour-course-heading" hidden>
+            <div class="results-heading"><h3 id="tour-course-heading">周遊コース</h3><button id="tour-show-map" type="button">地図に表示</button></div><p id="tour-summary"></p><div id="tour-route-legend" class="tour-line-legend" role="note" aria-label="周遊ルートの凡例"></div><p id="tour-route-note" class="tour-help"></p>
+            <p id="tour-progress" class="tour-progress" aria-live="polite"></p><p id="tour-next" class="tour-help"></p>
+            <ol id="tour-stops" class="tour-stops" aria-label="訪問順の経由地"></ol>
+            <label id="tour-return-confirm" class="tour-check" hidden><input id="tour-returned" type="checkbox" />出発地点に戻った</label>
+            <div class="tour-course-actions"><button id="tour-regenerate" type="button">条件を変えずに再生成</button><button id="tour-save" type="button" disabled>完了コースを保存</button><button id="tour-hide-map" type="button">地図の表示を消す</button></div>
+          </section>
+          <section class="tour-history" aria-labelledby="tour-history-heading"><h3 id="tour-history-heading">保存した周遊</h3><p id="tour-history-empty" class="tour-help">保存したコースはありません。</p><ul id="tour-history" class="place-list"></ul></section>
+        </div>
+      </div>
+    </div>
     <div class="app-shell" hidden>
       <nav class="main-navigation" aria-label="メインメニュー">
         <a class="app-brand" href="#" aria-label="散歩アプリ・地図"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-leaf"></use></svg><span>散歩アプリ</span></a>
-        <div class="navigation-items"><button type="button" data-view="map" aria-controls="map"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-map"></use></svg><span>地図</span></button><button type="button" data-view="search" aria-controls="discovery-screen"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-search"></use></svg><span>探す</span></button><button type="button" data-view="saved" aria-controls="search-panel"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-bookmark"></use></svg><span>登録地点</span></button><button type="button" data-view="settings" aria-controls="setup-screen"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-settings"></use></svg><span>設定</span></button></div>
+        <div class="navigation-items"><button type="button" data-view="map" aria-controls="map"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-map"></use></svg><span>地図</span></button><button type="button" data-view="search" aria-controls="discovery-screen"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-search"></use></svg><span>探す</span></button><button type="button" data-view="tour" aria-controls="tour-screen"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-walk"></use></svg><span>周遊</span></button><button type="button" data-view="saved" aria-controls="search-panel"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-bookmark"></use></svg><span>登録地点</span></button><button type="button" data-view="settings" aria-controls="setup-screen"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-settings"></use></svg><span>設定</span></button></div>
         <a class="sources-link" href="static/data-sources.html" target="_blank" rel="noopener"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-link"></use></svg><span>出典</span></a>
       </nav>
       <button id="panel-toggle" class="panel-toggle" hidden type="button" aria-controls="search-panel" aria-expanded="false" aria-label="場所を登録：開く" title="右に引っ張ると開きます"><span class="panel-label">場所を登録</span><span class="panel-chevron" aria-hidden="true">›</span></button>
@@ -125,6 +150,15 @@
               <input id="visit-date" type="date" required />
               <label for="visit-note">メモ <span class="optional">（任意）</span></label>
               <textarea id="visit-note" rows="3" maxlength="1000"></textarea>
+              <details id="visit-walk-fields" class="walk-fields"><summary>散歩の記録 <span class="optional">（任意）</span></summary>
+                <label class="walk-confirm"><input id="visit-walk-confirmed" type="checkbox" />実際に散歩した記録として保存</label>
+                <div id="visit-walk-values" hidden>
+                  <label for="visit-walk-source">距離・時間の種類</label><select id="visit-walk-source"><option value="manual">本人入力の実績</option><option value="route">ルート検索の推定</option></select>
+                  <div class="walk-value-fields"><div><label for="visit-distance">散歩距離（km）</label><input id="visit-distance" type="number" min="0" step="any" inputmode="decimal" placeholder="未入力" /></div><div><label for="visit-duration">散歩時間（分）</label><input id="visit-duration" type="number" min="0" step="any" inputmode="decimal" placeholder="未入力" /></div></div>
+                  <button id="copy-route-walk" type="button" class="secondary">表示中ルートの推定値を入力</button>
+                  <p class="walk-help">距離・時間は空欄でも保存できます。GPSでの実測は行いません。</p>
+                </div>
+              </details>
               <div class="actions">
                 <div class="place-point-actions"><button id="set-start" type="button" class="secondary">スタート地点に指定</button><button id="set-destination" type="button" class="secondary">目的地に指定</button></div>
                 <div class="record-save-actions">
@@ -136,6 +170,7 @@
           </section>
           <p id="visit-status" class="status" role="status" aria-live="polite"></p>
           <button id="undo-delete" type="button" class="secondary" hidden>削除を取り消す</button>
+          <section class="walk-statistics" aria-labelledby="walk-statistics-heading"><div class="results-heading"><h3 id="walk-statistics-heading">散歩の記録</h3><label class="sr-only" for="walk-stats-month">集計する月</label><input id="walk-stats-month" type="month" /></div><div id="walk-stats" aria-live="polite"></div></section>
           <section aria-label="保存した場所">
             <div class="results-heading"><h3>保存した場所</h3><span id="visit-count" class="count">0件</span></div>
             <p id="visits-empty" class="sr-only">記録なし</p>
@@ -197,14 +232,53 @@
         <p id="location-status" class="status" role="status" aria-live="polite"></p>
       </div>
     </div>
+    <dialog id="onboarding-guide" class="onboarding-guide" aria-labelledby="onboarding-heading" hidden>
+      <h2 id="onboarding-heading" class="sr-only">散歩アプリの使い方</h2>
+      <header class="onboarding-header"><span>散歩アプリ</span><button id="close-onboarding" type="button" autofocus>スキップ</button></header>
+      <div class="onboarding-content" aria-live="polite" aria-atomic="true">
+        <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-location-heading">
+          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="onboarding-map-line" d="M30 20v140M100 20l-20 140M200 20l30 140M20 65h240M20 135l240-35"/><use href="#i-location" x="101" y="50" width="78" height="78"/></svg>
+          <p class="onboarding-step">01 / 06</p><h3 id="onboarding-location-heading">出発地点を決める</h3><p>位置情報を許可すると、現在地を使えます。<br>「探す」のスタート地点は検索や地図でも指定できます。</p>
+        </section>
+        <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-search-heading" hidden>
+          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="onboarding-map-line" d="M30 20v140M100 20l-20 140M200 20l30 140M20 65h240M20 135l240-35"/><rect x="45" y="62" width="190" height="54" rx="6" fill="var(--green)"/><use href="#i-search" x="61" y="77" width="24" height="24"/><path d="M102 83h106M102 95h64"/></svg>
+          <p class="onboarding-step">02 / 06</p><h3 id="onboarding-search-heading">行きたい場所を探す</h3><p>「探す」から、名前や住所で検索。<br>歩く時間や場所の種類からも探せます。</p>
+        </section>
+        <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-route-heading" hidden>
+          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="onboarding-map-line" d="M30 20v140M100 20l-20 140M200 20l30 140M20 65h240M20 135l240-35"/><path d="M60 143h48v-42h63V63h40" stroke-width="4"/><circle cx="60" cy="143" r="7" fill="currentColor"/><use href="#i-pin" x="194" y="25" width="34" height="38"/></svg>
+          <p class="onboarding-step">03 / 06</p><h3 id="onboarding-route-heading">徒歩ルートを表示</h3><p>候補の「ルート確認」から道順を表示。<br>距離と、歩く速さに応じた推定時間を確認できます。</p>
+        </section>
+        <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-tour-heading" hidden>
+          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="22" y="20" width="236" height="140" rx="6" fill="var(--panel)"/><path d="M58 123V82h74V49h89" stroke="var(--green)"/><path d="M221 49v83H58" stroke="var(--accent)" stroke-dasharray="8 7"/><circle cx="58" cy="123" r="6" fill="var(--green)"/><circle cx="132" cy="82" r="6" fill="var(--panel)" stroke="var(--green)"/><circle cx="221" cy="49" r="6" fill="var(--panel)" stroke="var(--green)"/></svg>
+          <p class="onboarding-step">04 / 06</p><h3 id="onboarding-tour-heading">周遊でいろいろな場所へ</h3><p>「周遊」で時間とテーマを選ぶと、<br>複数の場所を巡るコースを作れます。</p>
+          <div class="onboarding-route-key tour-line-legend"><span aria-label="行き：緑の実線"><span class="tour-line-swatch outbound" aria-hidden="true"></span>行き</span><span aria-label="帰り：オレンジの破線"><span class="tour-line-swatch return" aria-hidden="true"></span>帰り</span></div>
+        </section>
+        <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-saved-heading" hidden>
+          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="onboarding-map-line" d="M30 20v140M100 20l-20 140M200 20l30 140M20 65h240M20 135l240-35"/><rect x="87" y="29" width="106" height="122" rx="6" fill="var(--green)"/><use href="#i-bookmark" x="122" y="47" width="36" height="36"/><path d="M109 105h62M109 121h42"/></svg>
+          <p class="onboarding-step">05 / 06</p><h3 id="onboarding-saved-heading">歩いた場所を残す</h3><p>「登録地点」で、訪問日とメモを保存。<br>散歩の記録を付けると、月ごとの回数や距離も確認できます。</p>
+        </section>
+        <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-speed-heading" hidden>
+          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-walk" x="107" y="22" width="66" height="80"/><path d="M54 137h172"/><circle cx="147" cy="137" r="9" fill="var(--green)" stroke-width="3"/><path class="onboarding-map-line" d="M54 157v4M226 157v4"/></svg>
+          <p class="onboarding-step">06 / 06</p><h3 id="onboarding-speed-heading">自分のペースで歩く</h3><p>「設定」で歩く速さを調整。<br>所要時間に反映され、次回も保存されます。</p>
+        </section>
+      </div>
+      <footer class="onboarding-footer">
+        <nav class="onboarding-pagination" aria-label="使い方のページ"><button type="button" data-onboarding-go="0" aria-label="1ページ目：出発地点を決める" aria-current="step"></button><button type="button" data-onboarding-go="1" aria-label="2ページ目：行きたい場所を探す"></button><button type="button" data-onboarding-go="2" aria-label="3ページ目：徒歩ルートを表示"></button><button type="button" data-onboarding-go="3" aria-label="4ページ目：周遊でいろいろな場所へ"></button><button type="button" data-onboarding-go="4" aria-label="5ページ目：歩いた場所を残す"></button><button type="button" data-onboarding-go="5" aria-label="6ページ目：自分のペースで歩く"></button></nav>
+        <div class="onboarding-actions"><button id="previous-onboarding" type="button" disabled>戻る</button><button id="finish-onboarding" class="onboarding-next" type="button">次へ</button></div>
+      </footer>
+    </dialog>
+    <aside id="onboarding-hint" class="onboarding-hint" role="status" hidden><p>使い方は「設定」から<br>いつでも確認できます。</p><button id="close-onboarding-hint" class="icon-button" type="button" aria-label="使い方の案内を閉じる"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><use href="#i-close"></use></svg></button></aside>
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="static/js/walk-features.js"></script>
     <script src="static/js/app.js"></script>
     <script src="static/js/natural-discovery.js"></script>
     <script src="static/js/route-nearby.js"></script>
+    <script src="static/js/tour-core.js"></script>
+    <script src="static/js/tour.js"></script>
     <script src="static/js/ui.js"></script>
   </body>
 </html>
