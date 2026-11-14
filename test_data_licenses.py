@@ -8,15 +8,24 @@ import unittest
 from urllib.parse import urlsplit
 
 import app
+from build_discovery_indexes import checked
+from tempfile import TemporaryDirectory
 
 
 class DataLicensesTest(unittest.TestCase):
+    def test_unverified_raw_source_cannot_enter_the_discovery_builder(self):
+        with TemporaryDirectory() as folder:
+            source = Path(folder) / "unknown.json"
+            source.write_text('{"places":[]}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Unverified source"):
+                checked(source, "0" * 64)
+
     def test_all_bundled_geodata_has_reusable_source_and_license(self):
         root = Path(app.ROOT) / "static"
         registry = json.loads((root / "data-licenses.json").read_text(encoding="utf-8"))
         files = {file for item in registry["datasets"] for file in item["files"]}
-        actual = {p.name for p in root.glob("*.json")} - {"data-licenses.json"}
-        self.assertEqual(actual, files - {"stations-jp-2025-v1.json.gz"})
+        actual = {p.relative_to(root).as_posix() for p in root.rglob("*.json")} - {"data-licenses.json"}
+        self.assertEqual(actual, {file for file in files if not file.endswith(".gz")})
         for item in registry["datasets"]:
             with self.subTest(dataset=item["id"]):
                 for key in ("provider", "sourceUrl", "license", "licenseUrl", "modified", "attribution"):

@@ -151,8 +151,9 @@
         <button id="edit-walking-settings" type="button" class="secondary" aria-expanded="false" aria-controls="setup-screen">歩く速さ</button>
       </div>
       <div class="nearby-convenience-controls">
-        <div class="nearby-convenience-actions"><span class="nearby-label">近くの</span><label class="sr-only" for="nearby-kind">近くで探す場所</label><select id="nearby-kind"><option value="convenience">コンビニ</option><option value="station">駅</option></select><button id="nearby-convenience" type="button" aria-label="近くのコンビニを探す" aria-describedby="nearby-convenience-status">探す</button><button id="clear-nearby-convenience" type="button" aria-label="コンビニの表示を消す" hidden>消す</button></div>
+        <div class="nearby-convenience-actions"><label class="sr-only" for="nearby-scope">検索する範囲</label><select id="nearby-scope" class="nearby-scope" aria-label="検索する範囲"><option value="point">近くの</option><option id="nearby-route-option" value="route" disabled>ルート沿い</option></select><label class="sr-only" for="nearby-kind">近くで探す場所</label><select id="nearby-kind"><option value="convenience">コンビニ</option><option value="station">駅</option><option value="toilet">トイレ</option><option value="bus_stop">バス停</option><option value="cafe">カフェ</option><option value="park">公園・緑地</option><option value="viewpoint">景色</option><option value="shrine">神社・寺院</option></select><button id="nearby-convenience" type="button" aria-label="近くのコンビニを探す" aria-describedby="nearby-convenience-status">探す</button><button id="clear-nearby-convenience" type="button" aria-label="コンビニの表示を消す" hidden>消す</button></div>
         <p id="nearby-convenience-status" class="status" role="status" aria-live="polite"></p>
+        <details id="nearby-results-panel" class="nearby-results-panel" hidden><summary>寄り道の候補<span id="nearby-results-count"></span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><use href="#i-chevron"></use></svg></summary><ul id="nearby-results" class="place-list" aria-label="ルート沿いの寄り道候補"></ul><button id="nearby-more" type="button" hidden>もっと見る</button></details>
       </div>
       <button id="open-discovery" class="discovery-toggle" type="button" aria-expanded="false" aria-controls="discovery-screen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 3v6M16 9v6M10 15v6" stroke-width="3"/></svg>目的地を探す</button>
       <details class="legend-control"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><use href="#i-map"></use></svg>凡例</summary>      <div class="map-legend" role="note" aria-label="地点の凡例">
@@ -185,6 +186,7 @@
             <ul id="route-options" class="route-options" aria-label="見つかったルート候補" hidden></ul>
             <p id="route-choice-note" class="route-choice-note"></p>
             <p id="route-summary"></p>
+            <button id="route-detours-button" type="button" disabled>ルート周辺の寄り道を探す</button>
             <details id="route-directions">
               <summary>道順</summary>
               <ol id="route-steps"></ol>
@@ -201,6 +203,8 @@
       crossorigin=""
     ></script>
     <script src="../static/js/app.js"></script>
+    <script src="../static/js/natural-discovery.js"></script>
+    <script src="../static/js/route-nearby.js"></script>
     <script src="../static/js/ui.js"></script>
   </body>
 </html>

@@ -206,10 +206,14 @@ class WalkingHandler(BaseHTTPRequestHandler):
         if not file.is_file():
             self.send_json({"error": "Not found"}, 404)
             return
-        station_index = file == ROOT / "static" / "stations-jp-2025-v1.json"
+        versioned_index = (file in (ROOT / "static/stations-jp-2025-v1.json", ROOT / "static/toilets-tokyo-2024-v1.json",
+                                   ROOT / "static/shrines-jp-2026-11-13-v1.json")
+                         or (file.parent in (ROOT / "static/bus-stops-jp-2022-v1",
+                                             ROOT / "static/discovery-wikidata-jp-2026-11-13-v1",
+                                             ROOT / "static/discovery-geonames-jp-2026-11-13-v1") and file.suffix == ".json"))
         compressed = file.with_suffix(file.suffix + ".gz")
         use_gzip = False
-        if station_index and compressed.is_file():
+        if versioned_index and compressed.is_file():
             for token in self.headers.get("Accept-Encoding", "").lower().split(","):
                 encoding, *parameters = token.strip().split(";")
                 try:
@@ -228,8 +232,8 @@ class WalkingHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "public, max-age=31536000, immutable" if station_index else "no-cache")
-        if station_index:
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable" if versioned_index else "no-cache")
+        if versioned_index:
             self.send_header("Vary", "Accept-Encoding")
         if use_gzip:
             self.send_header("Content-Encoding", "gzip")

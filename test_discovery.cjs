@@ -39,7 +39,8 @@ function setup() {
     DISCOVERY_MAP_TIMEOUT_MS: 60000, DISCOVERY_PROVIDER_DELAY_MS: 4000,
     DISCOVERY_MAP_ENDPOINTS: [], lastSearchAt: -Infinity,
     discoveryMapCache: new Map(), discoveryParkCache: new Map(), discoveryRandomCache: new Map(), discoveryContextCache: new Map(),
-    discoveryGeometryCache: new Map(), discoveryElevationCache: new Map(),
+    discoveryGeometryCache: new Map(), discoveryElevationCache: new Map(), shrineIndexCache: new Map(),
+    DISCOVERY_LOCAL_SOURCES: [], DISCOVERY_LOCAL_CLASSES: {}, bundledDiscoveryCache: new Map(), bundledDiscoveryAttributions: new Set(),
     map: { distance }, ui: { 'discovery-status': {} }, message() {},
     validCoordinates: (lat, lng) => typeof lat === 'number' && Number.isFinite(lat) && Math.abs(lat) <= 90
       && typeof lng === 'number' && Number.isFinite(lng) && Math.abs(lng) <= 180,
@@ -55,6 +56,7 @@ function setup() {
   vm.runInContext(source.slice(source.indexOf('const SEASONAL_KIND_WORDS'), source.indexOf('const NEARBY_CONVENIENCE_RADIUS')), context);
   vm.runInContext(source.slice(source.indexOf('const DISCOVERY_DISTANCE_FACTOR'), source.indexOf('const WALKING_SETTINGS_KEY')), context);
   vm.runInContext(source.slice(source.indexOf('function discoveryText'), source.indexOf('function renderDiscoveryResults')), context);
+  vm.runInContext(readFileSync(join(__dirname, 'static/js/natural-discovery.js'), 'utf8'), context);
   context.photon = async () => ({ features });
   context.mapData = async query => query.includes('.neighborhood') ? [] : elements();
   context.originalFetchDiscoveryMapData = context.fetchDiscoveryMapData;
@@ -65,6 +67,178 @@ function setup() {
   const request = custom => ({ criteria: { ...criteria, ...custom }, controller: new AbortController() });
   return { context, calls, mapCalls, request, advance: ms => { now += ms; } };
 }
+
+function enableBundledIndexes(c) {
+  const config = vm.runInNewContext(source.slice(source.indexOf('const DISCOVERY_LOCAL_SOURCES'), source.indexOf('const SEASONAL_KIND_WORDS'))
+    + ';({sources:DISCOVERY_LOCAL_SOURCES,classes:DISCOVERY_LOCAL_CLASSES})');
+  c.DISCOVERY_LOCAL_SOURCES = config.sources;
+  c.DISCOVERY_LOCAL_CLASSES = config.classes;
+  c.DISCOVERY_INDEX_BASE = 'https://local.test/static/';
+  const downloaded = [];
+  c.fetchRouteJson = async url => {
+    assert.equal(url.origin, 'https://local.test');
+    downloaded.push(url.pathname);
+    return JSON.parse(readFileSync(join(__dirname, decodeURIComponent(url.pathname)), 'utf8'));
+  };
+  return downloaded;
+}
+
+test('each actual local category can find its own records without external APIs, then reuse its spatial index', async () => {
+  for (const provider of ['wikidata', 'geonames']) {
+    const folder = `static/discovery-${provider}-jp-2026-11-13-v1`;
+    const manifest = JSON.parse(readFileSync(join(__dirname, folder, 'index.json'), 'utf8'));
+    for (const part of manifest.parts) {
+      const { context: c, request, mapCalls } = setup();
+      const downloads = enableBundledIndexes(c);
+      c.DISCOVERY_LOCAL_SOURCES = c.DISCOVERY_LOCAL_SOURCES.filter(source => source.id === provider);
+      const data = JSON.parse(readFileSync(join(__dirname, folder, part.file), 'utf8'));
+      const row = data.places[0];
+      const origin = { lat:row[2]-.001, lng:row[3] };
+      const input = { ...criteria, kind:part.kind, minMinutes:0, minutes:10 };
+      const result = await c.findDiscoveryPlaces(input, origin, request(input));
+      assert.ok(result.some(p => p.osmType === provider && p.osmId === row[0]), `${provider}/${part.kind}`);
+      assert.ok(result.every(p => p.kindId === part.kind && p.duration <= 600 && !p.free && !p.toilets && !p.benches));
+      const first = downloads.length;
+      await c.findDiscoveryPlaces(input, origin, request(input));
+      assert.equal(downloads.length, first, 'successful files are reused');
+      assert.equal(mapCalls.length, 0);
+    }
+  }
+});
+
+test('local source metadata, foreign coordinates, categories and duplicate IDs are checked before use', () => {
+  const { context: c } = setup(); enableBundledIndexes(c);
+  const original = JSON.parse(readFileSync(join(__dirname,'static/discovery-wikidata-jp-2026-11-13-v1/park.json'),'utf8'));
+  for (const change of [d=>d.license='unknown', d=>d.kind='cafe', d=>d.source='other',
+    d=>d.places[0][2]=91, d=>d.places[0][4]='unknown', d=>d.places.push(d.places[0]), d=>d.places[0][5]=NaN]) {
+    const data = structuredClone(original); change(data);
+    assert.throws(()=>c.bundledDiscoveryIndex(data,'wikidata','park'));
+  }
+});
+
+test('a missing or cancelled local part cannot suppress the existing fallback or cache a late response', async () => {
+  const { context: c, request, mapCalls } = setup(); enableBundledIndexes(c);
+  const input = { ...criteria, kind:'culture' };
+  c.fetchRouteJson = async()=>{throw Error('missing local file')};
+  c.mapData = async()=>{throw Object.assign(Error('busy'),{routeCode:'MapBusy'})};
+  await assert.rejects(c.findDiscoveryPlaces(input,start,request(input)),{routeCode:'MapBusy'});
+  assert.equal(mapCalls.length,1); assert.equal(c.bundledDiscoveryCache.size,0);
+  let resolve;
+  c.fetchRouteJson = ()=>new Promise(r=>{resolve=r});
+  const data = JSON.parse(readFileSync(join(__dirname,'static/discovery-wikidata-jp-2026-11-13-v1/culture.json'),'utf8'));
+  const req=request(input),updates=[];
+  const pending=c.findDiscoveryPlaces(input,start,req,p=>updates.push(p));
+  req.controller.abort(); resolve(data);
+  await assert.rejects(pending,{name:'AbortError'});
+  assert.equal(c.bundledDiscoveryCache.size,0); assert.equal(updates.length,0);
+});
+
+test('local recommendations recheck time, speed, direction, changed origin and rural evidence', async () => {
+  const { context:c,request,mapCalls }=setup(); enableBundledIndexes(c);
+  const input={...criteria,kind:'park',minMinutes:330,minutes:390};
+  const found=await c.findDiscoveryPlaces(input,start,request(input));
+  assert.ok(found.length);
+  for(const direction of ['n','e','s','w']) {
+    const next={...input,direction};
+    const selected=await c.findDiscoveryPlaces(next,start,request(next));
+    assert.ok(selected.every(p=>c.discoveryDirectionMatches(start,p,direction)&&p.duration>=330*60&&p.duration<=390*60));
+  }
+  const next={...input,speed:6.5}, shifted={lat:35.67,lng:139.63};
+  const changed=await c.findDiscoveryPlaces(next,shifted,request(next));
+  assert.ok(changed.length);
+  assert.ok(changed.every(p=>Math.abs(p.directDistance-distance(shifted,p))<.001&&p.duration>=330*60&&p.duration<=390*60));
+  assert.equal(mapCalls.length,0);
+  c.mapData=async()=>{throw Object.assign(Error('busy'),{routeCode:'MapBusy'})};
+  const rural={...input,ambience:'rural'}, req=request(rural);
+  assert.equal((await c.findDiscoveryPlaces(rural,start,req)).length,0,'no unverified rural matches');
+  assert.equal(req.ambienceUnavailable,true);
+});
+
+test('unspecified search publishes several local kinds before waiting for unbundled sources, and cancellation discards late updates', async () => {
+  const { context:c,request }=setup();enableBundledIndexes(c);
+  const input={...criteria,kind:'any',minMinutes:330,minutes:390},req=request(input),updates=[];
+  let firstExternal;
+  const waiting=[];
+  c.mapData=async()=>{firstExternal ??= new Set(updates.at(-1)?.map(p=>p.kindId));return new Promise(r=>waiting.push(r))};
+  const pending=c.runDiscoveryTask(req,()=>c.findDiscoveryPlaces(input,start,req,p=>updates.push(p)));
+  for(let i=0;i<100&&!firstExternal;i++)await new Promise(setImmediate);
+  assert.ok(firstExternal?.size>=3, 'multiple categories are usable before an external response');
+  const count=updates.length;req.controller.abort();
+  await assert.rejects(pending,{name:'AbortError'});
+  waiting.forEach(r=>r([]));await new Promise(setImmediate);
+  assert.equal(updates.length,count);
+});
+
+test('six-hour shrine search uses actual bundled candidates and preserves time, direction and speed', async () => {
+  const { context: c, request, mapCalls } = setup();
+  const data = JSON.parse(readFileSync(join(__dirname, 'static/shrines-jp-2026-11-13-v1.json'), 'utf8'));
+  c.shrineIndexCache = c.shrineIndexFromData(data);
+  const input = { ...criteria, kind: 'shrine', minMinutes: 330, minutes: 390 };
+  const updates = [];
+  const found = await c.findDiscoveryPlaces(input, start, request(input), p => updates.push(p));
+  assert.ok(found.length >= 5, 'Akitsu has real shrine candidates in the 5h30–6h30 band');
+  assert.equal(mapCalls.length, 0, 'no external map API is needed');
+  assert.ok(found.every(p => p.duration >= 330 * 60 && p.duration <= 390 * 60 && p.kindId === 'shrine'));
+  assert.ok(found.every(p => p.osmType === 'wikidata' && /^Q\d+$/.test(p.osmId)));
+  assert.ok(found.every(p => !p.free && !p.toilets && !p.benches), 'unknown amenities are not invented');
+  assert.ok(updates.some(p => p.length >= 5));
+  for (const [speed, direction, shifted] of [[6.5, 'w', start], [2.5, 'e', { lat:35.668, lng:139.631 }]]) {
+    const next = { ...input, speed, direction };
+    const places = await c.findDiscoveryPlaces(next, shifted, request(next));
+    assert.ok(places.length);
+    assert.ok(places.every(p => p.duration >= 330 * 60 && p.duration <= 390 * 60
+      && c.discoveryDirectionMatches(shifted, p, direction)));
+  }
+  assert.equal(mapCalls.length, 0);
+});
+
+test('shrine snapshot is fetched once, reused, and a cancelled download is neither cached nor displayed', async () => {
+  const { context: c, request } = setup();
+  const data = JSON.parse(readFileSync(join(__dirname, 'static/shrines-jp-2026-11-13-v1.json'), 'utf8'));
+  c.shrineIndexCache = null;
+  c.SHRINE_INDEX_ENDPOINT = 'https://example.test/static/shrines-jp-2026-11-13-v1.json';
+  let fetches = 0;
+  c.fetchRouteJson = async () => { fetches++; return data; };
+  const input = { ...criteria, kind: 'shrine', minMinutes: 330, minutes: 390 };
+  await c.findDiscoveryPlaces(input, start, request(input));
+  await c.findDiscoveryPlaces(input, start, request(input));
+  assert.equal(fetches, 1);
+  c.shrineIndexCache = null;
+  let finish;
+  c.fetchRouteJson = () => new Promise(resolve => { finish = resolve; });
+  const req = request(input), updates = [];
+  const pending = c.findDiscoveryPlaces(input, start, req, p => updates.push(p));
+  req.controller.abort(); finish(data);
+  await assert.rejects(pending, { name:'AbortError' });
+  assert.equal(c.shrineIndexCache, null);
+  assert.equal(updates.length, 0);
+});
+
+test('missing, malformed or out-of-band shrine data falls back without mistaking API errors for empty results', async () => {
+  for (const local of [null, { version:1, snapshotDate:'2026-11-13', places:[['Q1','Invalid',NaN,139]] },
+    { version:1, snapshotDate:'2026-11-13', places:[['Q1','Too close',start.lat,start.lng]] }]) {
+    const { context: c, request, mapCalls } = setup();
+    c.shrineIndexCache = null;
+    c.SHRINE_INDEX_ENDPOINT = 'https://example.test/shrines.json';
+    c.fetchRouteJson = async () => { if (!local) throw Error('not found'); return local; };
+    const input = { ...criteria, kind:'shrine', minMinutes:330, minutes:390 };
+    c.mapData = async () => [];
+    assert.equal((await c.findDiscoveryPlaces(input, start, request(input))).length, 0);
+    assert.equal(mapCalls.length, 1);
+    c.discoveryMapCache.clear();
+    c.mapData = async () => { throw Object.assign(Error('busy'), { routeCode:'MapBusy' }); };
+    await assert.rejects(c.findDiscoveryPlaces(input, start, request(input)), { routeCode:'MapBusy' });
+    assert.equal(c.discoveryMapCache.size, 0);
+  }
+});
+
+test('shrine index rejects duplicate identifiers and invalid schema before caching', () => {
+  const { context: c } = setup();
+  const row = ['Q1','Shrine',35,139];
+  for (const places of [[], [row,row], [['bad','Shrine',35,139]], [['Q2','',35,139]], [['Q3','Wrong',91,139]]]) {
+    assert.throws(() => c.shrineIndexFromData({ version:1, snapshotDate:'2026-11-13', places }));
+  }
+});
 
 test('6h30 park search returns only valid 6–7h candidates without waiting for Overpass', async () => {
   const { context: c, calls, mapCalls, request } = setup();
@@ -783,7 +957,7 @@ test('UI distinguishes a complete empty result from a deadline, keeps partial ca
   const { context: c, request } = setup();
   vm.runInContext(source.slice(source.indexOf('async function fetchDiscoverySuggestions('),
     source.indexOf('ui["open-discovery"].addEventListener')), c);
-  c.message = (target, text) => { target.textContent = text; };
+  c.message = (target, text, error = false) => { target.textContent = text; target.error = error; };
   c.finishDiscoverySearch = () => {};
   c.showDiscoveryResults = () => {};
   c.setDiscoveryBusy = value => { c.busy = value; };
@@ -792,12 +966,28 @@ test('UI distinguishes a complete empty result from a deadline, keeps partial ca
   c.runDiscoveryTask = (req, work) => original(req, work, 15);
   const empty = request(); c.discoveryRequest = empty; c.findDiscoveryPlaces = async () => [];
   await c.fetchDiscoverySuggestions(empty);
-  assert.match(c.ui['discovery-status'].textContent, /検索完了.*候補なし/);
+  assert.equal(c.ui['discovery-status'].textContent, '条件に合う場所は見つかりませんでした。');
+  assert.equal(c.ui['discovery-status'].error, false);
+  for (const flag of ['natureUnavailable','kindsUnavailable']) {
+    const incomplete = request(); c.discoveryRequest = incomplete;
+    c.findDiscoveryPlaces = async (_criteria,_start,req) => { req[flag] = true; req.natureLimited = true; return []; };
+    await c.fetchDiscoverySuggestions(incomplete);
+    assert.match(c.ui['discovery-status'].textContent, /検索できませんでした/);
+    assert.ok(!c.ui['discovery-status'].textContent.includes('見つかりませんでした'));
+    assert.equal(c.ui['discovery-status'].error, true);
+  }
+  for (const flag of ['natureLimited','natureAccessUnresolved']) {
+    const unconfirmed = request(); c.discoveryRequest = unconfirmed;
+    c.findDiscoveryPlaces = async (_criteria,_start,req) => { req[flag] = true; return []; };
+    await c.fetchDiscoverySuggestions(unconfirmed);
+    assert.match(c.ui['discovery-status'].textContent, /見つかりませんでした/);
+    assert.match(c.ui['discovery-status'].textContent, flag === 'natureLimited' ? /範囲の一部/ : /徒歩アクセス/);
+  }
   let late;
   const stalled = request(); c.discoveryRequest = stalled;
   c.findDiscoveryPlaces = (criteria, start, req, onUpdate) => { late = onUpdate; return new Promise(() => {}); };
   await c.fetchDiscoverySuggestions(stalled);
-  assert.match(c.ui['discovery-status'].textContent, /検索未完了.*タイムアウト/);
+  assert.match(c.ui['discovery-status'].textContent, /検索できませんでした.*タイムアウト/);
   assert.equal(c.busy, false);
   const status = c.ui['discovery-status'].textContent;
   late([{ key: 'late' }]); assert.equal(c.ui['discovery-status'].textContent, status);
@@ -824,7 +1014,11 @@ test('sea search includes harbours, fishing ports and marinas, retains beaches a
   c.mapData = async () => nodes;
   const sea = { ...criteria, kind: 'coast' };
   const found = await c.findDiscoveryPlaces(sea, start, request(sea));
-  assert.deepEqual(Array.from(found, p => p.osmId).sort((a, b) => a - b), [100, 101, 102, 103, 104, 105, 106]);
+  assert.equal(found.length,0,'raw harbour/beach points without mapped pedestrian access are not destinations');
+  const resolved=nodes.slice(0,7).map(node=>({...node,naturalAccess:{version:1,kind:'coast',point:{lat:node.lat,lng:node.lon},
+    anchorType:'way',anchorId:500,status:'unknown',note:'徒歩アクセス未確認'}}));
+  assert.deepEqual(Array.from(c.discoveryCandidates(resolved,sea,start),p=>p.osmId),[100],'overlapping natural features sharing the same footway point collapse');
+  assert.ok(nodes.slice(0,7).every(node=>c.discoveryKindMatches(node.tags,'coast')));
   assert.match(mapCalls[0], /harbour/); assert.match(mapCalls[0], /marina/);
   assert.match(mapCalls[0], /industrial/); assert.match(mapCalls[0], /beach\|coastline/);
   assert.ok(c.discoveryPreferences({ ...sea, keyword: '港' }).kinds.has('coast'));

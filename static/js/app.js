@@ -115,8 +115,22 @@ const DATA_SOURCES_URL = new URL("../data-sources.html", document.currentScript.
 map.attributionControl.addAttribution(`<a href="${DATA_SOURCES_URL}" target="_blank" rel="noopener">出典・ライセンス</a>`);
 const SEARCH_LIMIT = 15;
 const SEASONAL_PLACES_ENDPOINT = new URL("../seasonal-places.json", document.currentScript.src).href;
+const SHRINE_INDEX_ENDPOINT = new URL("../shrines-jp-2026-11-13-v1.json", document.currentScript.src).href;
 const ROUTE_ACCESS_ENDPOINT = new URL("../route-access.json", document.currentScript.src).href;
 const STATION_INDEX_ENDPOINT = new URL("../stations-jp-2025-v1.json", document.currentScript.src).href;
+const BUS_STOP_INDEX_ENDPOINT = new URL("../bus-stops-jp-2022-v1/index.json", document.currentScript.src).href;
+const TOILET_INDEX_ENDPOINT = new URL("../toilets-tokyo-2024-v1.json", document.currentScript.src).href;
+const DISCOVERY_INDEX_BASE = new URL("../", document.currentScript.src).href;
+const DISCOVERY_LOCAL_SOURCES = [
+  { id: "wikidata", folder: "discovery-wikidata-jp-2026-11-13-v1", kinds: ["mountain", "park", "neighborhood", "culture", "cafe", "restaurant", "shopping", "sightseeing"] },
+  { id: "geonames", folder: "discovery-geonames-jp-2026-11-13-v1", kinds: ["mountain", "park", "neighborhood", "culture", "restaurant", "shopping", "shrine", "sightseeing"] },
+];
+const DISCOVERY_LOCAL_CLASSES = {
+  wikidata: { mountain: ["Q207326"], park: ["Q22698", "Q167346"], neighborhood: ["Q123705"], culture: ["Q33506", "Q1007870"],
+    cafe: ["Q30022"], restaurant: ["Q11707"], shopping: ["Q11315", "Q180846"], sightseeing: ["Q23413", "Q1440300"] },
+  geonames: { mountain: ["MT", "PK"], park: ["PRK"], neighborhood: ["PPL", "PPLL", "PPLX"], culture: ["MUS"],
+    restaurant: ["REST"], shopping: ["MALL"], shrine: ["TMPL"], sightseeing: ["OBPT", "CSTL", "MNMT"] },
+};
 const SEASONAL_KIND_WORDS = {
   cherry_blossom: ["桜", "さくら", "サクラ", "花見", "お花見", "桜の名所", "桜が見たい", "桜を見たい"],
   autumn_leaves: ["紅葉", "もみじ", "モミジ", "黄葉", "紅葉狩り", "紅葉の名所", "紅葉が見たい", "紅葉を見たい"],
@@ -164,7 +178,8 @@ const DISCOVERY_KINDS = {
   random: { label: "ランダム", tags: null },
   mountain: { label: "山", tags: { natural: ["peak"] } },
   forest: { label: "森・林", tags: { natural: ["wood"] }, alternatives: [{ landuse: ["forest"] }, { boundary: ["forest"] }], geometry: true },
-  waterside: { label: "川辺・湖畔", tags: { natural: ["water", "spring"] }, alternatives: [{ waterway: ["riverbank", "waterfall"] }], geometry: true },
+  waterside: { label: "川辺・湖畔", tags: { natural: ["water", "spring"] },
+    alternatives: [{ waterway: ["river", "stream", "riverbank", "waterfall"] }, { water: ["lake", "pond"] }], geometry: true },
   coast: { label: "海辺・浜辺・港", tags: { natural: ["beach", "coastline"] },
     alternatives: [{ harbour: ["yes", "fishing", "marina"] }, { leisure: ["marina"] },
       { landuse: ["harbour", "port"] }, { industrial: ["port"] }, { water: ["harbour"] }], geometry: true },
@@ -211,7 +226,8 @@ const ui = Object.fromEntries([
   "visit-note", "save-button", "cancel-selection", "visit-status", "undo-delete",
   "visits-list", "visits-empty", "visit-count",
   "location-button", "follow-location", "location-status", "location-legend",
-  "nearby-kind", "nearby-convenience", "clear-nearby-convenience", "nearby-convenience-status", "convenience-legend", "nearby-legend-label",
+  "nearby-scope", "nearby-route-option", "nearby-kind", "nearby-convenience", "clear-nearby-convenience", "nearby-convenience-status", "convenience-legend", "nearby-legend-label",
+  "route-detours-button", "nearby-results-panel", "nearby-results", "nearby-results-count", "nearby-more",
   "setup-screen", "walking-settings-form", "custom-walking-speed", "custom-speed-value", "settings-status", "edit-walking-settings",
   "set-destination", "destination-panel", "destination-name", "destination-address",
   "clear-destination", "destination-legend",
@@ -237,6 +253,11 @@ const savedMarkers = L.layerGroup().addTo(map);
 const nearbyConvenienceMarkers = L.layerGroup().addTo(map);
 const nearbyConvenienceCache = new Map();
 let nearbyConvenienceRequest = null;
+let busStopManifestCache = null;
+const busStopPartsCache = new Map();
+let busStopAttributionAdded = false;
+let toiletIndexCache = null;
+let toiletAttributionAdded = false;
 const searchCache = new Map();
 let selectedPlace = null;
 let selectedVisitId = null;
@@ -294,6 +315,9 @@ let routeAccessCache = null;
 let stationIndexCache = null;
 let stationAttributionAdded = false;
 let seasonalPlacesCache = null;
+let shrineIndexCache = null;
+const bundledDiscoveryCache = new Map();
+const bundledDiscoveryAttributions = new Set();
 const discoveryGeometryCache = new Map();
 const discoveryContextCache = new Map();
 const discoveryElevationCache = new Map();
@@ -1116,7 +1140,8 @@ ui["follow-location"].addEventListener("click", () => {
   requestCurrentLocation({ recenter: true });
 });
 
-function clearNearbyConvenience() {
+function clearNearbyConvenience({ preserveRoute = false } = {}) {
+  if (typeof cancelRouteNearby === "function") cancelRouteNearby(preserveRoute);
   nearbyConvenienceRequest?.controller.abort();
   nearbyConvenienceRequest = null;
   nearbyConvenienceMarkers.clearLayers();
@@ -1124,38 +1149,68 @@ function clearNearbyConvenience() {
   ui["nearby-convenience"].removeAttribute("aria-busy");
   ui["clear-nearby-convenience"].hidden = true;
   ui["convenience-legend"].hidden = true;
+  ui["nearby-results-panel"].hidden = true;
+  ui["nearby-results"].replaceChildren();
+  ui["nearby-more"].hidden = true;
   message(ui["nearby-convenience-status"], "");
 }
 
-function nearbyConveniencePlaces(elements, origin, kind = "convenience") {
+function nearbyKindLabel(kind) {
+  return { station: "駅", toilet: "トイレ", bus_stop: "バス停", cafe: "カフェ", park: "公園・緑地", viewpoint: "景色", shrine: "神社・寺院" }[kind] || "コンビニ";
+}
+
+function nearbyCategorySelectors(kind) {
+  return {
+    convenience: ['nwr[shop="convenience"]'], station: ['nwr[railway~"^(station|halt)$"]'],
+    toilet: ['nwr[amenity="toilets"]'],
+    bus_stop: ['nwr[highway="bus_stop"]', 'nwr[public_transport="platform"][bus="yes"]', 'nwr[amenity="bus_station"]'],
+    cafe: ['nwr[amenity="cafe"]'], park: ['nwr[leisure~"^(park|nature_reserve)$"]'],
+    viewpoint: ['nwr[tourism="viewpoint"]'],
+    shrine: ['nwr[amenity="place_of_worship"][religion~"^(shinto|buddhist)$"]'],
+  }[kind] || [];
+}
+
+function nearbyConveniencePlaces(elements, origin, kind = "convenience", { plan = null } = {}) {
   const places = [];
   for (const element of elements) {
     if (!element || typeof element !== "object") continue;
     const tags = element.tags || {};
-    const matches = kind === "station" ? ["station", "halt"].includes(tags.railway) : tags.shop === "convenience";
+    const matches = kind === "station" ? ["station", "halt"].includes(tags.railway)
+      : kind === "toilet" ? tags.amenity === "toilets"
+        : kind === "bus_stop" ? tags.highway === "bus_stop" || tags.amenity === "bus_station"
+          || (tags.public_transport === "platform" && tags.bus === "yes")
+          : kind === "cafe" ? tags.amenity === "cafe"
+            : kind === "park" ? ["park", "nature_reserve"].includes(tags.leisure)
+              : kind === "viewpoint" ? tags.tourism === "viewpoint"
+                : kind === "shrine" ? tags.amenity === "place_of_worship" && ["shinto", "buddhist"].includes(tags.religion)
+                  : tags.shop === "convenience";
     if (!matches || ["private", "no"].includes(tags.access)
       || tags.opening_hours === "closed" || tags.disused === "yes" || tags.abandoned === "yes") continue;
+    if (["toilet", "bus_stop"].includes(kind) && ["customers", "permit", "members", "military"].includes(tags.access)) continue;
+    if (["cafe", "park", "viewpoint", "shrine"].includes(kind) && ["permit", "members", "military"].includes(tags.access)) continue;
     const lat = element.lat ?? element.center?.lat, lng = element.lon ?? element.center?.lon;
     if (!validCoordinates(lat, lng)) continue;
     const distance = map.distance([origin.lat, origin.lng], [lat, lng]);
-    if (distance > NEARBY_CONVENIENCE_RADIUS) continue;
-    const label = kind === "station" ? "駅" : "コンビニ";
+    const position = plan ? routeNearbyPosition({ lat, lng }, plan) : null;
+    if (plan ? position.distance > plan.radius : distance > NEARBY_CONVENIENCE_RADIUS) continue;
+    const label = nearbyKindLabel(kind);
     const name = String(tags["name:ja"] || tags.name || tags["brand:ja"] || tags.brand || label).trim().slice(0, 120) || label;
     const key = name.normalize("NFKC").replace(/\s/g, "").toLowerCase();
-    if (places.some((place) => place.key === key && map.distance([lat, lng], [place.lat, place.lng]) < (kind === "station" ? 180 : 20))) continue;
+    if (places.some((place) => place.key === key && map.distance([lat, lng], [place.lat, place.lng]) < (kind === "station" ? 180 : kind === "bus_stop" ? 10 : 20))) continue;
     const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"],
       tags["addr:street"], tags["addr:housenumber"]].filter((value) => typeof value === "string" && value))].join("、");
-    places.push({ name, key, address: address || (kind === "station" ? [tags.operator, tags["railway:line"]].filter(Boolean).join(" ／ ") : ""),
-      lat, lng, distance, source: element.source });
+    places.push({ name, key, address: address || (["station", "bus_stop"].includes(kind) ? [tags.operator, tags["railway:line"]].filter(Boolean).join(" ／ ") : ""),
+      lat, lng, distance, source: element.source, openingHours: tags.opening_hours || "", note: tags.note || "",
+      ...(position ? { distanceFromRoute: position.distance, alongRoute: position.along } : {}) });
   }
-  return places.sort((a, b) => a.distance - b.distance).slice(0, 200);
+  return places.sort((a, b) => plan ? a.alongRoute - b.alongRoute || a.distanceFromRoute - b.distanceFromRoute : a.distance - b.distance).slice(0, 200);
 }
 
 function nearbyConvenienceArea(origin) {
   // One cell is at most 223m across. Its padded box covers every point's 1km circle,
-  // so GPS drift can reuse the same data without losing shops at the search edge.
+  // so GPS drift can reuse the same data without losing places at the search edge.
   const center = { lat: Math.round(origin.lat * 500) / 500, lng: Math.round(origin.lng * 500) / 500 };
-  return { center, key: `${center.lat.toFixed(3)},${center.lng.toFixed(3)}`,
+  return { center, origin: { lat: origin.lat, lng: origin.lng }, key: `${center.lat.toFixed(3)},${center.lng.toFixed(3)}`,
     bounds: discoveryBounds(center, NEARBY_CONVENIENCE_CACHE_RADIUS) };
 }
 
@@ -1215,7 +1270,136 @@ async function localNearbyStations(area, request) {
   return found;
 }
 
+function busStopManifestFromData(data) {
+  if (data?.version !== 1 || data.referenceYear !== 2022 || !Array.isArray(data.parts)
+    || !data.parts.length || data.parts.length > 47) throw new Error("Invalid bus stop index");
+  const files = new Set();
+  for (const part of data.parts) {
+    if (!/^(0[1-9]|[1-3][0-9]|4[0-7])\.json$/.test(part?.file) || files.has(part.file)
+      || !Number.isInteger(part.count) || part.count < 1 || part.count > 50000
+      || !Array.isArray(part.bounds) || part.bounds.length !== 4
+      || !validCoordinates(part.bounds[0], part.bounds[1]) || !validCoordinates(part.bounds[2], part.bounds[3])
+      || part.bounds[0] > part.bounds[2] || part.bounds[1] > part.bounds[3]) throw new Error("Invalid bus stop region");
+    files.add(part.file);
+  }
+  return data.parts;
+}
+
+function busStopPartFromData(data, part) {
+  if (data?.version !== 1 || data.referenceYear !== 2022 || `${data.prefecture}.json` !== part.file
+    || !Array.isArray(data.stops) || data.stops.length !== part.count) throw new Error("Invalid bus stop records");
+  const cells = new Map();
+  for (const row of data.stops) {
+    if (!Array.isArray(row) || row.length !== 5 || typeof row[0] !== "string" || !row[0].trim() || row[0].length > 120
+      || !validCoordinates(row[1], row[2]) || typeof row[3] !== "string" || row[3].length > 1000
+      || typeof row[4] !== "string" || !/^bs\d+$/.test(row[4])) throw new Error("Invalid bus stop record");
+    const key = `${Math.floor(row[1] * 20)},${Math.floor(row[2] * 20)}`;
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push({ type: "bus_stop", id: `${data.prefecture}-${row[4]}`, lat: row[1], lon: row[2], source: "mlit-bus",
+      tags: { highway: "bus_stop", name: row[0], operator: row[3] } });
+  }
+  return cells;
+}
+
+async function localNearbyBusStops(area, request) {
+  if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+  const [south, west, north, east] = area.bounds.split(",").map(Number);
+  if (![south, west, north, east].every(Number.isFinite) || north < south || east < west
+    || (Math.floor(north * 20) - Math.floor(south * 20) + 1) * (Math.floor(east * 20) - Math.floor(west * 20) + 1) > 16) return [];
+  if (!busStopManifestCache) {
+    const data = await fetchRouteJson(new URL(BUS_STOP_INDEX_ENDPOINT), request, 4000);
+    if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    busStopManifestCache = busStopManifestFromData(data);
+  }
+  const parts = busStopManifestCache.filter(({ bounds: b }) => b[0] <= north && b[2] >= south && b[1] <= east && b[3] >= west);
+  const groups = await Promise.all(parts.map(async (part) => {
+    let cells = busStopPartsCache.get(part.file);
+    if (!cells) {
+      const data = await fetchRouteJson(new URL(part.file, BUS_STOP_INDEX_ENDPOINT), request, 4000);
+      if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+      cells = busStopPartFromData(data, part);
+      if (busStopPartsCache.size >= 4) busStopPartsCache.delete(busStopPartsCache.keys().next().value);
+      busStopPartsCache.set(part.file, cells);
+    } else {
+      busStopPartsCache.delete(part.file);
+      busStopPartsCache.set(part.file, cells);
+    }
+    const found = [];
+    for (let lat = Math.floor(south * 20); lat <= Math.floor(north * 20); lat++) {
+      for (let lng = Math.floor(west * 20); lng <= Math.floor(east * 20); lng++) {
+        for (const stop of cells.get(`${lat},${lng}`) || []) {
+          if (stop.lat >= south && stop.lat <= north && stop.lon >= west && stop.lon <= east) found.push(stop);
+        }
+      }
+    }
+    return found;
+  }));
+  if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+  return groups.flat();
+}
+
+async function localNearbyToilets(area, request) {
+  if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+  if (!toiletIndexCache) {
+    const data = await fetchRouteJson(new URL(TOILET_INDEX_ENDPOINT), request, 4000);
+    if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (data?.version !== 1 || data.referenceYear !== 2024 || !Array.isArray(data.places)
+      || !data.places.length || data.places.length > 10000) throw new Error("Invalid toilet index");
+    const places = data.places.map((row) => {
+      if (!Array.isArray(row) || row.length !== 7 || typeof row[0] !== "string" || !/^[a-f0-9-]{36}$/.test(row[0])
+        || typeof row[1] !== "string" || !row[1].trim() || row[1].length > 200 || !validCoordinates(row[2], row[3])
+        || !row.slice(4).every((value) => typeof value === "string" && value.length <= 20000)) throw new Error("Invalid toilet record");
+      return { type: "toilet", id: row[0], lat: row[2], lon: row[3], source: "tokyo-toilet",
+        tags: { amenity: "toilets", name: `${row[1]}（トイレ）`, "addr:street": row[4], opening_hours: row[5], note: row[6] } };
+    });
+    toiletIndexCache = places;
+  }
+  const [south, west, north, east] = area.bounds.split(",").map(Number);
+  if (![south, west, north, east].every(Number.isFinite) || north < south || east < west) return [];
+  return toiletIndexCache.filter((place) => place.lat >= south && place.lat <= north && place.lon >= west && place.lon <= east);
+}
+
 async function fetchNearbyConvenienceData(area, request, kind = "convenience") {
+  let localElements = [];
+  if (kind === "toilet") {
+    try {
+      const local = await localNearbyToilets(area, request);
+      localElements = local;
+      if ((area.origin ? nearbyConveniencePlaces(local, area.origin, kind) : local).length) return local;
+    } catch (error) {
+      if (request.controller.signal.aborted) throw error;
+    }
+  }
+  if (kind === "bus_stop") {
+    try {
+      const local = await localNearbyBusStops(area, request);
+      localElements = local;
+      if ((area.origin ? nearbyConveniencePlaces(local, area.origin, kind) : local).length) return local;
+    } catch (error) {
+      if (request.controller.signal.aborted) throw error;
+      // Missing static data must fall back, never masquerade as no nearby stops.
+    }
+  }
+  if (kind === "toilet" || kind === "bus_stop") {
+    // Query waiting areas, not vehicle stopping positions in the roadway.
+    const selectors = kind === "toilet" ? ['nwr[amenity="toilets"]']
+      : ['nwr[highway="bus_stop"]', 'nwr[public_transport="platform"][bus="yes"]', 'nwr[amenity="bus_station"]'];
+    const filters = '[access!~"^(private|no|customers|permit|members)$"][opening_hours!="closed"][disused!="yes"][abandoned!="yes"]';
+    const query = '[out:json][timeout:8][maxsize:16777216];('
+      + selectors.map((selector) => `${selector}${filters}(${area.bounds});`).join("")
+      + ');out body center qt 500;';
+    const external = await fetchDiscoveryMapData(query, request, NEARBY_CONVENIENCE_TIMEOUT_MS, false,
+      { providerDelayMs: 1000, ignoreCooldown: true });
+    return [...localElements, ...external];
+  }
+  if (["cafe", "park", "viewpoint", "shrine"].includes(kind)) {
+    const filters = '[access!~"^(private|no|permit|members|military)$"][opening_hours!="closed"][disused!="yes"][abandoned!="yes"]';
+    const query = '[out:json][timeout:8][maxsize:16777216];('
+      + nearbyCategorySelectors(kind).map((selector) => `${selector}${filters}(${area.bounds});`).join("")
+      + ');out body center qt 500;';
+    return fetchDiscoveryMapData(query, request, NEARBY_CONVENIENCE_TIMEOUT_MS, false,
+      { providerDelayMs: 1000, ignoreCooldown: true });
+  }
   if (kind === "station") {
     try {
       const local = await localNearbyStations(area, request);
@@ -1250,31 +1434,67 @@ async function fetchNearbyConvenienceData(area, request, kind = "convenience") {
   }
 }
 
-function showNearbyConvenience(places, kind = "convenience") {
-  nearbyConvenienceMarkers.clearLayers();
+function nearbyMarkerKey(place) {
+  return `${place.key}:${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
+}
+
+function showNearbyConvenience(places, kind = "convenience", scope = "point") {
+  if (scope !== "route") nearbyConvenienceMarkers.clearLayers();
+  const existing = new Map(nearbyConvenienceMarkers.getLayers().map((marker) => [marker.options.nearbyKey, marker]));
+  const keys = new Set(places.map(nearbyMarkerKey));
+  for (const [key, marker] of existing) if (!keys.has(key)) nearbyConvenienceMarkers.removeLayer(marker);
   const pane = map.getPane("nearbyStores") || map.createPane("nearbyStores");
   pane.style.zIndex = "390";
   const icon = L.divIcon({
     className: "nearby-store-marker", iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -16],
-    html: kind === "station"
+    html: ["cafe", "park", "viewpoint", "shrine"].includes(kind)
+      ? '<span class="nearby-store-symbol nearby-outing-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+        + ({ cafe: '<path d="M4 8h12v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8ZM16 9h2a3 3 0 0 1 0 6h-2M8 2v3M12 2v3"/>',
+          park: '<path d="m12 2-7 10h3l-4 6h16l-4-6h3L12 2ZM12 18v4"/>',
+          viewpoint: '<path d="m2 20 7-13 4 7 3-5 6 11H2Z"/><circle cx="17" cy="4" r="2"/>',
+          shrine: '<path d="M3 5h18M4 9h16M7 5v17M17 5v17M10 9v5h4V9M2 3l10 2 10-2"/>',
+        }[kind]) + '</svg></span>'
+      : kind === "toilet"
+      ? '<span class="nearby-store-symbol nearby-toilet-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v18M3 8l1.5 10L7 11l2.5 7L11 8M15 8h6M15 8v10h6"/></svg></span>'
+      : kind === "bus_stop"
+        ? '<span class="nearby-store-symbol nearby-bus-stop-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="3" width="16" height="16" rx="2"/><path d="M4 11h16M8 3v8M16 3v8M7 19v2M17 19v2"/><circle cx="8" cy="15" r="1"/><circle cx="16" cy="15" r="1"/></svg></span>'
+      : kind === "station"
       ? '<span class="nearby-store-symbol nearby-station-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="3" width="14" height="14" rx="2"/><path d="M5 10h14M12 3v7M8 17l-3 4M16 17l3 4M8 20h8"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/></svg></span>'
       : '<span class="nearby-store-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 10v10h16V10M3 10l2-6h14l2 6Z M9 20v-6h6v6 M8 4l-1 6 M16 4l1 6"/></svg></span>',
   });
   for (const place of places) {
+    const key = nearbyMarkerKey(place);
+    if (existing.has(key)) continue;
     const popup = document.createElement("div");
     popup.append(textElement("strong", place.name));
+    if (scope === "route") popup.append(textElement("p", `ルートから約${Math.round(place.distanceFromRoute)}m`));
     if (place.address) popup.append(textElement("p", place.address));
+    if (place.openingHours) popup.append(textElement("p", place.openingHours, "popup-note"));
+    if (place.note) popup.append(textElement("p", place.note, "popup-note"));
     popup.append(destinationButton(place));
-    L.marker([place.lat, place.lng], { icon, pane: "nearbyStores", title: place.name,
+    L.marker([place.lat, place.lng], { icon, pane: "nearbyStores", title: place.name, nearbyKey: key,
       alt: place.name, bubblingMouseEvents: false }).addTo(nearbyConvenienceMarkers)
       .bindTooltip(textElement("span", place.name)).bindPopup(popup, { autoPan: false });
   }
   ui["convenience-legend"].hidden = places.length === 0;
-  ui["nearby-legend-label"].textContent = kind === "station" ? "駅" : "コンビニ";
+  ui["nearby-legend-label"].textContent = nearbyKindLabel(kind);
+  const legendDot = ui["convenience-legend"].querySelector(".legend-dot");
+  legendDot.classList.toggle("toilet", kind === "toilet");
+  legendDot.classList.toggle("bus-stop", kind === "bus_stop");
+  legendDot.classList.toggle("outing", ["cafe", "park", "viewpoint", "shrine"].includes(kind));
   if (places.some((place) => place.source === "mlit") && !stationAttributionAdded) {
     map.attributionControl.addAttribution('駅: <a href="https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2025.html" title="国土数値情報（鉄道データ・2025年度）（国土交通省）を加工して作成 / CC BY 4.0">国土数値情報（加工）</a>');
     stationAttributionAdded = true;
   }
+  if (places.some((place) => place.source === "mlit-bus") && !busStopAttributionAdded) {
+    map.attributionControl.addAttribution('バス停: <a href="https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P11-v3_0.html" title="国土数値情報（バス停留所データ・2022年度）（国土交通省）を加工して作成 / CC BY 4.0">国土数値情報（加工）</a>');
+    busStopAttributionAdded = true;
+  }
+  if (places.some((place) => place.source === "tokyo-toilet") && !toiletAttributionAdded) {
+    map.attributionControl.addAttribution('トイレ: <a href="https://ckan.hokonavi.go.jp/dataset/facility_tokyo_bf-toilet" title="東京都福祉局・国土交通省のデータを本アプリで加工 / CC BY 4.0">東京都・国土交通省（加工）</a>');
+    toiletAttributionAdded = true;
+  }
+  if (typeof renderRouteNearbyResults === "function") renderRouteNearbyResults(places, scope);
 }
 
 async function cachedNearbyElements(area, request, kind) {
@@ -1293,6 +1513,7 @@ async function cachedNearbyElements(area, request, kind) {
 }
 
 async function searchNearbyConvenience() {
+  if (ui["nearby-scope"].value === "route") return searchRouteNearby();
   clearNearbyConvenience();
   const kind = ui["nearby-kind"].value;
   const useCurrentLocation = Boolean(currentPosition);
@@ -1323,7 +1544,7 @@ async function searchNearbyConvenience() {
     showNearbyConvenience(places, kind);
     const source = useCurrentLocation ? "現在地" : "地図の中心";
     message(ui["nearby-convenience-status"], places.length
-      ? `${source}から1km以内：${places.length}件` : `${source}から1km以内に見つかりませんでした。`);
+      ? `${source}から1km以内：${places.length}件` : `${source}から1km以内の${nearbyKindLabel(kind)}は地図データにありませんでした。`);
   } catch (error) {
     // A provider timeout also uses AbortError; only the user's cancellation is silent.
     if (nearbyConvenienceRequest === request && !request.controller.signal.aborted) {
@@ -1347,9 +1568,10 @@ ui["nearby-convenience"].addEventListener("click", searchNearbyConvenience);
 ui["nearby-kind"].addEventListener("change", () => {
   const hadSearch = Boolean(nearbyConvenienceRequest || !ui["clear-nearby-convenience"].hidden);
   clearNearbyConvenience();
-  const label = ui["nearby-kind"].value === "station" ? "駅" : "コンビニ";
-  ui["nearby-convenience"].setAttribute("aria-label", `近くの${label}を探す`);
+  const label = nearbyKindLabel(ui["nearby-kind"].value);
+  ui["nearby-convenience"].setAttribute("aria-label", `${ui["nearby-scope"].value === "route" ? "ルート沿いの" : "近くの"}${label}を探す`);
   ui["clear-nearby-convenience"].setAttribute("aria-label", `${label}の表示を消す`);
+  if (typeof syncNearbyRouteState === "function") syncNearbyRouteState();
   if (hadSearch) searchNearbyConvenience();
 });
 ui["clear-nearby-convenience"].addEventListener("click", () => {
@@ -1364,6 +1586,7 @@ function setDestination(place) {
     name: typeof place.name === "string" ? place.name.trim().slice(0, 120) : "",
     address: typeof place.address === "string" ? place.address.trim() : "",
     lat: place.lat, lng: place.lng,
+    ...(discoveryNaturalPlaceReady(place) ? { accessAnchor: { ...place.accessAnchor }, accessNote: place.accessNote } : {}),
   };
   if (destinationMarker) {
     destinationMarker.setLatLng([destination.lat, destination.lng]);
@@ -1394,10 +1617,12 @@ function setDestination(place) {
   cancelSearch(destinationSearch);
   clearSearchDisplay(destinationSearch);
   destinationSearch.input.value = destination.name;
+  if (typeof syncNaturalDestinationNote === "function") syncNaturalDestinationNote(place);
   routePointsChanged();
 }
 
 function clearDestination() {
+  if (typeof syncNaturalDestinationNote === "function") syncNaturalDestinationNote(null);
   const focusWasInside = ui["destination-panel"].contains(document.activeElement);
   stopWalkingRoute();
   if (destinationMarker) destinationMarker.remove();
@@ -1456,6 +1681,7 @@ function clearRouteDisplay() {
   ui["route-steps"].replaceChildren();
   ui["route-directions"].hidden = true;
   ui["route-panel"].hidden = true;
+  if (typeof syncNearbyRouteState === "function") syncNearbyRouteState();
 }
 
 function setRouteDetailsOpen(open, focus = false) {
@@ -1725,6 +1951,7 @@ function updateRouteChoiceNote(kind) {
 function displayWalkingRoute(route, kind = "standard", { background = false } = {}) {
   activeRouteKind = kind;
   syncRouteLayers();
+  if (typeof syncNearbyRouteState === "function") syncNearbyRouteState({ background });
   const speed = currentWalkingSpeed();
   ui["route-summary"].textContent = `${route.roundTrip ? "往復・周回 " : ""}距離 ${routeDistance(route.distance)} ／ 徒歩 約${routeDuration(route.duration)}（${speed.label ? `${speed.label}・` : ""}時速${speed.kmh} km）`;
   ui["route-steps"].replaceChildren();
@@ -2085,7 +2312,7 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
   await loadRouteAccess(request);
   const endpoint = MAP_PROXY_ENDPOINT ? new URL("/api/walking-routes", MAP_PROXY_ENDPOINT)
     : new URL("/api/walking-routes", window.location.href);
-  request.timeout = setTimeout(() => request.controller.abort(), 90000);
+  request.timeout = setTimeout(() => request.controller.abort(), request.orsTimeoutMs || 90000);
   request.destinationReached = roundTripDestinationReached;
   let response;
   try {
@@ -2145,17 +2372,25 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
   }
 }
 
-async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, automatic = false) {
+async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, automatic = false, skipNaturalORS = false) {
   routeTimer = null;
   if (!routeEnabled || version !== routeVersion) return;
   const controller = new AbortController();
   const request = { controller, automatic, replaceExisting: automatic, preferredKind: selectedRouteKind };
   routeRequest = request;
   const isCurrent = () => routeEnabled && routeRequest === request && version === routeVersion;
-  if (mode !== "standard") {
+  const naturalDestination = mode === "standard" && !skipNaturalORS && destination?.accessAnchor?.type === "way"
+    && map.distance(destination, end) < 1;
+  if (mode !== "standard" || naturalDestination) {
+    if (naturalDestination) request.orsTimeoutMs = 15000;
     try {
       await fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent);
     } catch (error) {
+      if (naturalDestination && isCurrent()) {
+        clearTimeout(request.timeout);
+        await fetchWalkingRoute(start, end, version, mode, automatic, true);
+        return;
+      }
       if (isCurrent()) {
         message(ui["route-status"], routeErrorMessage(error), true);
         if (!automatic || !routeLayer) setRouteDetailsOpen(true);
@@ -2802,7 +3037,7 @@ function discoverySurroundings(elements, start) {
     const hasOutline = Array.isArray(element.geometry) || element.members?.some((member) => Array.isArray(member?.geometry));
     const kind = start && (!discoveryPoint(element) || hasOutline) && discoveryKinds("places")
       .find((key) => DISCOVERY_KINDS[key].geometry && discoveryKindMatches(element.tags || {}, key));
-    const point = kind ? discoveryDestinationPoint(element, kind, start) : discoveryPoint(element);
+    const point = element.naturalAccess?.point || (kind ? discoveryDestinationPoint(element, kind, start) : discoveryPoint(element));
     if (!point) return [];
     const key = element.id ? `${element.type}/${element.id}` : `${point.lat},${point.lng},${element.tags?.name || ""}`;
     if (seen.has(key)) return [];
@@ -2893,13 +3128,19 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
   const kinds = discoverySearchKinds(criteria, preferences);
   const surroundings = discoverySurroundings(elements, start);
   const places = [];
-  for (const element of elements) {
+  for (const element of [...elements].sort((a,b) => Number(!!b?.naturalAccess?.featureName) - Number(!!a?.naturalAccess?.featureName))) {
     const tags = element?.tags || {};
     if (!element || !discoveryPublic(tags)) continue;
     const kindId = kinds.find((key) => DISCOVERY_KINDS[key].seasonal
-      ? element.seasons?.includes(key) : discoveryKindMatches(tags, key));
+      ? element.seasons?.includes(key) : ((element.source === "bundled:wikidata" || element.source === "bundled:geonames")
+        && element.localKind === key) || discoveryKindMatches(tags, key));
     if (!kindId) continue;
-    const point = discoveryDestinationPoint(element, kindId, start);
+    const natural = ["forest", "waterside", "coast"].includes(kindId);
+    const access = element.naturalAccess;
+    const point = natural ? access?.version === 1 && access.kind === kindId && ["mapped", "unknown"].includes(access.status)
+      && access.anchorType === "way" && Number.isSafeInteger(access.anchorId) && access.anchorId > 0
+      && validCoordinates(access.point?.lat, access.point?.lng) ? access.point : null
+      : discoveryDestinationPoint(element, kindId, start);
     if (!point) continue;
     if (!discoveryDirectionMatches(start, point, criteria.direction)) continue;
     const directDistance = map.distance([start.lat, start.lng], [point.lat, point.lng]);
@@ -2919,6 +3160,8 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
     const keywordScore = preferences.words.length ? 4 * preferences.words.filter((word) => searchable.includes(word)).length / preferences.words.length : 0;
     const preferenceScore = mood.score * 3 + keywordScore + (preferences.kinds.has(kindId) ? 20 : 0);
     if (places.some((other) => (element.id && other.osmType === element.type && other.osmId === element.id)
+      || (natural && other.kindId === kindId && other.accessAnchor?.id === access.anchorId
+        && map.distance([point.lat, point.lng], [other.lat, other.lng]) < 30)
       || (discoveryText(other.name).replace(/\s/g, "") === discoveryText(name).replace(/\s/g, "")
       && map.distance([point.lat, point.lng], [other.lat, other.lng]) < 30))) continue;
     const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"], tags["addr:quarter"],
@@ -2926,6 +3169,8 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
     places.push({ ...point, name, address, free, toilets, benches, directDistance, distance, duration, preferenceScore, elevation,
       key: `${element.type}/${element.id ?? `${point.lat},${point.lng},${kindId}`}`,
       ambienceNote: mood.note, ruralMatch: !!mood.matches, ruralRejected: !!mood.rejected,
+      ...(natural ? { accessNote: String(access.note || "徒歩アクセス未確認").slice(0, 180), accessStatus: access.status,
+        accessAnchor: { type: access.anchorType, id: access.anchorId }, naturalUnnamed: !!access.unnamed } : {}),
       kindId, kindLabel: kind.label, osmType: element.type, osmId: element.id });
   }
   return places.sort((a, b) => compareDiscoveryElevation(a, b, preferences.highElevation)
@@ -3268,6 +3513,110 @@ async function fetchDiscoveryParks(criteria, start, request, onUpdate) {
   return elements;
 }
 
+function bundledDiscoveryIndex(data, source, kind) {
+  const allowed = DISCOVERY_LOCAL_CLASSES[source]?.[kind];
+  if (!allowed || data?.version !== 1 || data.snapshotDate !== "2026-11-13" || data.source !== source || data.kind !== kind
+    || data.license !== (source === "wikidata" ? "CC0 1.0" : "CC BY 4.0")
+    || !Array.isArray(data.places) || !data.places.length || data.places.length > 100000) throw new Error("Invalid bundled discovery index");
+  const cells = new Map(), seen = new Set();
+  for (const row of data.places) {
+    if (!Array.isArray(row) || row.length !== 6 || typeof row[0] !== "string"
+      || !(source === "wikidata" ? /^Q[1-9]\d*$/ : /^[1-9]\d*$/).test(row[0]) || seen.has(row[0])
+      || typeof row[1] !== "string" || !row[1].trim() || row[1].length > 120 || !validCoordinates(row[2], row[3])
+      || row[2] < 20 || row[2] > 46 || row[3] < 122 || row[3] > 154 || !allowed.includes(row[4])
+      || (row[5] !== null && !validDiscoveryElevation(row[5]))) throw new Error("Invalid bundled discovery record");
+    seen.add(row[0]);
+    const key = `${Math.floor(row[2] * 10)},${Math.floor(row[3] * 10)}`;
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push({ type: source, id: row[0], source: `bundled:${source}`, localKind: kind, lat: row[2], lon: row[3],
+      tags: { name: row[1], ...(row[5] === null ? {} : { ele: row[5] }) } });
+  }
+  return cells;
+}
+
+function discoveryIndexArea(cells, start, radius) {
+  const [south, west, north, east] = discoveryBounds(start, radius).split(",").map(Number);
+  return [...cells].flatMap(([key, elements]) => {
+    const [lat, lng] = key.split(",").map(Number);
+    const longitudeMatches = west <= east
+      ? lng >= Math.floor(west * 10) && lng <= Math.floor(east * 10)
+      : lng >= Math.floor(west * 10) || lng <= Math.floor(east * 10);
+    return lat >= Math.floor(south * 10) && lat <= Math.floor(north * 10) && longitudeMatches ? elements : [];
+  });
+}
+
+async function localDiscoveryElements(kinds, start, radius, request) {
+  let elements = [];
+  if (kinds.includes("shrine")) {
+    try { elements = await localDiscoveryShrines(start, radius, request); }
+    catch (error) { if (request.controller.signal.aborted) throw error; }
+  }
+  for (const kind of kinds) {
+    for (const source of DISCOVERY_LOCAL_SOURCES.filter((source) => source.kinds.includes(kind))) {
+      if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+      try {
+        const key = `${source.id}/${kind}`;
+        let cells = bundledDiscoveryCache.get(key);
+        if (!cells) {
+          const data = await fetchRouteJson(new URL(`${source.folder}/${kind}.json`, DISCOVERY_INDEX_BASE), request, 5000);
+          if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+          cells = bundledDiscoveryIndex(data, source.id, kind);
+          bundledDiscoveryCache.set(key, cells);
+          if (!bundledDiscoveryAttributions.has(source.id)) {
+            map.attributionControl?.addAttribution(source.id === "wikidata"
+              ? '<a href="https://www.wikidata.org/wiki/Wikidata:Licensing">地点: Wikidata (CC0)</a>'
+              : '<a href="https://www.geonames.org/" title="GeoNames / CC BY 4.0 / 分類・抽出・座標丸め">地名: GeoNames</a>');
+            bundledDiscoveryAttributions.add(source.id);
+          }
+        }
+        elements = mergeDiscoveryElements(elements, discoveryIndexArea(cells, start, radius));
+      } catch (error) {
+        // An invalid/missing local part is not evidence that a region has no destinations.
+        if (request.controller.signal.aborted) throw error;
+      }
+    }
+  }
+  return elements;
+}
+
+function shrineIndexFromData(data) {
+  if (data?.version !== 1 || data.snapshotDate !== "2026-11-13" || !Array.isArray(data.places)
+    || !data.places.length || data.places.length > 100000) throw new Error("Invalid shrine index");
+  const cells = new Map(), ids = new Set();
+  for (const row of data.places) {
+    if (!Array.isArray(row) || row.length !== 4 || typeof row[0] !== "string" || !/^Q[1-9]\d*$/.test(row[0])
+      || ids.has(row[0]) || typeof row[1] !== "string" || !row[1].trim() || row[1].length > 120
+      || !validCoordinates(row[2], row[3]) || row[2] < 20 || row[2] > 46 || row[3] < 122 || row[3] > 154) {
+      throw new Error("Invalid shrine record");
+    }
+    ids.add(row[0]);
+    const key = `${Math.floor(row[2] * 10)},${Math.floor(row[3] * 10)}`;
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push({ type: "wikidata", id: row[0], lat: row[2], lon: row[3],
+      tags: { name: row[1], amenity: "place_of_worship", religion: "shinto", wikidata: row[0] } });
+  }
+  return cells;
+}
+
+async function localDiscoveryShrines(start, radius, request) {
+  if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+  if (!shrineIndexCache) {
+    const data = await fetchRouteJson(new URL(SHRINE_INDEX_ENDPOINT), request, 5000);
+    if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    shrineIndexCache = shrineIndexFromData(data);
+    map.attributionControl?.addAttribution('<a href="https://www.wikidata.org/wiki/Wikidata:Licensing" title="Wikidata contributors / CC0 1.0">神社: Wikidata</a>');
+  }
+  const [south, west, north, east] = discoveryBounds(start, radius).split(",").map(Number);
+  // Iterate occupied cells: an unusually long walking time cannot create a huge empty grid loop.
+  return [...shrineIndexCache].flatMap(([key, elements]) => {
+    const [lat, lng] = key.split(",").map(Number);
+    const longitudeMatches = west <= east
+      ? lng >= Math.floor(west * 10) && lng <= Math.floor(east * 10)
+      : lng >= Math.floor(west * 10) || lng <= Math.floor(east * 10);
+    return lat >= Math.floor(south * 10) && lat <= Math.floor(north * 10) && longitudeMatches ? elements : [];
+  });
+}
+
 async function fetchSeasonalPlaces(request) {
   setDiscoveryProgress(request, "名所の情報を取得中…");
   if (seasonalPlacesCache) return seasonalPlacesCache;
@@ -3453,7 +3802,9 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
   const worker = async () => {
     while (nextJob < jobs.length && !controller.signal.aborted) {
       const job = jobs[nextJob++];
-      const child = { ...request, controller: new AbortController(), anyProbe: true, kindProbe: true, ambienceUnavailable: false };
+      if (!job.kinds.length) continue;
+      const child = { ...request, controller: new AbortController(), anyProbe: true, kindProbe: true, ambienceUnavailable: false,
+        skipBundled: DISCOVERY_LOCAL_SOURCES.length > 0 };
       const cancelChild = () => child.controller.abort();
       controller.signal.addEventListener("abort", cancelChild, { once: true });
       try {
@@ -3478,12 +3829,44 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
           ? Object.assign(new Error("Place category timed out"), { routeCode: "MapTimeout" }) : error;
       } finally {
         request.ambienceUnavailable ||= child.ambienceUnavailable;
+        request.natureLimited ||= child.natureLimited;
+        request.natureUnavailable ||= child.natureUnavailable;
+        request.natureAccessUnresolved ||= child.natureAccessUnresolved;
         controller.signal.removeEventListener("abort", cancelChild);
         child.controller.abort();
       }
     }
   };
   try {
+    if (DISCOVERY_LOCAL_SOURCES.length) {
+      const localKinds = kinds.filter((kind) => kind === "shrine" || DISCOVERY_LOCAL_SOURCES.some((source) => source.kinds.includes(kind)));
+      const matched = new Set();
+      let nextLocal = 0;
+      const localWorker = async () => {
+        while (nextLocal < localKinds.length && !controller.signal.aborted) {
+          const kind = localKinds[nextLocal++];
+          const child = { ...request, controller: new AbortController(), anyProbe: true, bundledOnly: true, ambienceUnavailable: false };
+          const cancel = () => child.controller.abort();
+          controller.signal.addEventListener("abort", cancel, { once: true });
+          try {
+            const remaining = request.deadlineAt ? Math.max(1, request.deadlineAt - Date.now()) : DISCOVERY_KIND_TIMEOUT_MS;
+            const places = await runDiscoveryTask(child,
+              () => findDiscoveryPlaces({ ...criteria, kind }, start, child, (places) => {
+                if (controller.signal.aborted || child.controller.signal.aborted || !places.length) return;
+                byKind.set(kind, places); onUpdate(combined());
+              }), Math.min(DISCOVERY_KIND_TIMEOUT_MS, remaining));
+            if (!controller.signal.aborted && !child.controller.signal.aborted && places.length) {
+              request.ambienceUnavailable ||= child.ambienceUnavailable;
+              matched.add(kind); byKind.set(kind, places); onUpdate(combined());
+            }
+          } catch { /* The normal lookup below handles missing parts and unconfirmed conditions. */ }
+          finally { controller.signal.removeEventListener("abort", cancel); child.controller.abort(); }
+        }
+      };
+      // Publish local categories first; an unavailable external category cannot hold them up.
+      await Promise.all([localWorker(), localWorker()]);
+      for (const job of jobs) job.kinds = job.kinds.filter((kind) => !matched.has(kind));
+    }
     // A heavy forest/shoreline lookup must not hold up parks or other point categories.
     // Park searches retain the faster Photon path; all exact filters still run locally.
     await Promise.all([worker(), worker()]);
@@ -3570,6 +3953,13 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
     }
     return places;
   };
+  if (!request.skipBundled) {
+    elements = await localDiscoveryElements(kinds, start, maxRadius, request);
+    const places = elements.length ? await assessPlaces() : [];
+    // Snapshots are not exhaustive. Only an exact local match can skip the external fallback.
+    if (places.length || request.ambienceUnavailable) return enrichPlaces(places);
+    if (request.bundledOnly) return [];
+  }
   if (kinds.length === 1 && kinds[0] === "park") {
     let places = [];
     await fetchDiscoveryParks(criteria, start, request, async (found) => {
@@ -3585,9 +3975,20 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
     elements = await fetchSeasonalPlaces(request);
     return enrichPlaces(await assessPlaces());
   }
+  const naturalKinds = kinds.filter(kind => ["forest", "waterside", "coast"].includes(kind));
+  if (naturalKinds.length) {
+    if (typeof findNaturalDiscoveryElements !== "function") throw new Error("Natural discovery module is unavailable");
+    const found = await findNaturalDiscoveryElements(naturalKinds, criteria, start, radius, request, async found => {
+      elements = mergeDiscoveryElements(elements, found);
+      await assessPlaces();
+    });
+    elements = mergeDiscoveryElements(elements, found);
+    if (naturalKinds.length === kinds.length) return enrichPlaces(await assessPlaces());
+  }
+  const mapKinds = kinds.filter(kind => !naturalKinds.includes(kind));
   while (true) {
     if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
-    const { key, bounds, query } = discoveryMapLookup(criteria, start, kinds, radius, request);
+    const { key, bounds, query } = discoveryMapLookup(criteria, start, mapKinds, radius, request);
     let cached = discoveryMapCache.get(key);
     if (!cached || Date.now() - cached.at >= 600000) {
       setDiscoveryProgress(request, "候補を取得中…");
@@ -3652,10 +4053,18 @@ function discoveryDisplayedCount(request = discoveryResultsRequest) {
   return Math.min(request?.visibleCount || DISCOVERY_PAGE_SIZE, request?.places?.length || 0);
 }
 
+function discoveryNaturalPlaceReady(place) {
+  return ["forest", "waterside", "coast"].includes(place?.kindId) && place.accessAnchor?.type === "way"
+    && Number.isSafeInteger(place.accessAnchor.id) && place.accessAnchor.id > 0
+    && ["mapped", "unknown"].includes(place.accessStatus) && typeof place.accessNote === "string"
+    && place.accessNote.length > 0 && place.accessNote.length <= 180 && validCoordinates(place.lat, place.lng);
+}
+
 function renderDiscoveryResults(results, request) {
   const list = ui["discovery-results"];
   const highElevation = discoveryPreferences(request.criteria).highElevation;
   const ordered = sortDiscoveryPlaces(results, request.criteria);
+  if (typeof renderNaturalDiscoveryMarkers === "function") renderNaturalDiscoveryMarkers(ordered);
   request.places = ordered;
   request.visibleCount ||= DISCOVERY_PAGE_SIZE;
   discoveryResultsRequest = request;
@@ -3677,8 +4086,10 @@ function renderDiscoveryResults(results, request) {
     const matched = [place.free ? "無料" : "", place.toilets ? "トイレ100m以内" : "", place.benches ? "ベンチ100m以内" : ""].filter(Boolean);
     if (matched.length) content.append(textElement("span", matched.join("・"), "place-detail"));
     if (place.ambienceNote) content.append(textElement("span", place.ambienceNote, "place-detail"));
+    const natural = ["forest", "waterside", "coast"].includes(place.kindId);
+    if (natural) content.append(textElement("span", place.accessNote || "以前の候補・徒歩アクセスを再検索してください", "place-detail natural-access-note"));
     if (place.address) content.append(textElement("span", place.address, "place-detail"));
-    content.append(textElement("span", "目的地に指定", "discovery-result-action"));
+    content.append(textElement("span", natural && !discoveryNaturalPlaceReady(place) ? "徒歩アクセスの再検索が必要" : "目的地に指定", "discovery-result-action"));
     if (!button) {
       const item = document.createElement("li");
       button = content;
@@ -3692,6 +4103,7 @@ function renderDiscoveryResults(results, request) {
       setDestination(place);
       ui["open-discovery"].focus({ preventScroll: true });
     };
+    button.disabled = natural && !discoveryNaturalPlaceReady(place);
     const item = button.closest("li") || button.parentElement;
     if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
   }
@@ -3738,19 +4150,24 @@ async function fetchDiscoverySuggestions(request) {
     if (isCurrent()) message(ui["discovery-status"], results.length
       ? request.ambienceUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・周辺情報の取得に失敗しました。`
         : request.elevationUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・標高の取得に一部失敗しました。`
-          : request.kindsUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・一部の種類を取得できませんでした。`
+          : request.kindsUnavailable || request.natureUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・一部を取得できませんでした。`
+            : request.natureLimited ? `候補 ${discoveryDisplayedCount(request)}件・範囲と件数を制限して確認`
             : `検索完了・候補 ${discoveryDisplayedCount(request)}件`
-      : highElevation && places.length ? request.elevationUnavailable ? "標高を取得できず、検索未完了" : "検索完了・標高を確認できる候補なし"
-        : rural && request.ambienceUnavailable ? "周辺情報を取得できず、検索未完了"
-        : "検索完了・条件に合う候補なし");
+      : highElevation && places.length ? request.elevationUnavailable ? "標高を取得できず、検索できませんでした。" : "標高を確認できる場所は見つかりませんでした。"
+        : rural && request.ambienceUnavailable ? "周辺情報を取得できず、検索できませんでした。"
+          : request.kindsUnavailable || request.natureUnavailable ? "一部の情報を取得できず、検索できませんでした。"
+            : request.natureLimited ? "確認した範囲では見つかりませんでした（検索範囲の一部のみ確認）。"
+              : request.natureAccessUnresolved ? "徒歩アクセスを確認できる場所は見つかりませんでした。"
+                : "条件に合う場所は見つかりませんでした。",
+      !results.length && !!(request.ambienceUnavailable || request.elevationUnavailable || request.kindsUnavailable || request.natureUnavailable));
   } catch (error) {
     if (isCurrent()) message(ui["discovery-status"], results.length
       ? request.timedOut ? `候補 ${discoveryDisplayedCount(request)}件・追加検索は時間切れ`
         : `候補 ${discoveryDisplayedCount(request)}件・追加取得に失敗しました。`
-      : error.routeCode === "MapBusy" ? "検索未完了・検索先が混雑しています。"
-        : error.routeCode === "MapTimeout" || error.name === "AbortError" ? "検索未完了・通信がタイムアウトしました。"
-        : error.routeCode === "MapQuery" ? "検索未完了・検索エラーが発生しました。"
-        : "検索未完了・通信エラーが発生しました。", !results.length);
+      : error.routeCode === "MapBusy" ? "検索できませんでした（検索先が混雑しています）。"
+        : error.routeCode === "MapTimeout" || error.name === "AbortError" ? "検索できませんでした（通信がタイムアウトしました）。"
+        : error.routeCode === "MapQuery" ? "検索できませんでした（検索エラー）。"
+        : "検索できませんでした（通信エラー）。", !results.length);
   } finally {
     if (isCurrent()) {
       finishDiscoverySearch(request);
@@ -3921,8 +4338,8 @@ async function searchPlaces(query, context = placeSearch) {
   } catch (error) {
     if (isCurrent()) {
       message(context.status, error.name === "AbortError"
-        ? "検索に時間がかかっています。少し待ってから再検索してください。"
-        : "検索できませんでした。通信を確認して再検索するか、地図をクリックして場所を選んでください。", true);
+        ? "検索できませんでした（通信がタイムアウトしました）。"
+        : "検索できませんでした（通信エラー）。", true);
     }
   } finally {
     clearTimeout(request.timeout);
