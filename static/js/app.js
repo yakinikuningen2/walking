@@ -12,6 +12,9 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
 }).addTo(map);
+// Leaflet's software notice is linked on the licence page; keep OSM first on the map.
+map.attributionControl.setPrefix(false);
+map.attributionControl.setPosition("bottomleft");
 
 let pendingX = 0;
 let pendingY = 0;
@@ -113,6 +116,7 @@ map.getContainer().addEventListener("wheel", (event) => {
 const SEARCH_ENDPOINT = "https://photon.komoot.io/api/";
 const DATA_SOURCES_URL = new URL("../data-sources.html", document.currentScript.src).href;
 map.attributionControl.addAttribution(`<a href="${DATA_SOURCES_URL}" target="_blank" rel="noopener">出典・ライセンス</a>`);
+map.attributionControl.addAttribution('<a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener">地図の修正</a>');
 const SEARCH_LIMIT = 15;
 const SEASONAL_PLACES_ENDPOINT = new URL("../seasonal-places.json", document.currentScript.src).href;
 const SHRINE_INDEX_ENDPOINT = new URL("../shrines-jp-2026-11-13-v1.json", document.currentScript.src).href;
@@ -2057,7 +2061,8 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
     const mapQuery = DISCOVERY_MAP_ENDPOINTS.includes(url.origin + url.pathname) && url.searchParams.get("data");
     const direct = () => fetch(mapQuery ? new URL(url.origin + url.pathname) : url, mapQuery
         ? { method: "POST", body: new URLSearchParams({ data: mapQuery }), signal: controller.signal }
-        : { signal: controller.signal });
+        : { signal: controller.signal, ...(url.hostname === "valhalla1.openstreetmap.de"
+          ? { headers: { "X-Client-Id": "walking-yakinikuningen2" } } : {}) });
     let response = await fetchMapProxy(url, controller.signal, timeoutMs);
     if (!response) response = await direct();
     else if (mapQuery && [429, 502, 503, 504].includes(response.status)) {
@@ -2375,7 +2380,7 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
   message(ui["route-status"], warnings.join(" "));
   if (warnings.length && !request.automatic) setRouteDetailsOpen(true);
   if (!orsAttributionAdded) {
-    map.attributionControl.addAttribution('ルート候補: <a href="https://openrouteservice.org/">openrouteservice / HeiGIT</a>');
+    map.attributionControl.addAttribution('&copy; <a href="https://openrouteservice.org/">openrouteservice by HeiGIT</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>)');
     orsAttributionAdded = true;
   }
 }
@@ -3707,6 +3712,7 @@ async function fetchSeasonalPlaces(request) {
     && place.seasons.every((key) => Object.hasOwn(SEASONAL_KIND_WORDS, key)))) {
     throw new Error("Invalid seasonal place data");
   }
+  map.attributionControl?.addAttribution('<a href="https://ja.wikipedia.org/">季節名所: Wikipedia contributors</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0・加工</a>)');
   seasonalPlacesCache = data.places.map((place) => ({ type: "seasonal", id: place.id,
     lat: place.lat, lon: place.lng, seasons: place.seasons,
     tags: { name: place.name, "addr:province": place.address } }));

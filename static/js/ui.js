@@ -5,6 +5,26 @@
   const screens = { search: ui["discovery-screen"], saved: searchPanel, tour: document.getElementById("tour-screen"), settings: ui["setup-screen"] };
   let currentView = ui["setup-screen"].hidden ? "map" : "settings";
   let layoutFrame = null;
+  const attribution = map.attributionControl.getContainer();
+  attribution.setAttribute("aria-label", "地図の出典・ライセンス");
+  function positionAttribution() {
+    const corner = attribution.parentElement;
+    corner.style.zIndex = "1170";
+    if (!mobile.matches) { corner.style.bottom = ""; attribution.style.maxHeight = ""; attribution.style.maxWidth = ""; return; }
+    const box = map.getContainer().getBoundingClientRect();
+    let bottom = Math.min(box.bottom, document.querySelector(".main-navigation").getBoundingClientRect().top);
+    for (const [name, screen] of Object.entries(screens)) {
+      if (name === "saved" ? !panelIsOpen() : screen.hidden) continue;
+      bottom = Math.min(bottom, screen.getBoundingClientRect().top);
+    }
+    // Keep the credit above sheets, rather than underneath their opaque backgrounds.
+    corner.style.bottom = `${Math.max(0, box.bottom - bottom)}px`;
+    attribution.style.maxHeight = `${Math.max(22, Math.min(33, bottom - box.top))}px`;
+    // The compact destination button uses the bottom-right corner.
+    attribution.style.maxWidth = `${Math.max(160, box.width - 142)}px`;
+  }
+  const attributionSizes = new ResizeObserver(() => requestAnimationFrame(positionAttribution));
+  for (const element of [attribution, ...Object.values(screens), document.querySelector(".main-navigation")]) attributionSizes.observe(element);
 
   // Explicit pointer feedback also covers touch browsers that defer :active.
   let pressedControl = null;
@@ -46,6 +66,7 @@
     layoutFrame = requestAnimationFrame(() => {
       layoutFrame = null;
       map.invalidateSize({ animate: false, debounceMoveend: true });
+      positionAttribution();
     });
   }
 
@@ -112,6 +133,7 @@
     button.setAttribute("aria-expanded", String(expanded));
     button.setAttribute("aria-label", expanded ? "シートを小さくする" : "シートを展開");
     if (screen === screens.search) scheduleDiscoveryViewport();
+    refreshMapSize();
   }
 
   for (const screen of Object.values(screens)) {

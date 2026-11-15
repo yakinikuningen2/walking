@@ -1,6 +1,7 @@
 """Bundled-data provenance and public notice delivery, without external APIs."""
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
+import gzip
 import json
 from pathlib import Path
 from threading import Thread
@@ -24,8 +25,8 @@ class DataLicensesTest(unittest.TestCase):
         root = Path(app.ROOT) / "static"
         registry = json.loads((root / "data-licenses.json").read_text(encoding="utf-8"))
         files = {file for item in registry["datasets"] for file in item["files"]}
-        actual = {p.relative_to(root).as_posix() for p in root.rglob("*.json")} - {"data-licenses.json"}
-        self.assertEqual(actual, {file for file in files if not file.endswith(".gz")})
+        actual = {p.relative_to(root).as_posix() for p in root.rglob("*") if p.name.endswith((".json", ".json.gz"))} - {"data-licenses.json"}
+        self.assertEqual(actual, files)
         for item in registry["datasets"]:
             with self.subTest(dataset=item["id"]):
                 for key in ("provider", "sourceUrl", "license", "licenseUrl", "modified", "attribution"):
@@ -34,6 +35,24 @@ class DataLicensesTest(unittest.TestCase):
                 self.assertEqual(urlsplit(item["licenseUrl"]).scheme, "https")
                 for file in item["files"]:
                     self.assertTrue((root / file).is_file())
+                    if file.endswith(".gz"):
+                        self.assertEqual(gzip.decompress((root / file).read_bytes()), (root / file[:-3]).read_bytes())
+
+    def test_service_results_and_software_have_separate_licenses(self):
+        root = Path(app.ROOT) / "static"
+        registry = json.loads((root / "data-licenses.json").read_text(encoding="utf-8"))
+        for item in registry["services"]:
+            for key in ("provider", "sourceUrl", "license", "licenseUrl", "modified"):
+                self.assertTrue(item[key])
+            for file in item.get("files", []):
+                self.assertTrue((root / file).is_file())
+        ors = next(item for item in registry["services"] if item["sourceUrl"] == "https://account.heigit.org/info/tos")
+        self.assertIn("CC BY-SA 4.0", ors["license"])
+        self.assertEqual(ors["licenseUrl"], "https://creativecommons.org/licenses/by-sa/4.0/")
+        leaflet = (root / "licenses/leaflet-1.9.4.txt").read_text(encoding="utf-8")
+        self.assertIn("Copyright (c) 2010-2023, Volodymyr Agafonkin", leaflet)
+        self.assertIn("Redistributions in binary form", leaflet)
+        self.assertIn("EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.", leaflet)
 
     def test_seasonal_rows_retain_verifiable_classification_and_coordinates(self):
         data = json.loads((Path(app.ROOT) / "static/seasonal-places.json").read_text(encoding="utf-8"))
@@ -87,7 +106,7 @@ class NoticeDeliveryTest(unittest.TestCase):
 
     def test_notice_links_and_machine_readable_derivative_are_public(self):
         for path in ("/README.md", "/THIRD_PARTY_NOTICES.md", "/DATA_RESEARCH.md",
-                     "/static/data-sources.html", "/static/data-licenses.json", "/static/route-access.json"):
+                     "/static/data-sources.html", "/static/data-licenses.json", "/static/route-access.json", "/static/licenses/leaflet-1.9.4.txt"):
             with self.subTest(path=path):
                 status, body = self.get(path)
                 self.assertEqual(status, 200)

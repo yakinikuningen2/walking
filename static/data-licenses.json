@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "checked": "2026-11-13",
+  "checked": "2026-11-15",
   "program": "本アプリ独自のプログラムには、現在リポジトリ全体の利用許諾を定めるLICENSEファイルがありません。下記のデータ・ライブラリのライセンスを、プログラム全体へ適用するものではありません。",
   "datasets": [
     {
@@ -252,7 +252,41 @@
       "sourceUrl": "https://www.openstreetmap.org/copyright",
       "license": "ODbL 1.0。APIソフトウェアのライセンスとは別。",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
-      "modified": "検索・距離判定・経路表示に利用。全国抽出DBや背景タイルはリポジトリに同梱せず、検索結果・キャッシュは一時的に利用。派生DBの公開時はODbLの再提供条件を別途適用。"
+      "modified": "検索・距離判定・経路表示に利用。全国抽出DBや背景タイルはリポジトリに同梱せず、検索結果・キャッシュは一時的に利用。派生DBの公開時はODbLの再提供条件を別途適用。openrouteserviceが返す結果には、下記のCC BY-SA 4.0とAPI利用規約も別に適用。"
+    },
+    {
+      "name": "OpenStreetMap標準タイル配信",
+      "provider": "OpenStreetMap Foundation / OpenStreetMap contributors",
+      "sourceUrl": "https://operations.osmfoundation.org/policies/tiles/",
+      "license": "基礎データはODbL 1.0。配信にはTile Usage Policyを別途適用。",
+      "licenseUrl": "https://www.openstreetmap.org/copyright",
+      "modified": "表示中の地図に必要なタイルのみブラウザからHTTPSで取得。RefererとHTTPキャッシュを維持し、先読み一括取得・オフライン保存・タイルの同梱は行わない。地図上にOSM帰属とライセンスへのリンクを維持。公開配信の可用性・無制限利用の保証はない。"
+    },
+    {
+      "name": "Photon公開デモAPI",
+      "provider": "komoot / Photon contributors / OpenStreetMap contributors",
+      "sourceUrl": "https://github.com/komoot/photon#demo-server",
+      "license": "基礎データはODbL 1.0。公開デモの合理的な利用量という条件は別。",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "modified": "既存の名称・施設検索に利用。ソフトウェア自体のApache-2.0を検索データのライセンスに転用しない。同梱索引・キャッシュを優先。大量利用は制限・停止の対象であり、大規模公開時の利用許諾や負荷条件は別途確認が必要。"
+    },
+    {
+      "name": "Valhalla公開デモによる徒歩ルート・距離",
+      "provider": "FOSSGIS / Valhalla contributors / OpenStreetMap contributors",
+      "sourceUrl": "https://github.com/valhalla/valhalla#demo-server",
+      "additionalSources": ["https://routing.openstreetmap.de/about.html", "https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/"],
+      "license": "基礎データはODbL 1.0。公開デモのfair-use条件は別。",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "modified": "通常の徒歩案内、周遊、表示中の候補カードの距離取得に利用。端末内でリクエスト間隔を1秒以上に制限し、中止・件数制限・短期キャッシュを使用。X-Client-Idでアプリを識別し、地図の修正リンクを表示。端末内の制限は複数利用者全体の上限を保証しない。公式READMEには一般公開時のGitHub Discussionsへの連絡依頼があり、連絡は運営者が別途行う必要がある。ソフトウェア本体のMITライセンスは、デモサーバーの無制限利用許諾ではない。"
+    },
+    {
+      "name": "openrouteserviceの徒歩ルート候補",
+      "provider": "HeiGIT / OpenStreetMap contributors",
+      "sourceUrl": "https://account.heigit.org/info/tos",
+      "additionalSources": ["https://ask.openrouteservice.org/t/free-plan-in-an-app-with-a-paid-tier-license-cc-by-sa-4-0-personal-data-and-attribution-questions/8079", "https://openrouteservice.org/"],
+      "license": "API結果はCC BY-SA 4.0。基礎地図のODbL・API利用規約・契約プランの制限も別途適用。",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "modified": "Python側の環境変数ORS_API_KEYで既存の徒歩ルート候補を取得。地図上に© openrouteservice by HeiGIT、結果のCC BY-SA 4.0と基礎地図のOSM帰属を表示。結果の加工・再配布には同ライセンス条件を適用し、プログラム全体には一括適用しない。2026-11-15に現行規約の動的本文を一時ブラウザで確認。APIの個別契約プランと利用上限は運営者による確認が必要。規約には個人データ送信禁止があり、現在地を含む座標の扱いは別途確認が必要。同意取得だけで禁止事項が免除されるとは扱わない。"
     },
     {
       "name": "Leaflet 1.9.4",
@@ -260,7 +294,17 @@
       "sourceUrl": "https://github.com/Leaflet/Leaflet/tree/v1.9.4",
       "license": "BSD-2-Clause",
       "licenseUrl": "https://github.com/Leaflet/Leaflet/blob/v1.9.4/LICENSE",
-      "modified": "CDNから原ファイルを読み込み。本アプリにはライブラリ本体を同梱していない。"
+      "files": ["licenses/leaflet-1.9.4.txt"],
+      "modified": "CDNから原ファイルを読み込み。本アプリにはライブラリ本体を同梱していない。原ファイルの著作権表示を維持し、BSD-2-Clauseの全文も上記ファイルから提供。Leafletのロゴを地図に表示することはライセンス条件ではない。"
+    },
+    {
+      "name": "requests 2.34.2 / urllib3 2.8.0 / charset-normalizer 3.5.2 / idna 3.20 / certifi 2026.10.19",
+      "provider": "各Pythonパッケージの著作権者・開発者",
+      "sourceUrl": "https://github.com/psf/requests",
+      "additionalSources": ["https://github.com/urllib3/urllib3", "https://github.com/jawah/charset_normalizer", "https://github.com/kjd/idna", "https://github.com/certifi/python-certifi"],
+      "license": "requests: Apache-2.0 / urllib3・charset-normalizer: MIT / idna: BSD-3-Clause / certifi: MPL-2.0",
+      "licenseUrl": "https://github.com/psf/requests/blob/main/LICENSE",
+      "modified": "requirements.txtからインストールし、配布物に含まれるLICENSE・NOTICEを保持。2026-11-15にインストール済み各版のLicense / License-Expressionと同梱ライセンスファイルの存在を確認。本体の改変・リポジトリへのコピーは行わない。ライセンスごとのURLと条件はTHIRD_PARTY_NOTICES.mdを参照。"
     }
   ]
 }

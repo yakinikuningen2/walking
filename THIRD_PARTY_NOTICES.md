@@ -1,6 +1,33 @@
 # 外部データ・ライブラリの利用条件
 
-確認日：2026-11-13（条件検索用のWikidata・GeoNames索引を追加）。個別の対象版・配布元の一次資料を確認した記録です。APIや素材の利用規約は、オープンデータのライセンスと別に適用されます。
+確認日：2026-11-15（同梱物と現行実装を再監査）。個別の対象版・配布元の一次資料を確認した記録です。APIや素材の利用規約は、オープンデータのライセンスと別に適用されます。
+
+## 2026-11-15の再確認結果
+
+現在の同梱地理データ8区分・140ファイル（JSONとgzip）を出典台帳と照合しました。再配布可能な条件は確認できていますが、出典・加工表示・継承などの条件付きであり、権利上の問題が一切ないという保証ではありません。プログラム全体のライセンスは未設定です。
+
+| 対象 | 一次資料で確認した条件 | 現在の扱い |
+| --- | --- | --- |
+| 鉄道2025年度版 | [個別ページ](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2025.html)に2020年以降CC BY 4.0と明記 | 提供元・対象版・加工を表示。加工済み索引とgzipを同梱 |
+| バス停2022年度版 | [個別ページ](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P11-v3_0.html)のオープンデータ指定、[現行サイト規約](https://nlftp.mlit.go.jp/ksj/other/agreement.html)、[PDL1.0 1.7(3)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)のCC BY互換規定 | 2022年度版だけを使用。旧版の条件を流用しない |
+| 東京都トイレ | [対象配布ページ](https://ckan.hokonavi.go.jp/dataset/facility_tokyo_bf-toilet)がPDL1.0を指定 | CC BY互換規定に従う。写真は含めず、原提供元と変換・追加加工を表示 |
+| Wikidata地点索引・神社索引 | [構造化データはCC0](https://www.wikidata.org/wiki/Wikidata:Licensing) | 日本語名・分類・座標等の構造化データのみ。記事本文・写真は含めない |
+| GeoNames地点索引 | [配布README](https://download.geonames.org/export/dump/readme.txt)のCC BY 4.0 | GeoNamesの帰属・加工・ライセンスを表示 |
+| 桜・紅葉の編集データ | [Wikimedia利用規約7節](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use#7._Licensing_of_Content)とCC BY-SA 4.0。Wikidata座標はCC0 | 原記事・対象版・著者履歴案内を保持し、Wikipedia由来の編集を同条件で提供。写真なし |
+| OSM通行除外範囲 | [ODbLとDbCL](https://www.openstreetmap.org/copyright) | 加工データを分離し、帰属・ライセンス付きの同じJSONを公開取得可能にする |
+
+今回補った点は、スマホのシートに隠れない地図帰属表示、季節名所のWikipedia帰属、openrouteservice結果のCC BY-SA 4.0、Valhallaへの識別ヘッダー、アプリ内のサービス別条件・Pythonライブラリ一覧、[LeafletのBSDライセンス全文](static/licenses/leaflet-1.9.4.txt)です。OSM帰属は地図上に常時表示し、他の出典が増えた場合もOSMと出典ページへのリンクを先頭に維持します。自動試験の背景タイルは固定応答へ差し替え、公開タイルを自動巡回しません。
+
+検証結果：JavaScript 158件・Python 48件、計206件の自動テストが成功しました。同梱JSON・gzipの台帳一致と展開後の同一性、サービス別ライセンス、BSD本文の公開配信、Valhallaだけに識別ヘッダーを付けることを確認しています。Chromeの1440×900、390×844、320×568、844×390で、地図・検索・登録・設定・周遊の通常／展開状態でもOSMリンクが実際に押せること、出典一覧8区分・外部サービス8区分・BSD本文が表示できることを確認しました。スマホの右下検索ボタンも押せます。ValhallaのOPTIONS確認ではHTTP 204、`Access-Control-Allow-Headers: Content-Type, X-Client-Id`を確認し、識別ヘッダー追加によるCORSの可否を切り分けました。APIキーや利用者の座標はこの外部確認に送っていません。実機Safari、公開Renderの再デプロイ後の試験は含みません。
+
+### 未解決・運営者による追加確認が必要な点
+
+1. **公開GitHubの過去版から元PNG2点を取得できます。** 現行ファイル・追跡対象にはありませんが、`d93b9ec`で`search_simple.png`、`e74510e`で`地図マーカーのアイコン素材4.png`が追加され、`55dbadc`で削除されています。2026-11-15、これらの完全なコミットSHAとパスを使った`raw.githubusercontent.com/yakinikuningen2/walking/…`へのHEAD確認で、両方ともHTTP 200・Content-Type `image/png`でした。利用規約の素材単体の再配布禁止は[ちょうどいいイラスト](https://tyoudoii-illust.com/利用規約/)・[ICOON MONO](https://icooon-mono.com/license/)で再確認しました。アプリへの組み込み許可と、素材原本を公開Git履歴から取得できる状態は分けて考える必要があります。許諾取得または公開履歴からの除去等の対応が必要です。今回、履歴書換え・force pushは行っていません。全ブランチ・タグ・fork・キャッシュまで除去済みとは確認しておらず、履歴を書き換えるだけで古いSHA URLが直ちに取得不能になる保証もありません。
+2. **Valhalla公開デモの一般公開時の連絡依頼。** [公式README](https://github.com/valhalla/valhalla#demo-server)には、一般利用者向けアプリ公開時にGitHub Discussionsで知らせ、`X-Client-Id`を付ける依頼があります。後者は実装しました。運営者に代わる投稿や連絡は行っていません。[FOSSGIS提供元の公開説明](https://routing.openstreetmap.de/about.html)では帰属、地図修正リンク、最大1リクエスト/秒、大量利用禁止を確認しました。ブラウザ内の1秒制限は、複数利用者・複数タブ・サーバー全体の利用量まで保証しません。公開規模・商用利用を無条件に許諾済みとは判断しません。
+3. **openrouteserviceの個別契約と座標の扱い。** [現行アカウント規約](https://account.heigit.org/info/tos)は通常のテキスト取得では読めなかったため、2026-11-15にログインしていない一時ブラウザで動的本文を確認しました。Attribution and License節でAPI結果のCC BY-SA 4.0と帰属、Usage Limits節で回数・速度の制限とアカウント条件を確認しています。個別アカウントの契約プラン・上限までは確認していません。また、Prohibited Conduct節には個人データの送信禁止があります。本アプリは出発地点・目的地・経由地の座標を送ります。現在地などの座標が状況によって個人データに該当する可能性について、運営者側で適用を確認する必要があります。「名前やIDを送らない」「利用者の同意がある」だけで規約上の禁止が解除されるとは判断しません。[運営者の説明](https://ask.openrouteservice.org/t/free-plan-in-an-app-with-a-paid-tier-license-cc-by-sa-4-0-personal-data-and-attribution-questions/8079)でも座標が個人データに当たるかは一律に判断していません。この確認を理由に機能を無断削除したり、外部へ照会を送ったりはしていません。
+4. **FOSSGIS・共有APIの運用条件全文。** [FOSSGISの現行規約](https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/)は今回アクセス拒否で全文未確認です。公式の概要・Valhalla READMEで確認できた条件と、未確認部分を区別します。[Photonの公式デモ利用条件](https://github.com/komoot/photon#demo-server)は合理的な利用量に限定し、大量利用の停止・変更・無保証を明記しています。Overpassも提供元ごとに運用条件があり、データのODbLだけでサーバーを無制限に利用できるわけではありません。
+
+UIの独自SVG・CSS、現在の追跡ファイル、出典とライセンス表示を確認した範囲の技術的な監査です。公開済みサイトの全版、第三者による転載、商標・特許・各素材の制作経緯まで包括的に法的保証するものではありません。
 
 ## プログラムとの区別
 
@@ -48,7 +75,7 @@
 
 提供元：国土交通省。[取得元・対象版](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P11-v3_0.html)、[全国GML原本](https://nlftp.mlit.go.jp/ksj/gml/data/P11/P11-22/P11-22_GML.zip)。原本は9,031,560バイト、SHA-256は`e74da3736c56ddeb1f47c18d6e5f373f40fa7f3c7d695593029e8ac7a7f790d1`。
 
-2022年度版は個別ページでオープンデータと指定されています。現在の[サイト利用規約](https://nlftp.mlit.go.jp/ksj/other/agreement.html)はPDL1.0を採用し、[PDL1.0の1.7(3)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)はCC BYに従う利用を許諾しています。本アプリでは[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)に従って利用・再配布します。再配布不可の2010年度版は使用しません。
+2022年度版は個別ページでオープンデータと指定されています。現在の[サイト利用規約](https://nlftp.mlit.go.jp/ksj/other/agreement.html)はPDL1.0を採用し、[PDL1.0の1.7(3)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)はCC BYに従う利用を許諾しています。本アプリでは[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)に従って利用・再配布します。非商用等の別条件が示された2010年度版は使用しません。
 
 配布物は`static/bus-stops-jp-2022-v1/index.json`と`01.json`〜`47.json`、各`.gz`です。278,515レコードから名称・座標・事業者・地物IDを抽出し、座標を小数6桁に丸め、都道府県別に分割・圧縮しています。JSON合計19,699,540バイト、gzip合計4,648,755バイト（索引を除く）。原本ZIPは同梱しません。再生成用の`build_bus_stop_index.py`は原本のハッシュを検証します。
 
@@ -93,9 +120,13 @@
 - 季節名所のGO TOKYOにだけ依存した5地点と、同サイトにだけ依存した紅葉分類を公開用データから除外します。GO TOKYO・日本さくらの会のウェブサイトに一般的なデータ再配布許諾があると推定しません。残す編集データは再利用可能なWikipediaの一覧・個別記事を出典とします。元の混在データ全体を、後からCC0と表示することはしません。
 - 画像の「クレジット不要」という申告を、素材ファイルの再配布許諾へ読み替えません。新規のSVGは本プロジェクトで作った図形で、これらの素材データの転用・トレースはしません。
 
+## openrouteserviceのAPI結果
+
+API結果には、[現行API規約](https://account.heigit.org/info/tos)で確認したCC BY-SA 4.0を適用します。地図では **© openrouteservice by HeiGIT** と **© OpenStreetMap contributors** の帰属、結果のライセンスリンクを表示します。規約の指定する **© openrouteservice by HeiGIT | Data from OpenStreetMap** に対応する表記です。基礎地図のODbLだけでAPI結果の条件を説明しきったことにはしません。結果の加工・再配布はCC BY-SAの条件に従い、独自プログラム全体や利用者の記録を同じライセンスへ一括変更しません。
+
 ## ライブラリ・外部サービス
 
-ライブラリ本体をリポジトリへコピーせず、CDNまたは`requirements.txt`から読み込み・インストールします。原配布の著作権表示・LICENSEを保持します。
+ライブラリ本体をリポジトリへコピーせず、CDNまたは`requirements.txt`から読み込み・インストールします。原配布の著作権表示・LICENSEを保持します。Leaflet 1.9.4は[原文](https://raw.githubusercontent.com/Leaflet/Leaflet/v1.9.4/LICENSE)と同じBSD本文・著作権表示を`static/licenses/leaflet-1.9.4.txt`にも置きます。地図上のLeafletロゴ表示を外しても、これらのソフトウェアの告知は削除しません。
 
 | 名前 | 条件・公式ライセンス |
 | --- | --- |

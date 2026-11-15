@@ -5,6 +5,17 @@ const vm = require('node:vm');
 
 const source = readFileSync(`${__dirname}/static/js/app.js`, 'utf8');
 const access = JSON.parse(readFileSync(`${__dirname}/static/route-access.json`, 'utf8'));
+test('public Valhalla requests identify the app without leaking that header to other providers', async () => {
+  const calls=[];
+  const c=vm.createContext({URL,AbortController,setTimeout,clearTimeout,DISCOVERY_MAP_ENDPOINTS:[],fetchMapProxy:async()=>null,
+    fetch:async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>({})};}});
+  vm.runInContext(source.slice(source.indexOf('async function fetchRouteJson('),source.indexOf('async function waitForRouteTurn(')),c);
+  for(const url of ['https://valhalla1.openstreetmap.de/route','https://photon.komoot.io/api/']){
+    await c.fetchRouteJson(new URL(url),{controller:new AbortController()});
+  }
+  assert.equal(calls[0].options.headers['X-Client-Id'],'walking-yakinikuningen2');
+  assert.equal(calls[1].options.headers,undefined);
+});
 const stations = JSON.parse(readFileSync(`${__dirname}/static/stations-jp-2025-v1.json`, 'utf8'));
 const busManifest = JSON.parse(readFileSync(`${__dirname}/static/bus-stops-jp-2022-v1/index.json`, 'utf8'));
 const toiletData = JSON.parse(readFileSync(`${__dirname}/static/toilets-tokyo-2024-v1.json`, 'utf8'));
