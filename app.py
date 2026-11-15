@@ -18,6 +18,7 @@ import time
 
 import requests
 from walking_routes import RouteError, walking_suggestions
+from place_photos import PhotoError, place_photo
 
 
 ROOT = Path(__file__).resolve().parent
@@ -177,7 +178,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
             pass  # The browser may have cancelled this search.
 
     def do_OPTIONS(self):
-        if urlsplit(self.path).path not in ("/api/overpass", "/api/walking-routes", "/api/parks"):
+        if urlsplit(self.path).path not in ("/api/overpass", "/api/walking-routes", "/api/parks", "/api/place-photo"):
             self.send_json({"error": "Not found"}, 404)
             return
         self.send_response(204)
@@ -246,7 +247,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/overpass", "/api/walking-routes", "/api/parks"):
+        if path not in ("/api/overpass", "/api/walking-routes", "/api/parks", "/api/place-photo"):
             self.send_json({"error": "Not found"}, 404)
             return
         origin = self.headers.get("Origin", "")
@@ -255,9 +256,17 @@ class WalkingHandler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > (8192 if path in ("/api/walking-routes", "/api/parks") else 262144):
+            if length <= 0 or length > (8192 if path in ("/api/walking-routes", "/api/parks", "/api/place-photo") else 262144):
                 raise ValueError("Invalid body size")
             payload = json.loads(self.rfile.read(length))
+            if path == "/api/place-photo":
+                try:
+                    self.send_json(place_photo(payload))
+                except PhotoError as error:
+                    self.send_json({"error": error.message, "code": error.code}, error.status)
+                except Exception:
+                    self.send_json({"error": "写真の情報を取得できませんでした。", "code": "PhotoUnavailable"}, 502)
+                return
             if path == "/api/parks":
                 try:
                     self.send_json(park_data(payload))

@@ -166,7 +166,7 @@ test('different return requests retain the existing restricted-area exclusions a
   const fs=require('node:fs'),vm=require('node:vm');
   const source=fs.readFileSync(`${__dirname}/static/js/app.js`,'utf8');let body;
   const ring=[[139,35],[139.001,35],[139.001,35.001],[139,35]];
-  const context=vm.createContext({URL,ROUTE_ENDPOINT:'https://routes.test/route',loadRouteAccess:async()=>({areas:[{ring}]}),waitForRouteTurn:async()=>{},fetchRouteJson:async url=>{body=JSON.parse(url.searchParams.get('json'));return {};},parseWalkingRoute:()=>({points:[]})});
+  const context=vm.createContext({URL,map:{distance:(a,b)=>core.meters({lat:a[0],lng:a[1]},{lat:b[0],lng:b[1]})},ROUTE_ENDPOINT:'https://routes.test/route',loadRouteAccess:async()=>({areas:[{ring}]}),waitForRouteTurn:async()=>{},fetchRouteJson:async url=>{body=JSON.parse(url.searchParams.get('json'));return {};},parseWalkingRoute:()=>({points:[[start.lat,start.lng],[pool[0].lat,pool[0].lng]]})});
   vm.runInContext(source.slice(source.indexOf('async function calculateWalkingRoute('),source.indexOf('async function findNatureWaypoint(')),context);
   const avoid=core.returnAvoidAreas([{points:[[start.lat,start.lng],[start.lat+.01,start.lng]]},{points:[[start.lat+.01,start.lng],[start.lat,start.lng]]}],start,{lat:start.lat+.01,lng:start.lng});
   await context.calculateWalkingRoute(start,pool[0],'standard',4,{},null,avoid);

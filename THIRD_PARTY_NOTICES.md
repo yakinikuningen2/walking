@@ -1,5 +1,19 @@
 # 外部データ・ライブラリの利用条件
 
+## 長距離ルートの加工（2026-11-15）
+
+既存のValhalla / FOSSGISとopenrouteserviceを利用します。キーなしの予備処理では、同じValhalla提供元のlocateでOSMの歩行者アクセスを確認し、最大16区間の取得済み経路だけを連続性検査後に結合します。中継道路が見つからない場合の周辺5km・10kmの追加確認は最大3地点・各半径4方向・追加2要求までとし、確認済みの道路座標だけを使用します。距離・時間はAPI値を合算し、地図のOSM・Valhalla帰属を維持します。ORSのAPIキーはPython環境変数だけから取得し、結果のCC BY-SA 4.0とHeiGIT帰属も維持します。新しい外部データ・ライブラリは同梱しません。
+
+検証集計は `benchmarks/long-route-results.json`、取得元・仕様・加工・限界は `benchmarks/LONG_ROUTES.md`。生の経路・道路情報・画像・統合した全国DBは追加配布しません。将来、相当量の経路・道路を保存・加工した派生DBを公開する場合はODbLの再提供条件を適用します。
+
+## 施設の重複排除（2026-11-15）
+
+高尾山口駅の補足確認では、OSMの駅舎・駅ノードを照合し、バス停を独立した場所として明示しました。試験用に少数の名称・OSM ID・座標等を抜粋し、出典と加工は `benchmarks/TAKAO_AND_PHOTO_RECOVERY.md` に記載しています。写真は取得先ごとのタイムアウト時に既存の別手段を試し、手動再取得時に成功した照合応答を再利用しますが、採用時の座標・施設・著作者・ライセンス確認と共有キャッシュの期限・容量は維持します。
+
+Photon／Overpass（© OpenStreetMap contributors、ODbL 1.0・個別コンテンツDbCL 1.0）と既存のWikidata（CC0 1.0）・GeoNames（CC BY 4.0）等の候補を、ブラウザで照合・統合します。元の同梱データは提供元別のまま保持し、結果にも提供元とIDを引き継ぎ、地図と出典ページの帰属を維持します。プログラム全体にデータのライセンスを一括適用しません。相当量の統合・派生DBを公開・再配布する場合はODbL等の条件を別途適用します。
+
+検証集計は `benchmarks/facility-dedup-results.json`、取得元・加工・制約は `benchmarks/FACILITY_DEDUP.md` に記載しています。実APIの生応答、写真本体、全国を結合した索引は新たに同梱しません。合成比較の名称・座標はテスト用で、アプリの目的地データには追加しません。
+
 確認日：2026-11-15（同梱物と現行実装を再監査）。個別の対象版・配布元の一次資料を確認した記録です。APIや素材の利用規約は、オープンデータのライセンスと別に適用されます。
 
 ## 2026-11-15の再確認結果
@@ -155,3 +169,17 @@ Pythonパッケージの版・ライセンスは、インストール済み配�
 - PC幅1000px・スマートフォン幅320pxのChrome試験で、検索ボタンのクリック、検索候補、SVGマーカー、常設出典リンク、出典3件の表示、出典一覧の取得失敗時の案内を確認。横方向のはみ出し・JavaScript例外なし。
 - スマートフォンのキーボードを想定して表示領域を狭めた試験で、名前・条件検索の入力欄、GPS・速度・スタート地点の変更後の候補保持を確認。権利整理後のデータに合わせ、東京周辺の試験対象は桜を使用。
 - Gitの現行インデックスに元PNG2点が含まれないことを確認。元PNG2点はその後ユーザーの指示でローカルからも削除。過去コミットからの除去・GitHubへの反映・Render再デプロイは実施していない。
+
+## 目的地の写真（2026-11-15追加）
+
+写真本体は同梱せず、Wikimediaの無料APIから個別の利用条件を確認して表示します。地点情報のライセンスを写真のライセンスとして扱いません。
+
+- 提供元：Wikimedia Commonsの個別写真の著作者。関連付けにWikidata・Wikipedia・OpenStreetMapを利用します。
+- 取得元：[Commons API](https://commons.wikimedia.org/w/api.php)、[Wikidata API](https://www.wikidata.org/w/api.php)、[日本語Wikipedia API](https://ja.wikipedia.org/w/api.php)、[英語Wikipedia API](https://en.wikipedia.org/w/api.php)。実際のファイルページを写真ごとにリンクします。
+- 対応ライセンス：CC BY／CC BY-SA 1.0・2.0・2.5・3.0・4.0、[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)、[Public Domain Mark 1.0](https://creativecommons.org/publicdomain/mark/1.0/)。写真ごとの正確なライセンスURLをアプリ内に表示し、著作者名、APIのCredit・Attribution、元ファイルページへのリンクを保持します。
+- 加工：APIの縮小画像を16:9の枠でトリミング表示し、加工内容を明記します。拡大画面では画像全体を表示します。CC BY-SAの条件は該当写真・その加工に適用され、アプリのプログラム全体のライセンスへ置き換えません。
+- 照合の補足：Wikipediaのリダイレクト・住所フィールド、Wikidataのラベル・別名・P373、施設専用Commonsカテゴリを使います。Wikipediaの本文（CC BY-SA 4.0）は照合中だけ一時取得し、本文を表示・同梱・キャッシュ配布しません。利用する所在地等の事実と写真自体の利用条件を区別します。写真はCommonsの個別条件を引き続き確認します。
+- 高速化の補足：縮小画像を320px指定で取得し、撮影者・ライセンス・出典・表示上の加工内容を維持。照合用API応答（住所確認用の本文を含む場合あり）はサーバー内メモリで最大10分／96件／6MiBまで共有しますが、本文や生API応答を利用者へ配布する機能はありません。各地点で照合を再実行し、写真なしからの明示的な再取得は共有キャッシュも使いません。タイムアウト等で確認が未完了だった場合の再取得は成功済み照合応答を期限内で再利用します。端末では成功した写真のURL・帰属等のメタデータと公開目的地の参照だけをsessionStorageに最大50件・元の24時間期限で保存し、失敗・未取得結果・訪問日・メモ・散歩履歴・画像バイナリは保存しません。
+- 開発時の比較検証：`benchmarks/photo-results.csv` は既存のWikidata（CC0）・GeoNames（CC BY 4.0）・国土数値情報（CC BY 4.0）と、日本大学文理学部のPhoton/OSM地点（ODbL）の取得結果を評価した表です。座標の統合索引、写真バイナリ、記事本文、生のAPI応答は同梱しません。各提供元の取得版・出典・加工は既存のデータ台帳と `benchmarks/PHOTO_BENCHMARK.md` を参照してください。撮影者・画像の出典はCSVの個別URLから確認できます。
+- 除外：利用条件不明、著作者情報不明、非商用限定、特別なRestrictionsのある画像、任意の外部画像URL、Commons外のWikipediaローカル画像。再利用条件を確認できなければ表示しません。フリー画像でも人物・商標など別の権利まで一律に保証されるものではありません。
+- [再利用案内](https://commons.wikimedia.org/wiki/Commons:First_steps/Reuse)、[API利用ガイドライン](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_API_Usage_Guidelines)、[User-Agent方針](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy)を確認。最大2件同時、外部呼び出し間隔250ms、タイムアウト・429/503の待機を実装。メタデータのキャッシュだけを行い、写真バイナリはリポジトリに追加しません。

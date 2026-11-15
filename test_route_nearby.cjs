@@ -20,6 +20,7 @@ function setup({ fastDeadline = false } = {}) {
     .map(id => [id, { value: '', hidden: false, setAttribute() {}, removeAttribute() {} }]));
   fields['nearby-scope'].value = 'route'; fields['nearby-kind'].value = 'cafe';
   const c = vm.createContext({ URL, Map, Set, AbortController, DOMException, setTimeout: (fn, ms) => setTimeout(fn, fastDeadline && ms === 30000 ? 15 : ms), clearTimeout,
+    PlaceIdentity: require('./static/js/place-identity.js'),
     map: { distance }, validCoordinates: (lat,lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180,
     NEARBY_CONVENIENCE_RADIUS: 1000, ui: fields, nearbyConvenienceRequest: null,
     activeRouteKind: 'standard', routeChoices: new Map([['standard', { route }]]),

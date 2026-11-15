@@ -1,6 +1,7 @@
 // Walking tour planning uses injected search/routing functions and no external libraries.
 ((root) => {
   "use strict";
+  const identity = typeof module === "object" && module.exports ? require("./place-identity.js") : root.PlaceIdentity;
   const THEMES = {
     any: { label: "おまかせ", kinds: ["park", "shrine", "neighborhood", "cafe", "sightseeing", "culture"] },
     nature: { label: "自然を楽しむ", kinds: ["park", "waterside", "forest", "mountain"] },
@@ -50,13 +51,18 @@
     return { lat: p.lat, lng: p.lng, name: p.name.trim().slice(0, 120), address: typeof p.address === "string" ? p.address.slice(0, 300) : "",
       key: typeof p.key === "string" && p.key ? p.key.slice(0, 200) : `${p.lat.toFixed(6)},${p.lng.toFixed(6)}/${p.name.slice(0,120)}`,
       kindId: typeof p.kindId === "string" ? p.kindId.slice(0, 40) : "", kindLabel: typeof p.kindLabel === "string" ? p.kindLabel.slice(0, 60) : "場所",
+      ...(p.photoHints && typeof p.photoHints === "object" ? { photoHints: Object.fromEntries(Object.entries(p.photoHints)
+        .filter(([key, value]) => ["image", "wikimedia_commons", "wikidata", "wikipedia", "official_name", "alt_name", "short_name", "name:en", "name:ja", "wikipedia:ja"].includes(key) && typeof value === "string" && value.length <= 1000)) } : {}),
+      facilityIdentity: identity.identity(p),
+      ...(typeof p.accessStatus === "string" ? { accessStatus: p.accessStatus } : {}),
+      ...(p.accessAnchor ? { accessAnchor: {...p.accessAnchor} } : {}),
       ...(typeof p.accessNote === "string" ? { accessNote: p.accessNote.slice(0,180) } : {}) };
   }
   function candidates(input, start, visits = [], unfamiliar = false,direction="any") {
     const unique = [];
-    for (const raw of input) {
+    for (const raw of identity.dedupe(input)) {
       const p = cleanPlace(raw);
-      if (!p || meters(start, p) < 80 || unique.some(other => other.key === p.key || (other.name === p.name && meters(other,p) < 80))) continue;
+      if (!p || meters(start, p) < 80 || unique.some(other => other.key === p.key)) continue;
       if (!directionMatches(start,p,direction)) continue;
       if (unfamiliar && visits.some(visit=>meters(p,visit)<100)) continue;
       unique.push(p);
@@ -240,7 +246,7 @@
     }
     async function rebuild(course, stops, signal) {
       const clean=stops.map(cleanPlace);
-      if(!clean.length || clean.some(p=>!p) || new Set(clean.map(p=>p.key)).size!==clean.length || clean.length>LIMITS.stops)throw new TourError("INPUT","経由地は重複なしで1〜5地点を指定してください。");
+      if(!clean.length || clean.some(p=>!p) || new Set(clean.map(p=>p.key)).size!==clean.length || identity.dedupe(clean).length!==clean.length || clean.length>LIMITS.stops)throw new TourError("INPUT","経由地は重複なしで1〜5地点を指定してください。");
       const config=settings({...course.settings,count:clean.length});
       if(clean.some(p=>!directionMatches(course.start,p,config.direction)))throw new TourError("INPUT","選んだ経由地は指定した方角の範囲外です。");
       return bounded(async s=>{

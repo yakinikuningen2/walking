@@ -32,6 +32,7 @@ function setup() {
   let now = 1000000;
   const calls = [], mapCalls = [];
   const context = vm.createContext({
+    PlaceIdentity: require('./static/js/place-identity.js'),
     WalkingFeatures: require('./static/js/walk-features.js'),
     URL, URLSearchParams, AbortController, DOMException, Math, Number, Object, Map, Set, setTimeout, clearTimeout,
     Date: class extends Date { static now() { return now; } },
@@ -195,7 +196,7 @@ test('100 accepted unspecified candidates after the fast window finish successfu
   const found = c.findAnyDiscoveryPlaces(input,start,req,p=>updates.push(p));
   await new Promise(setImmediate); assert.equal(pending.length,2);
   advance(1100);
-  const parks = Array.from({length:100},(_,i)=>({key:`park/${i}`,kindId:'park',duration:23000+i,distance:20000+i,preferenceScore:0}));
+  const parks = Array.from({length:100},(_,i)=>({name:`Park ${i}`,lat:35+i*.0001,lng:139,key:`park/${i}`,kindId:'park',duration:23000+i,distance:20000+i,preferenceScore:0}));
   pending[0].onUpdate(parks);
   const result = await found;
   assert.equal(result.length,100); assert.equal(req.sufficientResults,true);
@@ -216,7 +217,7 @@ test('the initial one-second window keeps extra candidates and cancels outstandi
   let completed=false;
   const found=c.findAnyDiscoveryPlaces(input,start,req).then(places=>{completed=true;return places;});
   await new Promise(setImmediate);
-  const places=(kind,count)=>Array.from({length:count},(_,i)=>({key:`${kind}/${i}`,kindId:kind,duration:23000+i,distance:20000+i,preferenceScore:0}));
+  const places=(kind,count)=>Array.from({length:count},(_,i)=>({name:`${kind} ${i}`,lat:35+i*.0001,lng:139,key:`${kind}/${i}`,kindId:kind,duration:23000+i,distance:20000+i,preferenceScore:0}));
   pending[0].onUpdate(Array.from({length:150},()=>places('park',1)[0]));
   assert.ok(!timers.some(t=>t.ms===1000),'duplicate keys must not meet the target');
   pending[0].onUpdate(places('park',130)); advance(300); pending[1].onUpdate(places('cafe',80));
@@ -233,7 +234,7 @@ test('fewer candidates finish normally without a forced one-second delay', async
   c.setTimeout=(callback,ms)=>{const timer={callback,ms};timers.push(timer);return timer;};
   c.clearTimeout=timer=>{timer.cleared=true;};c.prefetchDiscoveryKinds=async()=>{};
   c.findDiscoveryPlaces=async selected=>selected.kind==='park'
-    ? Array.from({length:60},(_,i)=>({key:`park/${i}`,kindId:'park',duration:23000+i,distance:i,preferenceScore:0})):[];
+    ? Array.from({length:60},(_,i)=>({name:`Park ${i}`,lat:35+i*.0001,lng:139,key:`park/${i}`,kindId:'park',duration:23000+i,distance:i,preferenceScore:0})):[];
   const input={...criteria,kind:'any'},req=request(input);
   const result=await c.findAnyDiscoveryPlaces(input,start,req);
   assert.equal(result.length,60);assert.notEqual(req.sufficientResults,true);
@@ -248,7 +249,7 @@ test('unknown elevations cannot trigger early success, and a user cancellation s
     c.findDiscoveryPlaces=(selected,origin,child,onUpdate)=>{pending.push({child,onUpdate});return new Promise(()=>{});};
     const input={...criteria,kind:'any',highElevation:!cancel},req=request(input);
     const found=c.findAnyDiscoveryPlaces(input,start,req,p=>updates.push(p));await new Promise(setImmediate);
-    const pool=Array.from({length:130},(_,i)=>({key:`park/${i}`,kindId:'park',duration:23000+i,distance:i,preferenceScore:0,elevation:null}));
+    const pool=Array.from({length:130},(_,i)=>({name:`Park ${i}`,lat:35+i*.0001,lng:139,key:`park/${i}`,kindId:'park',duration:23000+i,distance:i,preferenceScore:0,elevation:null}));
     pending[0].onUpdate(pool);
     if(cancel){
       assert.ok(timers.some(t=>t.ms===1000));req.controller.abort();await assert.rejects(found,{name:'AbortError'});
@@ -642,7 +643,7 @@ test('random suggestions use only time and speed, probe separate kinds and selec
   assert.deepEqual(JSON.parse(JSON.stringify(normalized)), {
     minMinutes: 360, minutes: 420, kind: 'random', ambience: 'any', direction: 'any', highElevation: false, keyword: '', speed: 4,
   });
-  const tried = [], pool = [{ key: 'near' }, { key: 'middle' }, { key: 'far' }], updates = [];
+  const tried = [], pool = ['near','middle','far'].map((name,i)=>({name,key:name,lat:35+i*.01,lng:139,kindId:'park'})), updates = [];
   c.findDiscoveryPlaces = async (selected, origin) => {
     tried.push(selected.kind);
     assert.equal(origin, start);
@@ -895,13 +896,13 @@ test('6h unspecified search streams parks before the other batches finish and ke
 test('many early parks stay selectable while other kinds are pending, rather than ending the search', async () => {
   const { context: c, request } = setup();
   let finishCafe;
-  const parks = Array.from({ length: 10 }, (_, i) => ({ key: `park/${i}`, kindId: 'park', duration: 100 + i, preferenceScore: 0 }));
+  const parks = Array.from({ length: 10 }, (_, i) => ({name:`Park ${i}`,lat:35+i*.0001,lng:139, key: `park/${i}`, kindId: 'park', duration: 100 + i, preferenceScore: 0 }));
   const updates = [], tried = [];
   c.findDiscoveryPlaces = async (selected, origin, child, onUpdate) => {
     tried.push(selected.kind);
     if (selected.kind === 'park') { onUpdate(parks); return parks; }
     if (selected.kind === 'cafe') return new Promise(resolve => { finishCafe = resolve; });
-    return [{ key: 'shrine/1', kindId: 'shrine', duration: 1000, preferenceScore: 0 }];
+    return [{name:'Shrine',lat:35.01,lng:139, key: 'shrine/1', kindId: 'shrine', duration: 1000, preferenceScore: 0 }];
   };
   let finished = false;
   const broad = { ...criteria, kind: 'any' };
@@ -909,7 +910,7 @@ test('many early parks stay selectable while other kinds are pending, rather tha
   await new Promise(setImmediate);
   assert.equal(finished, false, 'two kinds are not enough even when parks alone exceed five');
   assert.ok(updates.some(places => places.some(place => place.kindId === 'park')), 'early candidates remain usable');
-  finishCafe([{ key: 'cafe/1', kindId: 'cafe', duration: 2000, preferenceScore: 0 }]);
+  finishCafe([{name:'Cafe',lat:35.02,lng:139, key: 'cafe/1', kindId: 'cafe', duration: 2000, preferenceScore: 0 }]);
   const result = await found;
   assert.equal(new Set(result.slice(0, 5).map(place => place.kindId)).size, 3);
   assert.ok(tried.includes('shrine'));
@@ -917,9 +918,9 @@ test('many early parks stay selectable while other kinds are pending, rather tha
 
 test('unspecified ordering keeps diverse kinds before truncation, more pages and history; specific kinds keep original ranking', () => {
   const { context: c } = setup();
-  const pool = Array.from({ length: 260 }, (_, i) => ({ key: `park/${i}`, kindId: 'park', duration: i, distance: i, preferenceScore: 0 }));
+  const pool = Array.from({ length: 260 }, (_, i) => ({name:`Park ${i}`,lat:35+i*.0001,lng:139, key: `park/${i}`, kindId: 'park', duration: i, distance: i, preferenceScore: 0 }));
   pool.push(...['cafe', 'mountain', 'shrine'].flatMap(kindId => Array.from({ length: 3 }, (_, i) => ({
-    key: `${kindId}/${i}`, kindId, duration: 1000 + i, distance: 1000 + i, preferenceScore: 0,
+    name:`${kindId} ${i}`,lat:35+i*.0001,lng:139,key: `${kindId}/${i}`, kindId, duration: 1000 + i, distance: 1000 + i, preferenceScore: 0,
   }))));
   const broad = { ...criteria, kind: 'any' };
   const mixed = c.sortDiscoveryPlaces(pool, broad);
@@ -981,7 +982,7 @@ test('unspecified search continues all kinds beyond three kinds and five candida
   const tried = [], updates = [];
   c.findDiscoveryPlaces = async selected => {
     tried.push(selected.kind);
-    return [{ key: selected.kind, kindId: selected.kind, preferenceScore: 0, duration: 100 }];
+    return [{name:selected.kind,lat:35,lng:139, key: selected.kind, kindId: selected.kind, preferenceScore: 0, duration: 100 }];
   };
   const broad = { ...criteria, kind: 'any' };
   const found = await c.findAnyDiscoveryPlaces(broad, start, request(broad), places => updates.push(places.length));
@@ -1133,7 +1134,7 @@ test('sea search includes harbours, fishing ports and marinas, retains beaches a
   assert.equal(found.length,0,'raw harbour/beach points without mapped pedestrian access are not destinations');
   const resolved=nodes.slice(0,7).map(node=>({...node,naturalAccess:{version:1,kind:'coast',point:{lat:node.lat,lng:node.lon},
     anchorType:'way',anchorId:500,status:'unknown',note:'徒歩アクセス未確認'}}));
-  assert.deepEqual(Array.from(c.discoveryCandidates(resolved,sea,start),p=>p.osmId),[100],'overlapping natural features sharing the same footway point collapse');
+  assert.deepEqual(Array.from(c.discoveryCandidates(resolved,sea,start),p=>p.osmId),[100,101,102,103,104,105,106],'distinct named natural features are not identified solely by a shared footway');
   assert.ok(nodes.slice(0,7).every(node=>c.discoveryKindMatches(node.tags,'coast')));
   assert.match(mapCalls[0], /harbour/); assert.match(mapCalls[0], /marina/);
   assert.match(mapCalls[0], /industrial/); assert.match(mapCalls[0], /beach\|coastline/);

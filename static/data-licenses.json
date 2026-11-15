@@ -238,6 +238,16 @@
   ],
   "services": [
     {
+      "name": "目的地の写真（Wikimedia Commons／Wikidata／Wikipedia API）",
+      "provider": "Wikimedia Commonsの各写真の著作者／Wikidata・Wikipedia contributors",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/Commons:First_steps/Reuse",
+      "additionalSources": ["https://www.mediawiki.org/wiki/API:Imageinfo", "https://www.wikidata.org/wiki/Wikidata:Data_access", "https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_API_Usage_Guidelines", "https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy"],
+      "license": "画像ごとのCC BY／CC BY-SA（1.0・2.0・2.5・3.0・4.0）、CC0 1.0、Public Domain Mark 1.0。関連付けのWikidata構造化データはCC0。",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia",
+      "modified": "写真は同梱しない。Commonsの個別メタデータで著作者とライセンスを確認後、縮小画像を16:9の枠でトリミング表示。拡大画面は画像全体を表示。正式名・別名・英語名・リダイレクト・施設の所在地・座標・関連ID・施設専用カテゴリを信頼度で照合。座標なしでもID等の強い根拠があれば採用し、既知の位置矛盾、条件不明・追加制限、確認できた地図・ロゴ等は除外。周辺検索の写真は周辺の写真と表示。Wikipedia本文は住所フィールドの照合に一時利用し、表示・同梱しない。最大2件同時の遅延取得とメモリキャッシュを使用。取得先の失敗時は既存の回数・時間上限内で別手段を試し、未完了後の手動再取得では成功済み照合応答だけを期限内で再利用。失敗を写真なしとして保存しない。",
+      "attribution": "各写真の下と拡大画面に著作者・Credit・Attribution・ライセンスURL・元ファイルページ・表示上の加工内容を記載。写真の条件とプログラム・地点データの条件を区別。320px指定の表示画像とクリック時の拡大画像を分け、API応答は最大10分／96件／6MiBのサーバーメモリ内で再利用。成功した写真メタデータは同一タブのsessionStorageにも最大50件・元の24時間期限で保持。記事本文・写真バイナリは同梱・キャッシュ配布しない。"
+    },
+    {
       "name": "自然スポットと周辺の徒歩アクセス検索",
       "provider": "OpenStreetMap contributors（既存のOverpass API提供元経由）",
       "sourceUrl": "https://www.openstreetmap.org/copyright",
@@ -252,7 +262,7 @@
       "sourceUrl": "https://www.openstreetmap.org/copyright",
       "license": "ODbL 1.0。APIソフトウェアのライセンスとは別。",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
-      "modified": "検索・距離判定・経路表示に利用。全国抽出DBや背景タイルはリポジトリに同梱せず、検索結果・キャッシュは一時的に利用。派生DBの公開時はODbLの再提供条件を別途適用。openrouteserviceが返す結果には、下記のCC BY-SA 4.0とAPI利用規約も別に適用。"
+      "modified": "検索・距離判定・経路表示に利用。施設名・カテゴリ・住所・座標・OSM要素タイプとID・関連IDで重複を照合し、候補をブラウザ内で統合。代表情報・徒歩アクセス点・別名・元の提供元とIDを保持。長距離では同じValhallaのlocateで歩行者用道路を確認し、最大16区間の実経路を連続性・到達点・迂回の検査後だけ結合。中継道路が見つからない場合の周辺5km・10km確認は最大3地点・各4方向・追加2要求までに限定し、確認済みの道路座標だけを使用。距離・時間を合算し、欠損は直線で補わない。全国抽出DBや背景タイルはリポジトリに同梱せず、検索結果・キャッシュは一時的に利用。派生DBの公開時はODbLの再提供条件を別途適用。openrouteserviceが返す結果には、下記のCC BY-SA 4.0とAPI利用規約も別に適用。"
     },
     {
       "name": "OpenStreetMap標準タイル配信",

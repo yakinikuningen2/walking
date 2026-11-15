@@ -119,6 +119,8 @@ def crosses_paid_area(shape):
 
 
 def _request_ors(coordinates, key, green=False, long_route=False, avoid_paid=False):
+    if sum(distance(a,b) for a,b in zip(coordinates,coordinates[1:])) > 6000000:
+        raise RouteError("ORS_LIMIT_EXCEEDED", "目的地が遠すぎるため、徒歩ルートを取得できませんでした（ORSの上限6,000km）。", 422)
     if not hasattr(_LOCAL, "session"):
         _LOCAL.session = requests.Session()
     body = {"coordinates": [[p["lng"], p["lat"]] for p in coordinates],

@@ -269,7 +269,9 @@ function renderRouteNearbyResults(places, scope) {
       focusPlace(place, { keepZoom: true });
       nearbyConvenienceMarkers.getLayers().find(m => m.options.nearbyKey === nearbyMarkerKey(place))?.openPopup();
     });
-    item.append(button); return item;
+    item.append(button);
+    if (typeof PlacePhotos !== "undefined") PlacePhotos.mount(item, place);
+    return item;
   });
   ui["nearby-results"].replaceChildren(...items);
   ui["nearby-results"].scrollTop = top;

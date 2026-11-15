@@ -190,8 +190,27 @@ class WalkingRoutesTest(unittest.TestCase):
         self.assertEqual(kwargs["json"]["preference"], "recommended")
         self.assertNotIn("options", kwargs["json"])
         self.assertEqual(kwargs["timeout"], (5, 60))
-        self.assertEqual(kwargs["headers"]["Authorization"], KEY)
         self.assertNotIn(KEY, json.dumps(kwargs["json"]))
+        self.assertEqual(kwargs["headers"]["Authorization"], KEY)
+
+    def test_hosted_maximum_is_checked_before_network_without_exposing_credentials(self):
+        far = {"lat": 34.0, "lng": -118.0}
+        session = MagicMock()
+        with patch.object(routes._LOCAL, "session", session, create=True):
+            with self.assertRaises(routes.RouteError) as error:
+                routes._request_ors([START, far], KEY, long_route=True)
+        self.assertEqual(error.exception.code, "ORS_LIMIT_EXCEEDED")
+        self.assertNotIn(KEY, error.exception.message)
+        session.post.assert_not_called()
+
+    def test_manual_route_ignores_suggestion_time_limits_and_uses_actual_road_metrics(self):
+        data = ors_response([START, END]); data["features"][0]["properties"]["summary"]["distance"] = 100000
+        with patch.object(routes, "_request_ors", return_value=data), patch.object(routes, "scenic_point") as scenic:
+            result = routes.walking_suggestions({**self.payload("standard"), "minutes": 5, "minMinutes": 0}, map_response)
+        route = result["routes"][0]["route"]
+        self.assertEqual(route["distance"], 100000)
+        self.assertEqual(route["duration"], 90000)
+        scenic.assert_not_called()
 
     def test_ors_limits_have_safe_distinct_errors(self):
         for status, code, expected in [(400, 2004, "ORS_LIMIT_EXCEEDED"), (500, 2017, "ORS_COMPUTATION_LIMIT"),

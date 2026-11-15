@@ -1206,14 +1206,15 @@ function nearbyConveniencePlaces(elements, origin, kind = "convenience", { plan 
     const label = nearbyKindLabel(kind);
     const name = String(tags["name:ja"] || tags.name || tags["brand:ja"] || tags.brand || label).trim().slice(0, 120) || label;
     const key = name.normalize("NFKC").replace(/\s/g, "").toLowerCase();
-    if (places.some((place) => place.key === key && map.distance([lat, lng], [place.lat, place.lng]) < (kind === "station" ? 180 : kind === "bus_stop" ? 10 : 20))) continue;
     const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"],
       tags["addr:street"], tags["addr:housenumber"]].filter((value) => typeof value === "string" && value))].join("、");
-    places.push({ name, key, address: address || (["station", "bus_stop"].includes(kind) ? [tags.operator, tags["railway:line"]].filter(Boolean).join(" ／ ") : ""),
+    places.push(PlaceIdentity.attach({ name, key, address: address || (["station", "bus_stop"].includes(kind) ? [tags.operator, tags["railway:line"]].filter(Boolean).join(" ／ ") : ""),
       lat, lng, distance, source: element.source, openingHours: tags.opening_hours || "", note: tags.note || "",
-      ...(position ? { distanceFromRoute: position.distance, alongRoute: position.along } : {}) });
+      kindId: kind, kindLabel: label,
+      ...(typeof PlacePhotos !== "undefined" ? { photoHints: PlacePhotos.hints(element) } : {}),
+      ...(position ? { distanceFromRoute: position.distance, alongRoute: position.along } : {}) }, element));
   }
-  return places.sort((a, b) => plan ? a.alongRoute - b.alongRoute || a.distanceFromRoute - b.distanceFromRoute : a.distance - b.distance).slice(0, 200);
+  return PlaceIdentity.dedupe(places).sort((a, b) => plan ? a.alongRoute - b.alongRoute || a.distanceFromRoute - b.distanceFromRoute : a.distance - b.distance).slice(0, 200);
 }
 
 function nearbyConvenienceArea(origin) {
@@ -1233,7 +1234,7 @@ function photonConvenienceElements(data) {
       || feature?.geometry?.type !== "Point" || !Array.isArray(coordinates)
       || !validCoordinates(coordinates[1], coordinates[0])) return [];
     const extra = properties.extra && typeof properties.extra === "object" ? properties.extra : {};
-    return [{ lat: coordinates[1], lon: coordinates[0], tags: {
+    return [{ type: ({N:"node",W:"way",R:"relation"})[properties.osm_type], id: properties.osm_id, lat: coordinates[1], lon: coordinates[0], tags: {
       ...extra, shop: "convenience",
       name: typeof properties.name === "string" ? properties.name : extra.name,
       "addr:province": properties.state, "addr:city": properties.city,
@@ -1449,6 +1450,7 @@ function nearbyMarkerKey(place) {
 }
 
 function showNearbyConvenience(places, kind = "convenience", scope = "point") {
+  places = PlaceIdentity.dedupe(places);
   if (scope !== "route") nearbyConvenienceMarkers.clearLayers();
   const existing = new Map(nearbyConvenienceMarkers.getLayers().map((marker) => [marker.options.nearbyKey, marker]));
   const keys = new Set(places.map(nearbyMarkerKey));
@@ -1482,9 +1484,10 @@ function showNearbyConvenience(places, kind = "convenience", scope = "point") {
     if (place.openingHours) popup.append(textElement("p", place.openingHours, "popup-note"));
     if (place.note) popup.append(textElement("p", place.note, "popup-note"));
     popup.append(destinationButton(place));
-    L.marker([place.lat, place.lng], { icon, pane: "nearbyStores", title: place.name, nearbyKey: key,
+    const marker = L.marker([place.lat, place.lng], { icon, pane: "nearbyStores", title: place.name, nearbyKey: key,
       alt: place.name, bubblingMouseEvents: false }).addTo(nearbyConvenienceMarkers)
       .bindTooltip(textElement("span", place.name)).bindPopup(popup, { autoPan: false });
+    if (typeof PlacePhotos !== "undefined") marker.on("popupopen", () => PlacePhotos.mount(popup, place));
   }
   ui["convenience-legend"].hidden = places.length === 0;
   ui["nearby-legend-label"].textContent = nearbyKindLabel(kind);
@@ -1619,6 +1622,14 @@ function setDestination(place) {
   ui["destination-address"].textContent = destination.address;
   ui["destination-address"].hidden = !destination.address;
   ui["destination-panel"].hidden = false;
+  if (typeof PlacePhotos !== "undefined") {
+    let photos = document.getElementById("destination-photos");
+    if (!photos) {
+      photos = document.createElement("details"); photos.id = "destination-photos"; photos.className = "destination-photos";
+      photos.append(textElement("summary", "写真")); ui["destination-panel"].append(photos);
+    }
+    PlacePhotos.mount(photos, place);
+  }
   ui["destination-legend"].hidden = false;
   map.closePopup();
   focusPlace(destination, { keepZoom: true });
@@ -1673,6 +1684,7 @@ function cancelRouteRequest() {
   routeRequest = null;
   if (previous) {
     clearTimeout(previous.timeout);
+    clearTimeout(previous.deadlineTimer);
     previous.controller.abort();
   }
 }
@@ -1864,24 +1876,25 @@ function walkingInstruction(step) {
 }
 
 function parseWalkingRoute(data) {
+  const invalid = text => Object.assign(new Error(text), {routeCode:"RouteResponse",userMessage:"取得した徒歩ルートの情報を確認できませんでした。再検索してください。"});
   const route = data.routes && data.routes[0];
   if (!route || !Number.isFinite(route.distance) || route.distance < 0
     || !Number.isFinite(route.duration) || route.duration < 0
     || !route.geometry || route.geometry.type !== "LineString"
     || !Array.isArray(route.geometry.coordinates) || route.geometry.coordinates.length < 2
-    || !Array.isArray(route.legs) || !route.legs.length) throw new Error("Invalid route response");
+    || !Array.isArray(route.legs) || !route.legs.length) throw invalid("Invalid route response");
   const points = route.geometry.coordinates.map((point) => {
-    if (!Array.isArray(point) || !validCoordinates(point[1], point[0])) throw new Error("Invalid route point");
+    if (!Array.isArray(point) || !validCoordinates(point[1], point[0])) throw invalid("Invalid route point");
     return [point[1], point[0]];
   });
   const steps = route.legs.flatMap((leg) => {
-    if (!Array.isArray(leg.steps) || !leg.steps.length) throw new Error("Missing route steps");
+    if (!Array.isArray(leg.steps) || !leg.steps.length) throw invalid("Missing route steps");
     return leg.steps;
   });
   for (const step of steps) {
     if (!step || !step.maneuver || typeof step.maneuver.type !== "string"
       || !Number.isFinite(step.distance) || step.distance < 0
-      || !["walking", "ferry"].includes(step.mode)) throw new Error("Invalid walking step");
+      || !["walking", "ferry"].includes(step.mode)) throw invalid("Invalid walking step");
   }
   if (routeAccessCache && routeCrossesRestrictedArea(points, routeAccessCache.areas.map((area) => area.ring))) {
     throw Object.assign(new Error("Paid station passage"), { userMessage: "改札内の通路を避けた徒歩ルートを取得できませんでした。" });
@@ -1903,9 +1916,13 @@ function syncRouteLayers() {
   for (const kind of ROUTE_KINDS) {
     const choice = routeChoices.get(kind.id);
     if (!choice?.route || routeLayers.has(kind.id)) continue;
-    routeLayers.set(kind.id, L.polyline(choice.route.points, {
-      pane: "walkingRoutes", color: kind.color, weight: 5, opacity: 0.85, interactive: false,
-    }).addTo(map));
+    try {
+      routeLayers.set(kind.id, L.polyline(choice.route.points, {
+        pane: "walkingRoutes", color: kind.color, weight: 5, opacity: 0.85, interactive: false,
+      }).addTo(map));
+    } catch {
+      throw Object.assign(new Error("Route drawing failed"), {routeCode:"RouteDisplay",userMessage:"ルートは取得できましたが、地図に表示できませんでした。画面を再読み込みしてください。"});
+    }
   }
   routeLayer = routeLayers.get(activeRouteKind) || null;
   // The blue base route remains readable where alternatives overlap it.
@@ -1957,7 +1974,9 @@ function updateRouteChoiceNote(kind) {
   const choice = routeChoices.get(kind);
   const detail = choice?.detail || ROUTE_KINDS.find((item) => item.id === kind)?.detail || "";
   const stores = choice?.convenienceCount > 0 ? `ルートから約60m以内にコンビニ${choice.convenienceCount}件。` : "";
-  ui["route-choice-note"].textContent = `${detail ? `${detail}。` : ""}${stores}`;
+  const longNote = choice?.route?.distance >= 20000 ? "長距離ルートです。所要時間に休憩は含みません。" : "";
+  const splitNote = choice?.route?.segmented ? "徒歩で通れる中継地点をつないだルートです。" : "";
+  ui["route-choice-note"].textContent = `${detail ? `${detail}。` : ""}${stores}${longNote}${splitNote}`;
 }
 
 function displayWalkingRoute(route, kind = "standard", { background = false } = {}) {
@@ -2017,10 +2036,13 @@ function prepareRouteReplacement(request) {
 
 function routeErrorMessage(error) {
   if (error.userMessage) return error.userMessage;
-  if (error.name === "AbortError") return "取得に時間がかかっています。更新してお試しください。";
-  if (["DistanceExceeded", 154].includes(error.routeCode)) return "ルート検索の距離上限を超えています。区間を分けて検索してください。";
-  if (["NoRoute", "NoSegment", 171, 172, 442].includes(error.routeCode)) return "徒歩で通れるルートが見つかりませんでした。";
-  return "取得できませんでした。通信を確認して更新してください。";
+  const code = String(error.routeCode || "");
+  if (error.name === "AbortError" || ["RouteTimeout","ORS_TIMEOUT"].includes(code)) return "ルート検索がタイムアウトしました。もう一度お試しください。";
+  if (["DistanceExceeded","154","ORS_LIMIT_EXCEEDED"].includes(code)) return "目的地が遠すぎるため、徒歩ルートを取得できませんでした。区間を分けて検索してください。";
+  if (["NoRoute","NoSegment","170","171","172","442","ORS_NO_ROUTE"].includes(code)) return "徒歩で移動可能な経路が見つかりませんでした。";
+  if (code === "150") return "経由地点が検索サービスの上限を超えています。";
+  if ([429,503].includes(error.httpStatus)) return "ルート検索サービスが混み合っています。時間を置いてお試しください。";
+  return "ルート検索サービスとの通信に失敗しました。もう一度お試しください。";
 }
 
 function abortableRouteDelay(ms, signal) {
@@ -2161,8 +2183,12 @@ async function calculateWalkingRoute(start, end, kind, speed, request, via = nul
       private_access_penalty: 43200,
     } },
   }));
-  const data = await fetchRouteJson(url, request);
+  const timeoutMs = request.routeTimeoutMs || (request.longDistance ? LongRoutes.timeoutMs(map.distance(start, end)) : 18000);
+  const data = await fetchRouteJson(url, request, timeoutMs);
   const route = parseWalkingRoute(data);
+  if (map.distance([start.lat,start.lng],route.points[0])>100 || map.distance([end.lat,end.lng],route.points.at(-1))>100) {
+    throw Object.assign(new Error("Route endpoints mismatch"), { userMessage: "ルートが指定地点につながっていません。別の地点を指定してください。", routeCode:"RouteResponse" });
+  }
   for (const [index, place] of viaPoints.entries()) {
     const snap = data.waypoints?.[index + 1]?.location;
     if (!snap || !validCoordinates(snap[1], snap[0]) || map.distance([place.lat, place.lng], [snap[1], snap[0]]) > 40
@@ -2321,30 +2347,46 @@ async function findConvenienceRoute(start, end, stores, reference, speed, reques
   return best;
 }
 
-async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent) {
-  await loadRouteAccess(request);
+async function requestSuggestedRouteData(start, end, mode, request) {
   const endpoint = MAP_PROXY_ENDPOINT ? new URL("/api/walking-routes", MAP_PROXY_ENDPOINT)
     : new URL("/api/walking-routes", window.location.href);
-  request.timeout = setTimeout(() => request.controller.abort(), request.orsTimeoutMs || 90000);
+  const controller = new AbortController(), abort = () => controller.abort();
+  if (request.controller.signal.aborted) abort();
+  request.controller.signal.addEventListener("abort",abort,{once:true});
+  const remaining = request.deadlineAt ? Math.max(1,request.deadlineAt-Date.now()) : 90000;
+  const timeout = setTimeout(abort,Math.min(request.orsTimeoutMs || 90000,remaining));
   request.destinationReached = roundTripDestinationReached;
-  let response;
   try {
-    response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" },
-      signal: request.controller.signal,
+    let response;
+    try { response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({ start: { lat: start.lat, lng: start.lng }, destination: { lat: end.lat, lng: end.lng },
         mode, speed_kmh: currentWalkingSpeed().kmh,
         ...(mode === "roundtrip" ? { return_to: roundTripOrigin, destination_reached: request.destinationReached } : {}) }) });
-  } catch (error) {
-    if (error.name !== "AbortError") error.userMessage = mode === "standard"
-      ? "通常の検索の距離上限を超えています。長距離検索用のPythonサーバーに接続できません。"
+    } catch (error) {
+      if (error.name !== "AbortError") error.userMessage = mode === "standard"
+      ? "予備のルート検索用のPythonサーバーに接続できませんでした。"
       : "Pythonサーバーに接続できません。app.pyを起動してください。";
-    throw error;
+      throw error;
+    }
+    let data;
+    try { data = await response.json(); }
+    catch (error) {
+      if (controller.signal.aborted) throw new DOMException("Aborted","AbortError");
+      throw Object.assign(new Error("Invalid server response"), { userMessage: "Pythonサーバーを更新して起動し直してください。",routeCode:"RouteResponse" });
+    }
+    if (!response.ok || data.error) throw Object.assign(new Error("Walking route unavailable"), {
+      routeCode:data.code,httpStatus:response.status,
+      userMessage: typeof data.error === "string" ? data.error : "ルートを取得できませんでした。" });
+    return data;
+  } finally {
+    clearTimeout(timeout);request.controller.signal.removeEventListener("abort",abort);
   }
-  let data;
-  try { data = await response.json(); }
-  catch { throw Object.assign(new Error("Invalid server response"), { userMessage: "Pythonサーバーを更新して起動し直してください。" }); }
-  if (!response.ok || data.error) throw Object.assign(new Error("Walking route unavailable"), {
-    userMessage: typeof data.error === "string" ? data.error : "ルートを取得できませんでした。" });
+}
+
+async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent) {
+  await loadRouteAccess(request);
+  const data = await requestSuggestedRouteData(start,end,mode,request);
   if (!isCurrent()) return;
   if (mode === "roundtrip" && (!validCoordinates(data.return_to?.lat, data.return_to?.lng)
     || map.distance([data.return_to.lat, data.return_to.lng], [roundTripOrigin.lat, roundTripOrigin.lng]) > 1
@@ -2385,22 +2427,60 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
   }
 }
 
+async function recoverLongWalkingRoute(start,end,request,isCurrent,primaryError) {
+  if (!isCurrent() || request.controller.signal.aborted) throw new DOMException("Aborted","AbortError");
+  if (!request.deadlineAt) {
+    request.deadlineAt=Date.now()+150000;
+    request.deadlineTimer=setTimeout(()=>request.controller.abort(),150000);
+  }
+  request.orsTimeoutMs=60000;
+  if (!request.skipORS) {
+    message(ui["route-status"],"予備の徒歩ルートを検索しています…");
+    try { await fetchSuggestedWalkingRoutes(start,end,"standard",request,isCurrent);return; }
+    catch (error) {
+      if (!isCurrent() || request.controller.signal.aborted) throw error;
+    }
+  }
+  // Never multiply requests to a throttled/unavailable Valhalla instance.
+  if ([429,502,503].includes(primaryError.httpStatus) || ["170","171","NoSegment"].includes(String(primaryError.routeCode))) throw primaryError;
+  const route=await LongRoutes.segmented({start,end,signal:request.controller.signal,
+    budgetMs:request.deadlineAt-Date.now(),
+    progress:text=>{if(isCurrent())message(ui["route-status"],text);},
+    locate:async(points,signal)=>{
+      const child={controller:{signal}};await waitForRouteTurn(child);
+      const url=new URL("/locate",ROUTE_ENDPOINT);
+      url.searchParams.set("json",JSON.stringify({locations:points.map(p=>({lat:p.lat,lon:p.lng,search_cutoff:1200})),verbose:true,costing:"pedestrian",
+        costing_options:{pedestrian:{max_hiking_difficulty:0,use_ferry:0,private_access_penalty:43200}}}));
+      return fetchRouteJson(url,child,15000);
+    },
+    route:(a,b,signal)=>calculateWalkingRoute(a,b,"standard",currentWalkingSpeed().kmh,{controller:{signal},routeTimeoutMs:30000})});
+  if(!isCurrent() || request.controller.signal.aborted)return;
+  prepareRouteReplacement(request);
+  routeLayers.get("standard")?.remove();routeLayers.delete("standard");
+  routeChoices.set("standard",{route});selectedRouteKind="standard";
+  displayWalkingRoute(route,"standard",{background:request.automatic});
+}
+
 async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, automatic = false, skipNaturalORS = false) {
   routeTimer = null;
   if (!routeEnabled || version !== routeVersion) return;
   const controller = new AbortController();
   const request = { controller, automatic, replaceExisting: automatic, preferredKind: selectedRouteKind };
+  request.skipORS = skipNaturalORS;
+  request.longDistance=map.distance(start,end)>=20000;
+  if(request.longDistance){request.deadlineAt=Date.now()+150000;request.deadlineTimer=setTimeout(()=>controller.abort(),150000);}
   routeRequest = request;
   const isCurrent = () => routeEnabled && routeRequest === request && version === routeVersion;
   const naturalDestination = mode === "standard" && !skipNaturalORS && destination?.accessAnchor?.type === "way"
     && map.distance(destination, end) < 1;
   if (mode !== "standard" || naturalDestination) {
-    if (naturalDestination) request.orsTimeoutMs = 15000;
+    if (naturalDestination) request.orsTimeoutMs = request.longDistance ? 60000 : 15000;
     try {
       await fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent);
     } catch (error) {
-      if (naturalDestination && isCurrent()) {
+      if (naturalDestination && isCurrent() && !request.controller.signal.aborted) {
         clearTimeout(request.timeout);
+        clearTimeout(request.deadlineTimer);
         await fetchWalkingRoute(start, end, version, mode, automatic, true);
         return;
       }
@@ -2410,6 +2490,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
       }
     } finally {
       clearTimeout(request.timeout);
+      clearTimeout(request.deadlineTimer);
       if (routeRequest === request) { routeRequest = null; setRouteBusy(false); }
     }
     return;
@@ -2422,7 +2503,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
     const speed = currentWalkingSpeed().kmh;
     let stores = null;
     let primaryError = null;
-    const kinds = ROUTE_KINDS.filter((kind) => ["standard", "gentle", "convenience", "nature"].includes(kind.id));
+    const kinds = ROUTE_KINDS.filter((kind) => (request.longDistance ? ["standard"] : ["standard", "gentle", "convenience", "nature"]).includes(kind.id));
     if (automatic) kinds.sort((a, b) => Number(b.id === request.preferredKind) - Number(a.id === request.preferredKind));
     for (const kind of kinds) {
       if (!isCurrent()) return;
@@ -2456,10 +2537,12 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
         setRouteBusy(false);
       } catch (error) {
         if (!isCurrent()) return;
+        if (error.routeCode === "RouteDisplay") throw error;
         if (kind.id === "standard") primaryError = error;
-        if (["standard", "gentle"].includes(kind.id) && ["DistanceExceeded", 154].includes(error.routeCode)) {
+        if ((["standard", "gentle"].includes(kind.id) && ["DistanceExceeded", 154,"154"].includes(error.routeCode))
+          || (kind.id === "standard" && request.longDistance && !request.controller.signal.aborted)) {
           // Keep the whole route on foot; never substitute a driving route or guessed straight segments.
-          await fetchSuggestedWalkingRoutes(start, end, "standard", request, isCurrent);
+          await recoverLongWalkingRoute(start, end, request, isCurrent,error);
           return;
         }
         // Extra route types are suggestions; missing ones have no reserved UI slot.
@@ -2478,6 +2561,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
     }
   } finally {
     clearTimeout(request.timeout);
+    clearTimeout(request.deadlineTimer);
     if (routeRequest === request) {
       routeRequest = null;
       setRouteBusy(false);
@@ -2545,6 +2629,11 @@ function selectPlace(place, visit = null, moveMap = true) {
   selectedPlace = place;
   selectedVisitId = visit ? visit.id : null;
   ui["place-editor"].hidden = false;
+  if (typeof PlacePhotos !== "undefined") {
+    let photos = document.getElementById("selected-place-photo");
+    if (!photos) { photos = document.createElement("div"); photos.id = "selected-place-photo"; ui["place-editor"].prepend(photos); }
+    PlacePhotos.mount(photos, place);
+  }
   ui["selected-address"].textContent = place.address || "";
   ui["selected-address"].hidden = !place.address;
   ui["visit-name"].value = place.name;
@@ -2584,6 +2673,7 @@ function renderVisits() {
       radius: 8, color: "#fff", weight: 2, fillColor: "#28694f",
       fillOpacity: 1, bubblingMouseEvents: false,
     }).addTo(savedMarkers).bindPopup(popup, { autoPan: false });
+    if (typeof PlacePhotos !== "undefined") marker.on("popupopen", () => PlacePhotos.mount(popup, visit));
     if (visit.note.trim()) {
       marker.bindTooltip(textElement("span", visit.note), {
         permanent: true,
@@ -2600,6 +2690,7 @@ function renderVisits() {
     const button = placeButton(visit, `${visit.date}${visit.address ? ` · ${visit.address}` : ""}`, "visit-button");
     button.addEventListener("click", () => { focusPlace(visit); marker.openPopup(); });
     item.append(button);
+    if (typeof PlacePhotos !== "undefined") PlacePhotos.mount(item, visit);
     if (visit.note) item.append(textElement("p", visit.note, "visit-note"));
     if (visit.walk) item.append(textElement("p", walkRecordLabel(visit.walk), "walk-record-detail"));
     const actions = document.createElement("div");
@@ -2683,8 +2774,7 @@ function japaneseCountry(properties) {
 
 function photonPlaces(data) {
   if (!data || !Array.isArray(data.features)) throw new Error("Invalid search response");
-  const seen = new Set();
-  return data.features.flatMap((feature) => {
+  return PlaceIdentity.searchResults(data.features.flatMap((feature) => {
     const p = feature.properties || {};
     const coordinates = feature.geometry && feature.geometry.coordinates;
     if (!Array.isArray(coordinates) || !validCoordinates(coordinates[1], coordinates[0])) return [];
@@ -2692,15 +2782,19 @@ function photonPlaces(data) {
     const address = [...new Set([japaneseCountry(p), p.state, p.city, p.district,
       p.locality, p.street, p.housenumber].filter((value) => typeof value === "string" && value))].join("、");
     const name = String(p.name || p.street || p.city || address || "名前のない場所").slice(0, 120);
-    const key = `${lat},${lng},${name}`;
-    if (seen.has(key)) return [];
-    seen.add(key);
-    const tags = typeof p.osm_key === "string" ? { [p.osm_key]: p.osm_value } : {};
+    const tags = { ...p.extra, ...(typeof p.osm_key === "string" ? { [p.osm_key]: p.osm_value } : {}),
+      "addr:province":p.state, "addr:city":p.city, "addr:suburb":p.district || p.locality,
+      "addr:street":p.street, "addr:housenumber":p.housenumber, "addr:postcode":p.postcode };
     const kindId = Object.keys(DISCOVERY_KINDS).find(key => DISCOVERY_KINDS[key].tags && discoveryKindMatches(tags, key));
-    const kindLabel = kindId ? DISCOVERY_KINDS[kindId].label : p.osm_key === "railway" && ["station", "halt"].includes(p.osm_value) ? "駅" : "場所";
-    return [{ name, address, lat, lng, ...(kindId ? { kindId } : {}), kindLabel,
-      ...(typeof p.description === "string" ? { description: p.description.slice(0, 300) } : {}) }];
-  }).slice(0, SEARCH_LIMIT);
+    const transport = tags.building === "train_station" || ["station","halt"].includes(tags.railway) ? "station"
+      : tags.highway === "bus_stop" || tags.amenity === "bus_station" || (tags.public_transport === "platform" && tags.bus === "yes") ? "bus_stop" : "";
+    const kindLabel = kindId ? DISCOVERY_KINDS[kindId].label : {station:"駅",bus_stop:"バス停"}[transport]
+      || ({platform:"ホーム",stop:"停車位置",subway_entrance:"駅の入口"})[tags.railway] || "場所";
+    const photoKind = kindId || transport;
+    return [PlaceIdentity.attach({ name, address, lat, lng, ...(photoKind ? { kindId: photoKind } : {}), kindLabel,
+      ...(typeof PlacePhotos !== "undefined" ? { photoHints: PlacePhotos.hints({ ...p, tags: p.extra }) } : {}),
+      ...(typeof p.description === "string" ? { description: p.description.slice(0, 300) } : {}) }, { ...p, tags })];
+  })).slice(0, SEARCH_LIMIT);
 }
 
 function createSearchContext(prefix, onSelect) {
@@ -3241,23 +3335,19 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
     const elevation = mappedElevation ?? (cachedElevation && Date.now() - cachedElevation.at < 600000 ? cachedElevation.height : null);
     const keywordScore = preferences.words.length ? 4 * preferences.words.filter((word) => searchable.includes(word)).length / preferences.words.length : 0;
     const preferenceScore = mood.score * 3 + keywordScore + (preferences.kinds.has(kindId) ? 20 : 0);
-    if (places.some((other) => (element.id && other.osmType === element.type && other.osmId === element.id)
-      || (natural && other.kindId === kindId && other.accessAnchor?.id === access.anchorId
-        && map.distance([point.lat, point.lng], [other.lat, other.lng]) < 30)
-      || (discoveryText(other.name).replace(/\s/g, "") === discoveryText(name).replace(/\s/g, "")
-      && map.distance([point.lat, point.lng], [other.lat, other.lng]) < 30))) continue;
     const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"], tags["addr:quarter"],
       tags["addr:neighbourhood"], tags["addr:street"], tags["addr:housenumber"]].filter((value) => typeof value === "string" && value))].join("、");
-    places.push({ ...point, name, address, free, toilets, benches, directDistance, distance, duration, preferenceScore, elevation,
+    places.push(PlaceIdentity.attach({ ...point, name, address, free, toilets, benches, directDistance, distance, duration, preferenceScore, elevation,
       key: `${element.type}/${element.id ?? `${point.lat},${point.lng},${kindId}`}`,
       ambienceNote: mood.note, ruralMatch: !!mood.matches, ruralRejected: !!mood.rejected,
       ...(natural ? { accessNote: String(access.note || "徒歩アクセス未確認").slice(0, 180), accessStatus: access.status,
         accessAnchor: { type: access.anchorType, id: access.anchorId }, naturalUnnamed: !!access.unnamed } : {}),
-      kindId, kindLabel: kind.label, osmType: element.type, osmId: element.id });
+      kindId, kindLabel: kind.label, osmType: element.type, osmId: element.id }, element));
+    if (typeof PlacePhotos !== "undefined") places[places.length - 1].photoHints = PlacePhotos.hints({ ...element, tags });
     const description = tags["description:ja"] || tags.description;
     if (typeof description === "string") places[places.length - 1].description = description.slice(0, 300);
   }
-  return places.sort((a, b) => compareDiscoveryElevation(a, b, preferences.highElevation)
+  return PlaceIdentity.dedupe(places).sort((a, b) => compareDiscoveryElevation(a, b, preferences.highElevation)
     || b.preferenceScore - a.preferenceScore || a.directDistance - b.directDistance).slice(0, limit);
 }
 
@@ -3284,7 +3374,7 @@ function compareDiscoveryElevation(a, b, enabled) {
 
 function sortDiscoveryPlaces(places, criteria) {
   const highElevation = discoveryPreferences(criteria).highElevation;
-  const ordered = [...places].sort((a, b) => compareDiscoveryElevation(a, b, highElevation)
+  const ordered = PlaceIdentity.dedupe(places).sort((a, b) => compareDiscoveryElevation(a, b, highElevation)
     || b.preferenceScore - a.preferenceScore || a.duration - b.duration || a.distance - b.distance);
   if (criteria.kind !== "any") return ordered.slice(0, DISCOVERY_RESULT_LIMIT);
   // Mix kinds on every page rather than letting a large park result fill the list.
@@ -3432,6 +3522,7 @@ function mergeDiscoveryElements(...groups) {
     const key = `${element.type}/${element.id}`;
     const previous = merged.get(key);
     const combined = { ...previous, ...element };
+    combined.tags = { ...previous?.tags, ...Object.fromEntries(Object.entries(element.tags || {}).filter(([,value])=>value != null && value !== "")) };
     if (previous?.members?.some((member) => Array.isArray(member?.geometry))
       && !element.members?.some((member) => Array.isArray(member?.geometry))) combined.members = previous.members;
     merged.set(key, combined);
@@ -3613,7 +3704,7 @@ function bundledDiscoveryIndex(data, source, kind) {
     const key = `${Math.floor(row[2] * 10)},${Math.floor(row[3] * 10)}`;
     if (!cells.has(key)) cells.set(key, []);
     cells.get(key).push({ type: source, id: row[0], source: `bundled:${source}`, localKind: kind, lat: row[2], lon: row[3],
-      tags: { name: row[1], ...(row[5] === null ? {} : { ele: row[5] }) } });
+      tags: { name: row[1], ...(source === "wikidata" ? { wikidata: row[0] } : {}), ...(row[5] === null ? {} : { ele: row[5] }) } });
   }
   return cells;
 }
@@ -3715,7 +3806,11 @@ async function fetchSeasonalPlaces(request) {
   map.attributionControl?.addAttribution('<a href="https://ja.wikipedia.org/">季節名所: Wikipedia contributors</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0・加工</a>)');
   seasonalPlacesCache = data.places.map((place) => ({ type: "seasonal", id: place.id,
     lat: place.lat, lon: place.lng, seasons: place.seasons,
-    tags: { name: place.name, "addr:province": place.address } }));
+    tags: { name: place.name, "addr:province": place.address,
+      ...(typeof place.coordinateSource === "string" && /^https:\/\/www\.wikidata\.org\/wiki\/Q[1-9]\d*$/.test(place.coordinateSource)
+        ? { wikidata: place.coordinateSource.split("/").at(-1) } : {}),
+      ...(typeof place.coordinateSource === "string" && place.coordinateSource.startsWith("https://ja.wikipedia.org/wiki/")
+        ? { wikipedia: `ja:${decodeURIComponent(place.coordinateSource.slice("https://ja.wikipedia.org/wiki/".length))}` } : {}) } }));
   return seasonalPlacesCache;
 }
 
@@ -3743,7 +3838,7 @@ function cachedRandomDiscoveryPlaces(criteria, start) {
       places.push({ ...cached.place, directDistance, distance, duration });
     }
   }
-  return places;
+  return PlaceIdentity.dedupe(places);
 }
 
 async function probeRandomDiscoveryKind(kind, criteria, start, request) {
@@ -3768,6 +3863,8 @@ async function findRandomDiscoveryPlaces(criteria, start, request, onUpdate = ()
   if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
   const randomCriteria = randomDiscoveryCriteria({ minMinutes: criteria.minMinutes, minutes: criteria.minutes }, criteria.speed);
   const choose = (places) => {
+    places = PlaceIdentity.dedupe(places);
+    if (!places.length) return [];
     const selected = [places[Math.floor(Math.random() * places.length)]];
     onUpdate(selected);
     return selected;
@@ -3881,8 +3978,7 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
   if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
   request.controller.signal.addEventListener("abort", abort, { once: true });
   const byKind = new Map();
-  const combined = (pool = byKind) => sortDiscoveryPlaces(
-    [...new Map([...pool.values()].flat().map((place) => [place.key, place])).values()], criteria);
+  const combined = (pool = byKind) => sortDiscoveryPlaces([...pool.values()].flat(), criteria);
   let acceptedCount = 0;
   let enoughTimer = null;
   const stopWhenEnough = () => {
@@ -4265,6 +4361,7 @@ function renderDiscoveryResults(results, request) {
     button.disabled = natural && !discoveryNaturalPlaceReady(place);
     const item = button.closest("li") || button.parentElement;
     item.classList.add("candidate-card");
+    if (typeof PlacePhotos !== "undefined") PlacePhotos.mount(item, place);
     updateCandidateActions(item, place);
     if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
   }
@@ -4443,10 +4540,14 @@ function beginDiscoverySearch(criteria) {
 }
 
 function renderSearch(places, context = placeSearch) {
+  places = PlaceIdentity.dedupe(places);
   context.results.replaceChildren();
   for (const place of places) {
     const item = document.createElement("li");
     const button = placeButton(place, place.address, "result-button");
+    if (place.kindId === "bus_stop" && places.some(other=>other.kindId === "station" && PlaceIdentity.normalize(other.name) === PlaceIdentity.normalize(place.name))) {
+      button.querySelector(".place-title").textContent = `${place.name}（バス停）`;
+    }
     button.addEventListener("click", () => context.onSelect(place));
     item.append(button);
     if (context !== startSearch) {
@@ -4455,6 +4556,7 @@ function renderSearch(places, context = placeSearch) {
       button.append(textElement("span", place.kindLabel || "場所", "candidate-metrics"), candidateDistanceElement(place));
       appendCandidateEvidence(button, place);
       updateCandidateActions(item, place);
+      if (typeof PlacePhotos !== "undefined") PlacePhotos.mount(item, place);
     }
     context.results.append(item);
   }
@@ -4603,6 +4705,10 @@ ui["visit-form"].addEventListener("submit", (event) => {
   const previous = editing ? visits.find(entry => entry.id === id) : null;
   const visit = { ...previous, id, name, date, note, address: selectedPlace.address || "",
     lat: selectedPlace.lat, lng: selectedPlace.lng };
+  if (typeof PlacePhotos !== "undefined") {
+    visit.photoHints = PlacePhotos.hints(selectedPlace);
+    visit.kindId = typeof selectedPlace.kindId === "string" ? selectedPlace.kindId.slice(0, 40) : previous?.kindId || "";
+  }
   if (walk) visit.walk = walk;
   else delete visit.walk;
   const next = editing ? visits.map((entry) => entry.id === id ? visit : entry) : [...visits, visit];

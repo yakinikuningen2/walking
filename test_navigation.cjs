@@ -24,6 +24,7 @@ function functionSource(name, next) {
 }
 function setup() {
   const context = vm.createContext({ URL, Number, Math, Map, Set, AbortController, DOMException,
+    PlaceIdentity: require('./static/js/place-identity.js'),
     NEARBY_CONVENIENCE_RADIUS: 1000, NEARBY_CONVENIENCE_TIMEOUT_MS: 10000,
     ROUTE_ACCESS_ENDPOINT: 'https://app.example/static/route-access.json', routeAccessCache: access,
     STATION_INDEX_ENDPOINT: 'https://app.example/static/stations-jp-2025-v1.json', stationIndexCache: null,
@@ -43,6 +44,26 @@ function setup() {
   vm.runInContext(`${functionSource('stationIndexFromData', 'fetchNearbyConvenienceData').replace(/async\s*$/, '')}`, context);
   return context;
 }
+
+test('nearby stations preserve photo identity and load popup photos only when opened', () => {
+  const c=setup(), mounts=[],layers=[];
+  c.PlacePhotos={hints:require('./static/js/place-photos.js').hints,mount:(container,place)=>mounts.push({container,place})};
+  const origin={lat:35.7787,lng:139.4966};
+  const [place]=c.nearbyConveniencePlaces([{type:'node',id:1,lat:origin.lat,lon:origin.lng,
+    tags:{railway:'station',name:'秋津',wikidata:'Q123','name:en':'Akitsu Station'}}],origin,'station');
+  assert.equal(place.kindId,'station');assert.equal(place.kindLabel,'駅');
+  assert.equal(place.photoHints.wikidata,'Q123');assert.equal(place.photoHints['name:en'],'Akitsu Station');
+  const element=()=>({children:[],append(...items){this.children.push(...items)}});
+  c.document={createElement:element};c.textElement=(tag,text)=>({tag,text});c.destinationButton=()=>({type:'destination'});
+  c.nearbyConvenienceMarkers={clearLayers(){layers.length=0},getLayers:()=>layers,removeLayer(){}};
+  c.map.getPane=()=>({style:{}});
+  c.ui={'convenience-legend':{querySelector:()=>({classList:{toggle(){}}})},'nearby-legend-label':{}};
+  c.L={divIcon:()=>({}),marker:(point,options)=>({options,handlers:{},addTo(){layers.push(this);return this},
+    bindTooltip(){return this},bindPopup(popup){this.popup=popup;return this},on(name,handler){this.handlers[name]=handler;return this}})};
+  vm.runInContext(functionSource('nearbyMarkerKey','cachedNearbyElements').replace(/async\s*$/,''),c);
+  c.showNearbyConvenience([place],'station');assert.equal(mounts.length,0);
+  layers[0].handlers.popupopen();assert.equal(mounts.length,1);assert.equal(mounts[0].place,place);
+});
 
 test('Akitsu paid passage is blocked between exterior endpoints while the public detour remains usable', () => {
   const c = setup(), rings = access.areas.map(area => area.ring);

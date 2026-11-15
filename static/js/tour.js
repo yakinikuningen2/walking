@@ -69,7 +69,8 @@ const WalkingTour = (() => {
       const popup=document.createElement("div");popup.append(textElement("strong",`${i+1}. ${p.name}`),textElement("p",p.kindLabel));
       if(p.accessNote)popup.append(textElement("p",p.accessNote,"tour-help"));
       const view=textElement("button","地点登録");view.type="button";view.addEventListener("click",()=>selectPlace(p));popup.append(view);
-      L.marker([p.lat,p.lng],{icon,bubblingMouseEvents:false}).addTo(markers).bindPopup(popup,{autoPan:false});
+      const marker=L.marker([p.lat,p.lng],{icon,bubblingMouseEvents:false}).addTo(markers).bindPopup(popup,{autoPan:false});
+      if(typeof PlacePhotos!=="undefined")marker.on("popupopen",()=>PlacePhotos.mount(popup,p));
     });
     mapProgress();renderLegend(legend);badge.hidden=false;mapControls.hidden=false;
     if(fit)requestAnimationFrame(()=>{if(line)map.fitBounds(line.getBounds(),{padding:[40,40],maxZoom:16,animate:false});});
@@ -103,6 +104,7 @@ const WalkingTour = (() => {
         const button=textElement("button",text);button.type="button";button.disabled=disabled||!!active;button.setAttribute("aria-label",`${p.name}：${text}`);button.onclick=run;actions.append(button);
       }
       item.append(actions);$("tour-stops").append(item);
+      if(typeof PlacePhotos!=="undefined")PlacePhotos.mount(item,p);
     });
     $("tour-return-confirm").hidden=!course.settings.returnToStart||pending.length>0;
     $("tour-returned").checked=course.returned;$("tour-returned").disabled=!!active;
@@ -142,8 +144,9 @@ const WalkingTour = (() => {
     await Promise.all([worker(),worker()]);
     const rows=[...byKind.values()],mixed=[];
     for(let i=0;i<50;i++)for(const row of rows)if(row[i])mixed.push(row[i]);
-    if(mixed.length<(config.autoCount?1:config.count)&&failures)throw new TourCore.TourError("SEARCH_API","一部の施設を検索できず、必要な候補を確認できませんでした。時間を置いて再試行してください。");
-    return mixed;
+    const unique=PlaceIdentity.dedupe(mixed);
+    if(unique.length<(config.autoCount?1:config.count)&&failures)throw new TourCore.TourError("SEARCH_API","一部の施設を検索できず、必要な候補を確認できませんでした。時間を置いて再試行してください。");
+    return unique;
   }
   const engine=TourCore.createEngine({search,progress:text=>{if(active)tell(text);},route:async(a,b,speed,signal,options={})=>{
     const controller=new AbortController(),abort=()=>controller.abort();signal.addEventListener("abort",abort,{once:true});

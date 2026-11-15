@@ -1,0 +1,625 @@
+{
+  "date": "2026-11-15",
+  "provider": "Valhalla / FOSSGIS",
+  "reportedVersion": "3.9.2-a919bb6",
+  "before": [
+    {
+      "case": "1km",
+      "start": {
+        "lat": 35.681236,
+        "lng": 139.767125
+      },
+      "end": {
+        "lat": 35.675,
+        "lng": 139.76332
+      },
+      "http": 200,
+      "code": "Ok",
+      "message": null,
+      "distance": 1108.034,
+      "duration": 1089.763,
+      "points": 62,
+      "seconds": 1.65
+    },
+    {
+      "case": "5km",
+      "start": {
+        "lat": 35.681236,
+        "lng": 139.767125
+      },
+      "end": {
+        "lat": 35.7138,
+        "lng": 139.7739
+      },
+      "http": 200,
+      "code": "Ok",
+      "message": null,
+      "distance": 4197.396,
+      "duration": 4071.257,
+      "points": 359,
+      "seconds": 1.349
+    },
+    {
+      "case": "10km",
+      "start": {
+        "lat": 35.681236,
+        "lng": 139.767125
+      },
+      "end": {
+        "lat": 35.6904,
+        "lng": 139.6991
+      },
+      "http": 200,
+      "code": "Ok",
+      "message": null,
+      "distance": 7572.451,
+      "duration": 7537.422,
+      "points": 428,
+      "seconds": 1.378
+    },
+    {
+      "case": "20km",
+      "start": {
+        "lat": 35.681236,
+        "lng": 139.767125
+      },
+      "end": {
+        "lat": 35.702,
+        "lng": 139.5606
+      },
+      "http": 200,
+      "code": "Ok",
+      "message": null,
+      "distance": 21537.27,
+      "duration": 20571.471,
+      "points": 1066,
+      "seconds": 2.815
+    },
+    {
+      "case": "50km",
+      "start": {
+        "lat": 35.681236,
+        "lng": 139.767125
+      },
+      "end": {
+        "lat": 35.63238,
+        "lng": 139.269815
+      },
+      "http": 200,
+      "code": "Ok",
+      "message": null,
+      "distance": 50364.434,
+      "duration": 47950.801,
+      "points": 2108,
+      "seconds": 5.375
+    },
+    {
+      "case": "100km",
+      "start": {
+        "lat": 35.681236,
+        "lng": 139.767125
+      },
+      "end": {
+        "lat": 35.1032,
+        "lng": 139.0777
+      },
+      "http": 200,
+      "code": "Ok",
+      "message": null,
+      "distance": 104212.641,
+      "duration": 101271.359,
+      "points": 3845,
+      "seconds": 8.835
+    },
+    {
+      "case": "over-limit",
+      "start": {
+        "lat": 35.681236,
+        "lng": 139.767125
+      },
+      "end": {
+        "lat": 35.1709,
+        "lng": 136.8815
+      },
+      "http": 400,
+      "code": "DistanceExceeded",
+      "message": null,
+      "distance": null,
+      "duration": null,
+      "points": 0,
+      "seconds": 0.284
+    }
+  ],
+  "inputLimitProbes": [
+    {
+      "latitude": 2.24,
+      "airMeters": 249076.80000000002,
+      "http": 400,
+      "data": {
+        "code": "DistanceExceeded",
+        "message": "Path distance exceeds the max distance limit."
+      },
+      "seconds": 1.325
+    },
+    {
+      "latitude": 2.26,
+      "airMeters": 251300.69999999998,
+      "http": 400,
+      "data": {
+        "code": "DistanceExceeded",
+        "message": "Path distance exceeds the max distance limit."
+      },
+      "seconds": 1.999
+    },
+    {
+      "latitude": 0.89,
+      "airMeters": 98963.55,
+      "http": 400,
+      "data": {
+        "code": "NoSegment",
+        "message": "One of the supplied input coordinates could not snap to street segment."
+      },
+      "seconds": 1.334
+    },
+    {
+      "latitude": 0.91,
+      "airMeters": 101187.45,
+      "http": 400,
+      "data": {
+        "code": "DistanceExceeded",
+        "message": "Path distance exceeds the max distance limit."
+      },
+      "seconds": 0.977
+    }
+  ],
+  "waypointLimitProbe": {
+    "count": 51,
+    "http": 400,
+    "response": {
+      "code": "InvalidValue",
+      "message": "The successfully parsed query parameters are invalid."
+    }
+  },
+  "split100km": {
+    "ok": true,
+    "distance": 107317.989,
+    "duration": 99971.242,
+    "points": 2907,
+    "segments": 3,
+    "start": {
+      "lat": 35.681236,
+      "lng": 139.767125
+    },
+    "end": {
+      "lat": 36.5592,
+      "lng": 139.8987
+    },
+    "seconds": 5.757,
+    "calls": [
+      {
+        "path": "/locate",
+        "http": 200,
+        "seconds": 1.201
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 2.38,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.211,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 0.919,
+        "code": "Ok"
+      }
+    ]
+  },
+  "beyondInputLimit": {
+    "ok": true,
+    "distance": 157503.984,
+    "duration": 147461.435,
+    "points": 4281,
+    "segments": 5,
+    "start": {
+      "lat": 35.681236,
+      "lng": 139.767125
+    },
+    "end": {
+      "lat": 36.931681,
+      "lng": 140.020669
+    },
+    "primary": {
+      "ok": false,
+      "code": "DistanceExceeded",
+      "http": 400
+    },
+    "seconds": 13.935,
+    "calls": [
+      {
+        "path": "/route",
+        "http": 400,
+        "seconds": 0.931,
+        "code": "DistanceExceeded"
+      },
+      {
+        "path": "/locate",
+        "http": 200,
+        "seconds": 0.883
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 5.344,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 2.588,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 2.234,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.489,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.136,
+        "code": "Ok"
+      }
+    ]
+  },
+  "browser": [
+    {
+      "name": "desktop",
+      "cases": [
+        {
+          "case": "1km",
+          "distance": 1108.034,
+          "points": 62,
+          "drawn": true
+        },
+        {
+          "case": "5km",
+          "distance": 4197.396,
+          "points": 359,
+          "drawn": true
+        },
+        {
+          "case": "10km",
+          "distance": 7572.451,
+          "points": 428,
+          "drawn": true
+        },
+        {
+          "case": "20km",
+          "distance": 21537.27,
+          "points": 1066,
+          "drawn": true
+        },
+        {
+          "case": "50km",
+          "distance": 50364.434,
+          "points": 2108,
+          "drawn": true
+        },
+        {
+          "case": "100km",
+          "distance": 104212.641,
+          "points": 3845,
+          "drawn": true
+        }
+      ],
+      "split": {
+        "distance": 157503.984,
+        "segments": 5,
+        "points": 4281,
+        "note": "長距離ルートです。所要時間に休憩は含みません。徒歩で通れる中継地点をつないだルートです。"
+      },
+      "errorAndRetry": true,
+      "timeout": true,
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "name": "phone",
+      "cases": [
+        {
+          "case": "1km",
+          "distance": 1108.034,
+          "points": 62,
+          "drawn": true
+        },
+        {
+          "case": "5km",
+          "distance": 4197.396,
+          "points": 359,
+          "drawn": true
+        },
+        {
+          "case": "10km",
+          "distance": 7572.451,
+          "points": 428,
+          "drawn": true
+        },
+        {
+          "case": "20km",
+          "distance": 21537.27,
+          "points": 1066,
+          "drawn": true
+        },
+        {
+          "case": "50km",
+          "distance": 50364.434,
+          "points": 2108,
+          "drawn": true
+        },
+        {
+          "case": "100km",
+          "distance": 104212.641,
+          "points": 3845,
+          "drawn": true
+        }
+      ],
+      "split": {
+        "distance": 157503.984,
+        "segments": 5,
+        "points": 4281,
+        "note": "長距離ルートです。所要時間に休憩は含みません。徒歩で通れる中継地点をつないだルートです。"
+      },
+      "errorAndRetry": true,
+      "timeout": true,
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "name": "small-phone",
+      "cases": [
+        {
+          "case": "1km",
+          "distance": 1108.034,
+          "points": 62,
+          "drawn": true
+        },
+        {
+          "case": "5km",
+          "distance": 4197.396,
+          "points": 359,
+          "drawn": true
+        },
+        {
+          "case": "10km",
+          "distance": 7572.451,
+          "points": 428,
+          "drawn": true
+        },
+        {
+          "case": "20km",
+          "distance": 21537.27,
+          "points": 1066,
+          "drawn": true
+        },
+        {
+          "case": "50km",
+          "distance": 50364.434,
+          "points": 2108,
+          "drawn": true
+        },
+        {
+          "case": "100km",
+          "distance": 104212.641,
+          "points": 3845,
+          "drawn": true
+        }
+      ],
+      "split": {
+        "distance": 157503.984,
+        "segments": 5,
+        "points": 4281,
+        "note": "長距離ルートです。所要時間に休憩は含みません。徒歩で通れる中継地点をつないだルートです。"
+      },
+      "errorAndRetry": true,
+      "timeout": true,
+      "overflow": false,
+      "consoleErrors": 0
+    }
+  ],
+  "tests": {
+    "javascript": 219,
+    "python": 90,
+    "total": 309
+  },
+  "orsLiveTested": false,
+  "sources": [
+    {
+      "url": "https://www.openstreetmap.org/copyright",
+      "attribution": "OpenStreetMap contributors",
+      "license": "ODbL 1.0 / DbCL 1.0"
+    },
+    {
+      "url": "https://valhalla.openstreetmap.de/",
+      "provider": "FOSSGIS / Valhalla"
+    },
+    {
+      "url": "https://giscience.github.io/openrouteservice/hosted-api-restrictions",
+      "purpose": "official ORS constraints; no authenticated live request"
+    }
+  ],
+  "extendedRecovery": {
+    "ok": true,
+    "distance": 918659.625,
+    "duration": 912708.6560000001,
+    "points": 29773,
+    "segments": 10,
+    "start": {
+      "lat": 35.7789,
+      "lng": 139.4968
+    },
+    "end": {
+      "lat": 34.3974,
+      "lng": 132.4757
+    },
+    "primary": {
+      "ok": false,
+      "code": "DistanceExceeded",
+      "http": 400
+    },
+    "seconds": 24.805,
+    "calls": [
+      {
+        "path": "/route",
+        "http": 400,
+        "seconds": 1.203,
+        "code": "DistanceExceeded"
+      },
+      {
+        "path": "/locate",
+        "http": 200,
+        "seconds": 0.603
+      },
+      {
+        "path": "/locate",
+        "http": 200,
+        "seconds": 0.293
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 3.936,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.947,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.551,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.822,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.917,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 2.373,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 1.711,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 2.157,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 2.712,
+        "code": "Ok"
+      },
+      {
+        "path": "/route",
+        "http": 200,
+        "seconds": 2.484,
+        "code": "Ok"
+      }
+    ]
+  },
+  "extendedBrowser": [
+    {
+      "name": "desktop",
+      "cases": [
+        {
+          "case": "100km",
+          "distance": 104212.641,
+          "points": 3845,
+          "drawn": true
+        }
+      ],
+      "split": {
+        "distance": 918659.625,
+        "segments": 10,
+        "points": 29773,
+        "note": "長距離ルートです。所要時間に休憩は含みません。徒歩で通れる中継地点をつないだルートです。"
+      },
+      "visualOnly": true,
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "name": "phone",
+      "cases": [
+        {
+          "case": "100km",
+          "distance": 104212.641,
+          "points": 3845,
+          "drawn": true
+        }
+      ],
+      "split": {
+        "distance": 918659.625,
+        "segments": 10,
+        "points": 29773,
+        "note": "長距離ルートです。所要時間に休憩は含みません。徒歩で通れる中継地点をつないだルートです。"
+      },
+      "visualOnly": true,
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "name": "small-phone",
+      "cases": [
+        {
+          "case": "100km",
+          "distance": 104212.641,
+          "points": 3845,
+          "drawn": true
+        }
+      ],
+      "split": {
+        "distance": 918659.625,
+        "segments": 10,
+        "points": 29773,
+        "note": "長距離ルートです。所要時間に休憩は含みません。徒歩で通れる中継地点をつないだルートです。"
+      },
+      "visualOnly": true,
+      "overflow": false,
+      "consoleErrors": 0
+    }
+  ]
+}

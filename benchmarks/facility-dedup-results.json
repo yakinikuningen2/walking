@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-15",
+  "synthetic": {
+    "legacyName": {
+      "input": 600,
+      "results": 575,
+      "duplicatesRemaining": 250,
+      "falseMergedFacilities": 25,
+      "medianMs": 1.208
+    },
+    "legacyConditions": {
+      "input": 600,
+      "results": 500,
+      "duplicatesRemaining": 250,
+      "falseMergedFacilities": 100,
+      "medianMs": 49.529
+    },
+    "legacyTour": {
+      "input": 600,
+      "results": 500,
+      "duplicatesRemaining": 250,
+      "falseMergedFacilities": 100,
+      "medianMs": 1.635
+    },
+    "common": {
+      "input": 600,
+      "results": 350,
+      "duplicatesRemaining": 0,
+      "falseMergedFacilities": 0,
+      "medianMs": 11.213
+    }
+  },
+  "dense1000": {
+    "legacyConditions": {
+      "input": 1000,
+      "results": 1000,
+      "recordsCombined": 0,
+      "medianMs": 97.851
+    },
+    "common": {
+      "input": 1000,
+      "results": 1000,
+      "recordsCombined": 0,
+      "medianMs": 7.627
+    }
+  },
+  "live": {
+    "responses": [
+      {
+        "provider": "Photon",
+        "query": "井の頭恩賜公園",
+        "records": 6
+      },
+      {
+        "provider": "Photon",
+        "query": "新宿御苑",
+        "records": 26
+      },
+      {
+        "provider": "Photon",
+        "query": "明治神宮",
+        "records": 40
+      },
+      {
+        "provider": "Photon",
+        "query": "秋津駅",
+        "records": 5
+      },
+      {
+        "provider": "Overpass",
+        "error": "406"
+      }
+    ],
+    "localRecords": 38,
+    "legacyName": {
+      "input": 115,
+      "results": 111,
+      "recordsCombined": 4,
+      "medianMs": 0.079
+    },
+    "legacyConditions": {
+      "input": 115,
+      "results": 101,
+      "recordsCombined": 14,
+      "medianMs": 1.49
+    },
+    "common": {
+      "input": 115,
+      "results": 109,
+      "recordsCombined": 6,
+      "medianMs": 0.974
+    },
+    "merged": [
+      {
+        "name": "新宿御苑",
+        "ids": [
+          "osm:way/15772074",
+          "bundled:wikidata:wikidata/Q776863"
+        ],
+        "lat": 35.6850716,
+        "lng": 139.7095466
+      },
+      {
+        "name": "明治神宮",
+        "ids": [
+          "osm:way/469908925",
+          "bundled:wikidata:wikidata/Q287165"
+        ],
+        "lat": 35.6748417,
+        "lng": 139.6996266
+      }
+    ],
+    "rawTemporaryFile": "C:\\Users\\yakin\\AppData\\Local\\Temp\\walking-facility-dedup-live.json"
+  }
+}

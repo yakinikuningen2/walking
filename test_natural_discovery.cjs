@@ -15,6 +15,7 @@ function distance(a,b) {
 function setup() {
   let now=1000000;const queries=[];
   const c=vm.createContext({URL,URLSearchParams,AbortController,DOMException,Map,Set,Math,Number,Object,setTimeout,clearTimeout,
+    PlaceIdentity: require('./static/js/place-identity.js'),
     Date:class extends Date{static now(){return now}},map:{distance},
     validCoordinates:(lat,lng)=>typeof lat==='number'&&Number.isFinite(lat)&&Math.abs(lat)<=90&&typeof lng==='number'&&Number.isFinite(lng)&&Math.abs(lng)<=180,
     DISCOVERY_LOCAL_SOURCES:[],DISCOVERY_LOCAL_CLASSES:{},bundledDiscoveryCache:new Map(),bundledDiscoveryAttributions:new Set(),shrineIndexCache:new Map(),

@@ -1,0 +1,12 @@
+id,name,category,provider,before,after,before_source,after_source
+control/park/10310866,中央公園,same-name-park,GeoNames CC BY 4.0,none,none,,
+control/park/10352587,中央公園,same-name-park,GeoNames CC BY 4.0,none,none,,
+control/park/10427225,城山公園,same-name-park,GeoNames CC BY 4.0,found,found,https://commons.wikimedia.org/wiki/File:%E7%B6%BE%E7%80%AC%E5%B8%82_%E5%9F%8E%E5%B1%B1%E5%85%AC%E5%9C%92_-_panoramio.jpg,https://commons.wikimedia.org/wiki/File:%E7%B6%BE%E7%80%AC%E5%B8%82_%E5%9F%8E%E5%B1%B1%E5%85%AC%E5%9C%92_-_panoramio.jpg
+control/park/11016605,城山公園,same-name-park,GeoNames CC BY 4.0,found,found,https://commons.wikimedia.org/wiki/File:Shiroyama_ooike2.jpg,https://commons.wikimedia.org/wiki/File:Shiroyama_ooike2.jpg
+control/park/8561312,城山公園,same-name-park,GeoNames CC BY 4.0,none,none,,
+control/temple/10254124,城泉寺,temple,GeoNames CC BY 4.0,none,none,,
+control/temple/10256112,願成寺,temple,GeoNames CC BY 4.0,none,none,,
+control/nihon-category,日本大学文理学部,category-reference,OSM via Photon ODbL,none,found,,https://commons.wikimedia.org/wiki/File:Nihon_univ_college_of_humanities_and_sciences_2009.JPG
+control/nihon-short-name,日大文理,alias,OSM via Photon ODbL,none,found,,https://commons.wikimedia.org/wiki/File:Nihon_univ_college_of_humanities_and_sciences_2009.JPG
+control/wrong-entity-coordinate,明治神宮,negative-control,Synthetic wrong-link test,none,none,,
+control/small-park/467845844,公園,small-park,OpenStreetMap via Photon ODbL,none,none,,
