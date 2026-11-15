@@ -1027,10 +1027,17 @@ test('removed legacy walking-place option restores as unspecified while preservi
   }
   c.ui = new Proxy({}, { get: (obj, key) => obj[key] ||= {} });
   c.updateDiscoveryTimeRange = () => {}; c.renderDiscoveryResults = places => { c.restored = places; };
+  c.setDiscoveryMode = mode => { c.restoredMode = mode; };
   c.discoveryDisplayedCount = () => 1;
   vm.runInContext(source.slice(source.indexOf('function restoreDiscoverySearch('), source.indexOf('function finishDiscoverySearch(')), c);
   c.restoreDiscoverySearch({ id: 'old', criteria: { ...criteria, kind: 'places' }, places: [{ key: 'saved' }], elapsedSeconds: 1 }, false);
   assert.equal(c.ui['discovery-kind'].value, 'any'); assert.equal(c.restored[0].key, 'saved');
+  assert.equal(c.restoredMode, 'conditions');
+  c.restoreDiscoverySearch({ id: 'random', criteria: { ...criteria, kind: 'random', minutes: 150 }, places: [{key:'random'}], elapsedSeconds: 1 }, false);
+  assert.equal(c.restoredMode, 'random');
+  assert.equal(c.ui['random-hours'].value, 2);
+  assert.equal(c.ui['random-minutes'].value, 0);
+  assert.equal(c.ui['discovery-kind'].value, 'any', 'random history must preserve the other tab settings');
   assert.equal(vm.runInContext('DISCOVERY_SEARCH_TIMEOUT_MS', c), 60000);
 });
 

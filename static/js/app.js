@@ -246,6 +246,7 @@ const ui = Object.fromEntries([
   "discovery-screen", "discovery-content", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
   "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
   "discovery-direction", "discovery-random", "discovery-random-cancel", "discovery-search-label",
+  "discovery-conditions-tab", "random-form", "random-hours", "random-minutes", "random-time-range", "random-submit",
   "discovery-submit", "discovery-cancel", "discovery-status", "discovery-elapsed-label", "discovery-elapsed", "discovery-results",
   "discovery-more",
   "discovery-history", "discovery-history-list",
@@ -1903,6 +1904,8 @@ function syncRouteLayers() {
     }).addTo(map));
   }
   routeLayer = routeLayers.get(activeRouteKind) || null;
+  // The blue base route remains readable where alternatives overlap it.
+  (routeLayers.get("standard") || routeLayers.get("ors_standard"))?.bringToFront();
 }
 
 function renderRouteChoices() {
@@ -2791,14 +2794,20 @@ function renderDiscoveryHistory() {
 function restoreDiscoverySearch(entry, focus = true) {
   if (discoveryRequest) stopDiscovery();
   const minutes = entry.criteria.minutes - 30;
-  ui["discovery-kind"].value = entry.criteria.kind === "random" ? "" : entry.criteria.kind === "places" ? "any" : entry.criteria.kind;
   ui["discovery-search-label"].textContent = entry.criteria.kind === "random" ? "ランダム検索" : "条件検索";
-  ui["discovery-hours"].value = Math.floor(minutes / 60);
-  ui["discovery-minutes"].value = minutes % 60;
-  ui["discovery-ambience"].value = entry.criteria.ambience;
-  ui["discovery-direction"].value = ["n", "e", "s", "w"].includes(entry.criteria.direction) ? entry.criteria.direction : "any";
-  ui["discovery-keyword"].value = entry.criteria.keyword;
-  ui["discovery-high-elevation"].checked = !!entry.criteria.highElevation;
+  if (entry.criteria.kind === "random") {
+    ui["random-hours"].value = Math.floor(minutes / 60);
+    ui["random-minutes"].value = minutes % 60;
+  } else {
+    ui["discovery-kind"].value = entry.criteria.kind === "places" ? "any" : entry.criteria.kind;
+    ui["discovery-hours"].value = Math.floor(minutes / 60);
+    ui["discovery-minutes"].value = minutes % 60;
+    ui["discovery-ambience"].value = entry.criteria.ambience;
+    ui["discovery-direction"].value = ["n", "e", "s", "w"].includes(entry.criteria.direction) ? entry.criteria.direction : "any";
+    ui["discovery-keyword"].value = entry.criteria.keyword;
+    ui["discovery-high-elevation"].checked = !!entry.criteria.highElevation;
+  }
+  setDiscoveryMode(entry.criteria.kind === "random" ? "random" : "conditions");
   ui["discovery-history"].open = false;
   updateDiscoveryTimeRange();
   const request = { historical: true, historyId: entry.id, criteria: entry.criteria, start: entry.start,
@@ -2822,20 +2831,21 @@ function updateDiscoveryElapsed() {
   ui["discovery-elapsed"].textContent = `${seconds}秒`;
   if (discoveryRequest) {
     const random = discoveryRequest.criteria.kind === "random";
-    ui[random ? "discovery-random" : "discovery-submit"].textContent = `${random ? "ランダム検索中" : "条件検索中"}… ${seconds}秒`;
+    ui[random ? "random-submit" : "discovery-submit"].textContent = `${random ? "ランダム検索中" : "条件検索中"}… ${seconds}秒`;
   }
   if (discoveryRequest?.progressStage) renderDiscoveryProgress(discoveryRequest);
 }
 
 function setDiscoveryBusy(busy) {
   ui["discovery-submit"].disabled = busy;
-  ui["discovery-random"].disabled = busy;
+  ui["random-submit"].disabled = busy;
   ui["discovery-submit"].textContent = busy && discoveryRequest?.criteria.kind !== "random" ? "条件検索中… 0秒" : "条件に合う場所を探す";
-  ui["discovery-random"].textContent = busy && discoveryRequest?.criteria.kind === "random" ? "ランダム検索中… 0秒" : "ランダムに探す";
+  ui["random-submit"].textContent = busy && discoveryRequest?.criteria.kind === "random" ? "ランダム検索中… 0秒" : "ランダムに探す";
   ui["discovery-cancel"].disabled = !busy;
   ui["discovery-random-cancel"].disabled = !busy;
   if (busy) ui["discovery-form"].setAttribute("aria-busy", "true");
   else ui["discovery-form"].removeAttribute("aria-busy");
+  ui["random-form"].setAttribute("aria-busy", String(busy));
   clearTimeout(discoveryElapsedTimer);
   discoveryElapsedTimer = null;
   if (busy) {
@@ -2881,7 +2891,7 @@ function stopDiscovery() {
   setDiscoveryBusy(false);
   const count = ui["discovery-results"].children.length;
   message(ui["discovery-status"], count ? `${count}件の候補を表示しています。` : "検索を中止しました。");
-  if (restoreFocus) ui[focusedCancel === ui["discovery-random-cancel"] ? "discovery-random" : "discovery-submit"].focus({ preventScroll: true });
+  if (restoreFocus) ui[focusedCancel === ui["discovery-random-cancel"] ? "random-submit" : "discovery-submit"].focus({ preventScroll: true });
 }
 
 function showDiscoveryResults(request) {
@@ -4191,6 +4201,12 @@ function updateCandidateActions(item, place) {
   save.onclick = () => { setDiscoveryOpen(false, false); selectPlace(place); };
 }
 
+function candidateDistanceElement(place) {
+  const span = textElement("span", "距離を確認中…", "candidate-metrics candidate-road-metrics");
+  span.walkingPlace = place;
+  return span;
+}
+
 function renderDiscoveryResults(results, request) {
   const list = ui["discovery-results"];
   const highElevation = discoveryPreferences(request.criteria).highElevation;
@@ -4211,8 +4227,9 @@ function renderDiscoveryResults(results, request) {
   }
   for (const [index, place] of visible.entries()) {
     let button = [...list.querySelectorAll("[data-place-key]")].find((item) => item.dataset.placeKey === place.key);
-    const detail = `${place.kindLabel} ／ 検索時の目安 約${routeDuration(place.duration)}・${routeDistance(place.distance)}`;
+    const detail = place.kindLabel;
     const content = placeButton(place, detail, "discovery-result");
+    content.append(candidateDistanceElement(place));
     if (highElevation && validDiscoveryElevation(place.elevation)) content.append(textElement("span", `標高 約${Math.round(place.elevation).toLocaleString("ja-JP")} m`, "place-detail"));
     const matched = [place.free ? "無料" : "", place.toilets ? "トイレ100m以内" : "", place.benches ? "ベンチ100m以内" : ""].filter(Boolean);
     if (matched.length) content.append(textElement("span", matched.join("・"), "place-detail"));
@@ -4228,6 +4245,10 @@ function renderDiscoveryResults(results, request) {
       button.dataset.placeKey = place.key;
       item.append(button);
     } else {
+      const metrics = button.querySelector(".candidate-road-metrics");
+      if (metrics?.walkingPlace?.lat === place.lat && metrics.walkingPlace.lng === place.lng) {
+        content.querySelector(".candidate-road-metrics").replaceWith(metrics);
+      }
       button.replaceChildren(...content.childNodes);
     }
     button.onclick = () => {
@@ -4325,9 +4346,9 @@ ui["discovery-screen"].addEventListener("keydown", (event) => {
     setDiscoveryOpen(false);
   }
 });
-function discoveryTimeWindow() {
-  const hours = ui["discovery-hours"].valueAsNumber;
-  const minutePart = ui["discovery-minutes"].valueAsNumber;
+function discoveryTimeWindow(random = false) {
+  const hours = ui[random ? "random-hours" : "discovery-hours"].valueAsNumber;
+  const minutePart = ui[random ? "random-minutes" : "discovery-minutes"].valueAsNumber;
   const minutes = hours * 60 + minutePart;
   if (!Number.isInteger(hours) || hours < 0 || !Number.isInteger(minutePart) || minutePart < 0 || minutePart > 59
     || !Number.isFinite(minutes) || minutes < 5) return null;
@@ -4338,6 +4359,8 @@ function updateDiscoveryTimeRange() {
   const time = discoveryTimeWindow();
   message(ui["discovery-time-range"], time
     ? `${time.minMinutes ? routeDuration(time.minMinutes * 60) : "0分"}〜${routeDuration(time.minutes * 60)}の場所を探します。` : "");
+  const random = discoveryTimeWindow(true);
+  message(ui["random-time-range"], random ? `${random.minMinutes ? routeDuration(random.minMinutes * 60) : "0分"}〜${routeDuration(random.minutes * 60)}の場所を探します。` : "");
 }
 
 for (const type of ["input", "change"]) ui["discovery-form"].addEventListener(type, () => {
@@ -4370,12 +4393,32 @@ ui["discovery-form"].addEventListener("submit", (event) => {
   beginDiscoverySearch(criteria);
 });
 
-ui["discovery-random"].addEventListener("click", () => {
-  if (discoveryRequest || !ui["discovery-hours"].reportValidity() || !ui["discovery-minutes"].reportValidity()) return;
-  const time = discoveryTimeWindow();
+function setDiscoveryMode(mode) {
+  const random = mode === "random";
+  ui["discovery-form"].hidden = random;
+  ui["random-form"].hidden = !random;
+  for (const [id, selected] of [["discovery-conditions-tab", !random], ["discovery-random", random]]) {
+    ui[id].setAttribute("aria-selected", String(selected));
+    ui[id].tabIndex = selected ? 0 : -1;
+  }
+}
+ui["discovery-random"].addEventListener("click", () => setDiscoveryMode("random"));
+ui["discovery-conditions-tab"].addEventListener("click", () => setDiscoveryMode("conditions"));
+for (const id of ["discovery-random", "discovery-conditions-tab"]) ui[id].addEventListener("keydown", event => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const random = event.key === "End" || (event.key !== "Home" && id !== "discovery-random");
+  setDiscoveryMode(random ? "random" : "conditions");
+  ui[random ? "discovery-random" : "discovery-conditions-tab"].focus();
+});
+for (const type of ["input", "change"]) ui["random-form"].addEventListener(type, () => { cancelDiscovery(); updateDiscoveryTimeRange(); });
+ui["random-form"].addEventListener("submit", event => {
+  event.preventDefault();
+  if (discoveryRequest || !ui["random-form"].reportValidity()) return;
+  const time = discoveryTimeWindow(true);
   if (!time) {
     message(ui["discovery-status"], "徒歩時間は5分以上で指定してください。", true);
-    ui["discovery-hours"].focus({ preventScroll: true });
+    ui["random-hours"].focus({ preventScroll: true });
     return;
   }
   beginDiscoverySearch(randomDiscoveryCriteria(time, currentWalkingSpeed().kmh));
@@ -4403,12 +4446,8 @@ function renderSearch(places, context = placeSearch) {
     if (context !== startSearch) {
       item.className = "candidate-card";
       button.classList.add("candidate-select");
-      const start = getStartPoint();
-      const directDistance = start ? map.distance([start.lat, start.lng], [place.lat, place.lng]) : null;
-      const distance = directDistance === null ? null : directDistance * DISCOVERY_DISTANCE_FACTOR;
-      const duration = distance === null ? null : distance / (currentWalkingSpeed().kmh / 3.6);
-      button.append(textElement("span", `${place.kindLabel || "場所"}${distance === null ? " ／ 出発地点未設定" : ` ／ 約${routeDistance(distance)}・徒歩約${routeDuration(duration)}（距離からの推定）`}`, "candidate-metrics"));
-      appendCandidateEvidence(button, { ...place, directDistance, distance, duration });
+      button.append(textElement("span", place.kindLabel || "場所", "candidate-metrics"), candidateDistanceElement(place));
+      appendCandidateEvidence(button, place);
       updateCandidateActions(item, place);
     }
     context.results.append(item);

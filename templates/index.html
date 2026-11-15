@@ -66,7 +66,8 @@
           <section class="destination-condition-search" aria-labelledby="destination-condition-heading">
             <h3 id="destination-condition-heading" class="destination-search-title">散歩の条件</h3>
           <details id="discovery-history" class="discovery-history" hidden><summary>検索履歴</summary><ul id="discovery-history-list" class="place-list" aria-label="過去の条件検索"></ul></details>
-          <form id="discovery-form" aria-labelledby="destination-condition-heading">
+          <div class="discovery-mode-tabs" role="tablist" aria-label="散歩先の探し方"><button id="discovery-conditions-tab" type="button" role="tab" aria-selected="true" aria-controls="discovery-form">条件検索</button><button id="discovery-random" type="button" role="tab" aria-selected="false" aria-controls="random-form" tabindex="-1">ランダムに探す</button></div>
+          <form id="discovery-form" role="tabpanel" aria-labelledby="discovery-conditions-tab">
             <fieldset class="discovery-time">
               <legend>片道の歩く時間</legend>
               <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
@@ -87,8 +88,12 @@
             <label for="discovery-keyword">希望・キーワード <span class="optional">（任意）</span></label>
             <input id="discovery-keyword" type="text" maxlength="80" placeholder="例：田舎 森" />
             </div></details>
-            <div class="settings-actions random-actions"><button id="discovery-random-cancel" type="button" disabled>中止</button><button id="discovery-random" type="button">ランダムに探す</button></div>
             <div class="settings-actions primary-search-actions"><button id="discovery-cancel" type="button" disabled>中止</button><button id="discovery-submit" type="submit" class="primary-button">条件に合う場所を探す</button></div>
+          </form>
+          <form id="random-form" role="tabpanel" aria-labelledby="discovery-random" hidden>
+            <fieldset class="discovery-time"><legend>片道の歩く時間</legend><div class="discovery-time-row"><label><input id="random-hours" type="number" min="0" step="1" value="0" aria-label="ランダム検索の時間" aria-describedby="random-time-range" required />時間</label><label><input id="random-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="ランダム検索の分" aria-describedby="random-time-range" required />分</label></div></fieldset>
+            <p id="random-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
+            <div class="settings-actions primary-search-actions"><button id="discovery-random-cancel" type="button" disabled>中止</button><button id="random-submit" type="submit" class="primary-button">ランダムに探す</button></div>
           </form>
           <div class="results-heading"><h3>散歩先の候補</h3><span id="discovery-count" aria-live="off">0件</span></div>
           <ul id="discovery-results" class="place-list" aria-label="希望に近い目的地"></ul>
@@ -275,6 +280,7 @@
     ></script>
     <script src="../static/js/walk-features.js"></script>
     <script src="../static/js/app.js"></script>
+    <script src="../static/js/candidate-distances.js"></script>
     <script src="../static/js/natural-discovery.js"></script>
     <script src="../static/js/route-nearby.js"></script>
     <script src="../static/js/tour-core.js"></script>
