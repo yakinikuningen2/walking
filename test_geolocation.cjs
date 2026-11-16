@@ -33,6 +33,7 @@ function setup({ watch = true, secure = true } = {}) {
     },
     validCoordinates(lat, lng) { return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180; },
     setLocationBusy(value) { c.locating = value; },
+    pauseNavigationRefresh() {},
     message(target, value) { target.textContent = value; },
     routeLocationFailed() { failures.push('route'); },
     locationFailed(error) {

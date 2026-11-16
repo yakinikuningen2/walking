@@ -143,9 +143,9 @@ const NEARBY_CONVENIENCE_RADIUS = 1000;
 const NEARBY_CONVENIENCE_CACHE_RADIUS = 1200;
 const NEARBY_CONVENIENCE_TIMEOUT_MS = 10000;
 const NEARBY_CONVENIENCE_LOOKUP_TIMEOUT_MS = 5000;
-const ROUTE_PROGRESS_REFRESH_METERS = 50;
+const ROUTE_PROGRESS_REFRESH_METERS = 30;
 const ROUTE_DEVIATION_METERS = 50;
-const ROUTE_REFRESH_INTERVAL_MS = 20000;
+const ROUTE_REFRESH_INTERVAL_MS = 10000;
 const ROUTE_POSITION_CONFIRM_MS = 2000;
 const ROUTE_ENDPOINT = "https://valhalla1.openstreetmap.de/route";
 const MAP_DATA_ENDPOINT = "https://overpass.private.coffee/api/interpreter";
@@ -246,7 +246,7 @@ const ui = Object.fromEntries([
   "route-button", "route-status", "route-panel", "route-summary", "route-directions",
   "route-steps", "clear-route", "route-options", "route-choice-note",
   "scenic-route-button", "roundtrip-route-button",
-  "toggle-route-details", "route-details-content",
+  "toggle-route-details", "route-details-content", "route-map-actions", "refresh-route-on-map",
   "discovery-screen", "discovery-content", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
   "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
   "discovery-direction", "discovery-random", "discovery-random-cancel", "discovery-search-label",
@@ -287,6 +287,8 @@ let locationPermissionDenied = false;
 let currentHeadingMarker = null;
 let headingReading = null;
 let headingListening = false;
+let headingPermissionRequest = null;
+let headingPermission = null;
 let searchedStart = null;
 let startMarker = null;
 let selectingStartOnMap = false;
@@ -300,6 +302,7 @@ let roundTripOrigin = null;
 let roundTripDestinationReached = false;
 let routeContext = null;
 let routeNavigation = null;
+let routeNavigationTimer = null;
 let lastAutomaticRouteAt = -Infinity;
 let routeAwaitingLocation = false;
 let routeLayer = null;
@@ -860,8 +863,8 @@ function renderCurrentHeading() {
   if (!currentHeadingMarker) {
     currentHeadingMarker = L.marker([currentPosition.lat, currentPosition.lng], {
       icon: L.divIcon({
-        className: "current-heading-icon", iconSize: [48, 48], iconAnchor: [24, 24],
-        html: '<span class="current-heading-pointer" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 3 33 19 24 15 15 19Z" fill="#2476cf" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></span>',
+        className: "current-heading-icon", iconSize: [56, 56], iconAnchor: [28, 28],
+        html: '<span class="current-heading-pointer" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M28 2 39 24 28 19 17 24Z" fill="#2476cf" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></span>',
       }),
       interactive: false, keyboard: false, zIndexOffset: 1000,
     }).addTo(map);
@@ -901,6 +904,31 @@ function startHeadingUpdates() {
 function clearCurrentHeading() {
   headingReading = null;
   renderCurrentHeading();
+}
+
+async function enableHeadingFromGesture() {
+  const sensor = window.DeviceOrientationEvent;
+  if (window.isSecureContext === false || !sensor) return false;
+  if (headingReading || headingPermission === "granted" || typeof sensor.requestPermission !== "function") {
+    startHeadingUpdates();
+    return true;
+  }
+  if (headingPermission === "denied") return false;
+  if (headingPermissionRequest) return headingPermissionRequest.then(state => state === "granted", () => false);
+  // Safari needs user activation. Absolute orientation includes the magnetometer.
+  try {
+    headingPermissionRequest = sensor.requestPermission(true);
+    headingPermission = await headingPermissionRequest;
+    if (headingPermission === "granted") startHeadingUpdates();
+    else clearCurrentHeading();
+    return headingPermission === "granted";
+  } catch {
+    // A blocked sensor must not interrupt location or navigation.
+    clearCurrentHeading();
+    return false;
+  } finally {
+    headingPermissionRequest = null;
+  }
 }
 
 if (window.isSecureContext !== false && window.DeviceOrientationEvent) {
@@ -977,6 +1005,7 @@ function locationFailed(error) {
 }
 
 function stopWatchingLocation() {
+  pauseNavigationRefresh();
   locationWatchGeneration++;
   if (locationWatchId !== null) navigator.geolocation.clearWatch(locationWatchId);
   locationWatchId = null;
@@ -1139,11 +1168,13 @@ function requestCurrentLocation({ initial = false, recenter = false, preserveVie
 }
 
 ui["location-button"].addEventListener("click", () => {
+  void enableHeadingFromGesture();
   if (currentPosition) focusPlace(currentPosition, { keepZoom: true, preserveFollowing: true });
   requestCurrentLocation({ recenter: true });
 });
 
 ui["follow-location"].addEventListener("click", () => {
+  void enableHeadingFromGesture();
   setLocationFollowing(!followingLocation);
   if (!followingLocation) return;
   if (currentPosition) focusPlace(currentPosition, { keepZoom: true, preserveFollowing: true });
@@ -1675,13 +1706,14 @@ function destinationButton(place) {
 }
 
 function setRouteBusy(busy) {
-  for (const id of ["route-button", "scenic-route-button", "roundtrip-route-button"]) ui[id].disabled = busy;
+  for (const id of ["route-button", "scenic-route-button", "roundtrip-route-button", "refresh-route-on-map"]) ui[id].disabled = busy;
   ui["route-button"].textContent = busy ? "取得中…" : routeLayer && walkingRouteMode === "standard" ? "ルートを更新" : "徒歩ルートを表示";
   if (busy) ui["route-button"].setAttribute("aria-busy", "true");
   else ui["route-button"].removeAttribute("aria-busy");
 }
 
 function cancelRouteRequest() {
+  cancelNavigationRefresh();
   routeVersion += 1;
   clearTimeout(routeTimer);
   routeTimer = null;
@@ -1695,6 +1727,7 @@ function cancelRouteRequest() {
 }
 
 function clearRouteDisplay() {
+  cancelNavigationRefresh();
   routeNavigation = null;
   for (const layer of routeLayers.values()) layer.remove();
   routeLayers.clear();
@@ -1713,6 +1746,7 @@ function clearRouteDisplay() {
 
 function setRouteDetailsOpen(open, focus = false) {
   ui["route-details-content"].hidden = !open;
+  ui["route-map-actions"].hidden = !routeEnabled;
   ui["toggle-route-details"].hidden = !routeEnabled;
   ui["toggle-route-details"].textContent = open ? "詳細を閉じる" : "ルート詳細";
   ui["toggle-route-details"].setAttribute("aria-expanded", String(open));
@@ -1721,6 +1755,14 @@ function setRouteDetailsOpen(open, focus = false) {
 
 ui["toggle-route-details"].addEventListener("click", () => {
   setRouteDetailsOpen(ui["route-details-content"].hidden);
+});
+
+ui["refresh-route-on-map"].addEventListener("click", () => {
+  if (!routeEnabled || !destination || routeRequest || routeTimer !== null || !getStartPoint()) return;
+  lastAutomaticRouteAt = Date.now();
+  // Use the background replacement path so the map, details and old route stay
+  // visible while the user explicitly requests a fresh route.
+  requestWalkingRoute({ automatic: true });
 });
 
 function stopWalkingRoute() {
@@ -1783,7 +1825,32 @@ function walkingRoutePosition(place, route, minAlong = 0, maxAlong = Infinity) {
   return { distance: closest * Math.cos(place.lat * Math.PI / 180), along, total };
 }
 
+function cancelNavigationRefresh() {
+  clearTimeout(routeNavigationTimer);
+  routeNavigationTimer = null;
+}
+
+function pauseNavigationRefresh() {
+  cancelNavigationRefresh();
+  if (routeNavigation) routeNavigation.pending = null;
+}
+
+function scheduleNavigationRefresh(position, delay) {
+  // Re-evaluate a confirmed fix after the cooldown even without another GPS fix.
+  // This never polls the routing API or moves the map camera.
+  routeNavigationTimer = setTimeout(() => {
+    routeNavigationTimer = null;
+    updateWalkingRouteFromLocation(position);
+  }, Math.max(1, delay));
+}
+
+window.addEventListener("pagehide", pauseNavigationRefresh);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseNavigationRefresh();
+});
+
 function updateWalkingRouteFromLocation(position) {
+  cancelNavigationRefresh();
   if (typeof document !== "undefined" && document.hidden) return;
   if (!routeEnabled || !destination || searchedStart || routeAwaitingLocation || !currentPosition) return;
   const route = routeChoices.get(activeRouteKind)?.route;
@@ -1819,9 +1886,20 @@ function updateWalkingRouteFromLocation(position) {
   const reason = offRoute ? "deviation" : route.roundTrip && roundTripDestinationReached && route.destinationDistance > 0
     ? "return" : progress.along >= ROUTE_PROGRESS_REFRESH_METERS ? "progress" : null;
   if (!reason) { state.pending = null; return; }
-  if (state.pending?.reason !== reason) { state.pending = { reason, since: now }; return; }
-  if (now - state.pending.since < ROUTE_POSITION_CONFIRM_MS || now - lastAutomaticRouteAt < ROUTE_REFRESH_INTERVAL_MS) return;
-  if (routeTimer !== null || routeRequest?.replaceExisting) return;
+  const timestamp = Number.isFinite(position.timestamp) ? position.timestamp : now;
+  if (state.pending?.reason !== reason) {
+    state.pending = { reason, since: now, timestamp, confirmed: false };
+    return;
+  }
+  if (timestamp > state.pending.timestamp) state.pending.confirmed = true;
+  if (!state.pending.confirmed) return;
+  const wait = Math.max(ROUTE_POSITION_CONFIRM_MS - (now - state.pending.since),
+    ROUTE_REFRESH_INTERVAL_MS - (now - lastAutomaticRouteAt));
+  if (wait > 0) { scheduleNavigationRefresh(position, wait); return; }
+  if (routeTimer !== null || routeRequest) {
+    scheduleNavigationRefresh(position, 1000);
+    return;
+  }
   lastAutomaticRouteAt = now;
   state.pending = null;
   if (typeof NearbyRouting !== "undefined") NearbyRouting.advance(route,progress,offRoute);

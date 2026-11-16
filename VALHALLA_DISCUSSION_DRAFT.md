@@ -47,7 +47,7 @@ We also limit work in the client:
 - no route queries simply to open or pan/zoom the map;
 - automatic candidate road-distance lookups are limited to eight per page load, only for visible candidates; further lookups require an explicit click;
 - in-page duplicate requests share cached results; hidden cards and obsolete searches are cancelled;
-- location-based route refreshes require usable, confirmed location fixes and meaningful progress (normally 50 m) or off-route deviation, with at least 20 seconds between automatic refreshes;
+- location-based route refreshes require usable location fixes confirmed across multiple samples over at least 2 seconds and meaningful progress (normally 30 m) or off-route deviation, with at least 10 seconds between automatic refreshes; a pending confirmed fix is rechecked after the cooldown without requiring the map to be reopened, and pending timers stop when the page is hidden;
 - automatic route refreshes stop when the page is hidden and do not regenerate unrelated route types;
 - multi-stop generation is user initiated and bounded to 14 routing calls and 45 seconds per course-generation operation;
 - long-route recovery is bounded to 16 fetched segments, a small number of locate batches, 120 seconds for segmentation, and 150 seconds for the overall client operation. We validate walking access and continuity and never draw invented straight-line connectors.

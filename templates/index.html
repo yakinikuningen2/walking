@@ -207,7 +207,6 @@
       </div>
 </details>
       <div class="location-controls">
-        <button id="toggle-route-details" class="route-details-toggle" type="button" aria-expanded="true" aria-controls="route-details-content" hidden>詳細を閉じる</button>
         <div id="route-details-content" class="route-details-content">
           <div id="destination-panel" class="destination-panel" role="group" aria-labelledby="destination-heading" hidden>
             <p id="destination-heading" class="destination-heading">目的地</p>
@@ -234,6 +233,10 @@
             </details>
             <button id="clear-route" type="button" class="secondary">案内を終了</button>
           </div>
+        </div>
+        <div id="route-map-actions" class="route-map-actions" hidden>
+          <button id="toggle-route-details" class="route-details-toggle" type="button" aria-expanded="true" aria-controls="route-details-content" hidden>詳細を閉じる</button>
+          <button id="refresh-route-on-map" class="route-details-toggle secondary" type="button" aria-label="ルートを更新">更新</button>
         </div>
         <p id="location-status" class="status" role="status" aria-live="polite"></p>
       </div>
