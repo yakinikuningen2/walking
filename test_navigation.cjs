@@ -5,16 +5,27 @@ const vm = require('node:vm');
 
 const source = readFileSync(`${__dirname}/static/js/app.js`, 'utf8');
 const access = JSON.parse(readFileSync(`${__dirname}/static/route-access.json`, 'utf8'));
-test('public Valhalla requests identify the app without leaking that header to other providers', async () => {
+test('Valhalla uses the controlled Python relay without direct fallback or unrelated headers', async () => {
   const calls=[];
-  const c=vm.createContext({URL,AbortController,setTimeout,clearTimeout,DISCOVERY_MAP_ENDPOINTS:[],fetchMapProxy:async()=>null,
+  const c=vm.createContext({URL,AbortController,DOMException,setTimeout,clearTimeout,MAP_PROXY_ENDPOINT:'https://app.example/api/overpass',DISCOVERY_MAP_ENDPOINTS:[],fetchMapProxy:async()=>null,
     fetch:async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>({})};}});
   vm.runInContext(source.slice(source.indexOf('async function fetchRouteJson('),source.indexOf('async function waitForRouteTurn(')),c);
-  for(const url of ['https://valhalla1.openstreetmap.de/route','https://photon.komoot.io/api/']){
+  for(const url of ['https://valhalla1.openstreetmap.de/route?json=%7B%7D','https://photon.komoot.io/api/']){
     await c.fetchRouteJson(new URL(url),{controller:new AbortController()});
   }
-  assert.equal(calls[0].options.headers['X-Client-Id'],'walking-yakinikuningen2');
+  assert.equal(calls[0].url.href,'https://app.example/api/valhalla');assert.equal(calls[0].options.method,'POST');
+  assert.equal(JSON.parse(calls[0].options.body).action,'route');assert.equal(calls[0].options.headers['X-Client-Id'],undefined);
   assert.equal(calls[1].options.headers,undefined);
+});
+
+test('an unavailable routing relay or cancelled request never falls back to a direct provider call',async()=>{
+ const calls=[],c=vm.createContext({URL,AbortController,DOMException,setTimeout,clearTimeout,MAP_PROXY_ENDPOINT:'http://127.0.0.1:8000/api/overpass',DISCOVERY_MAP_ENDPOINTS:[],
+   fetchMapProxy:()=>{throw Error('must not use map fallback')},fetch:async(url,options)=>{calls.push(url.href);return{status:404}}});
+ vm.runInContext(source.slice(source.indexOf('async function fetchRouteJson('),source.indexOf('async function waitForRouteTurn(')),c);
+ const url=new URL('https://valhalla1.openstreetmap.de/locate?json=%7B%7D');
+ await assert.rejects(c.fetchRouteJson(url,{controller:new AbortController()}),{routeCode:'ROUTING_RELAY_REQUIRED'});
+ assert.deepEqual(calls,['http://127.0.0.1:8000/api/valhalla']);
+ const controller=new AbortController();controller.abort();await assert.rejects(c.fetchRouteJson(url,{controller}),{name:'AbortError'});assert.equal(calls.length,1);
 });
 const stations = JSON.parse(readFileSync(`${__dirname}/static/stations-jp-2025-v1.json`, 'utf8'));
 const busManifest = JSON.parse(readFileSync(`${__dirname}/static/bus-stops-jp-2022-v1/index.json`, 'utf8'));

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "checked": "2026-11-15",
+  "checked": "2026-11-16",
   "program": "本アプリ独自のプログラムには、現在リポジトリ全体の利用許諾を定めるLICENSEファイルがありません。下記のデータ・ライブラリのライセンスを、プログラム全体へ適用するものではありません。",
   "datasets": [
     {
@@ -245,7 +245,7 @@
       "license": "画像ごとのCC BY／CC BY-SA（1.0・2.0・2.5・3.0・4.0）、CC0 1.0、Public Domain Mark 1.0。関連付けのWikidata構造化データはCC0。",
       "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia",
       "modified": "写真は同梱しない。Commonsの個別メタデータで著作者とライセンスを確認後、縮小画像を16:9の枠でトリミング表示。拡大画面は画像全体を表示。正式名・別名・英語名・リダイレクト・施設の所在地・座標・関連ID・施設専用カテゴリを信頼度で照合。座標なしでもID等の強い根拠があれば採用し、既知の位置矛盾、条件不明・追加制限、確認できた地図・ロゴ等は除外。周辺検索の写真は周辺の写真と表示。Wikipedia本文は住所フィールドの照合に一時利用し、表示・同梱しない。最大2件同時の遅延取得とメモリキャッシュを使用。取得先の失敗時は既存の回数・時間上限内で別手段を試し、未完了後の手動再取得では成功済み照合応答だけを期限内で再利用。失敗を写真なしとして保存しない。",
-      "attribution": "各写真の下と拡大画面に著作者・Credit・Attribution・ライセンスURL・元ファイルページ・表示上の加工内容を記載。写真の条件とプログラム・地点データの条件を区別。320px指定の表示画像とクリック時の拡大画像を分け、API応答は最大10分／96件／6MiBのサーバーメモリ内で再利用。成功した写真メタデータは同一タブのsessionStorageにも最大50件・元の24時間期限で保持。記事本文・写真バイナリは同梱・キャッシュ配布しない。"
+      "attribution": "各写真の下と拡大画面に作品名・著作者・Credit・Attribution・ライセンスURL・元ファイルページ・表示上の加工内容を記載。2026-11-16に旧版CCライセンスの作品名表示を補い、CommonsのObjectNameを優先し、未指定ならファイル名を表示。長すぎる作品名は省略して採用せず、その写真を除外。写真の条件とプログラム・地点データの条件を区別。320px指定の表示画像とクリック時の拡大画像を分け、API応答は最大10分／96件／6MiBのサーバーメモリ内で再利用。成功した写真メタデータは同一タブのsessionStorageにも最大50件・元の24時間期限で保持。記事本文・写真バイナリは同梱・キャッシュ配布しない。"
     },
     {
       "name": "自然スポットと周辺の徒歩アクセス検索",
@@ -287,16 +287,16 @@
       "additionalSources": ["https://routing.openstreetmap.de/about.html", "https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/"],
       "license": "基礎データはODbL 1.0。公開デモのfair-use条件は別。",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
-      "modified": "通常の徒歩案内、周遊、表示中の候補カードの距離取得に利用。端末内でリクエスト間隔を1秒以上に制限し、中止・件数制限・短期キャッシュを使用。X-Client-Idでアプリを識別し、地図の修正リンクを表示。端末内の制限は複数利用者全体の上限を保証しない。公式READMEには一般公開時のGitHub Discussionsへの連絡依頼があり、連絡は運営者が別途行う必要がある。ソフトウェア本体のMITライセンスは、デモサーバーの無制限利用許諾ではない。"
+      "modified": "通常の徒歩案内、周遊、候補の道のり、アクセス道路、標高に利用。ブラウザはPythonの/api/valhallaへPOSTし、提供元へ直接フォールバックしない。上流はhttps://valhalla1.openstreetmap.de/のroute・locate・heightだけに固定。X-Client-Idはwalking-ctsh.onrender.com、識別User-Agentを付ける。1プロセス全利用者で同時1件・1秒以上・45回/60秒・1000回/24時間、待機2件・最大2秒。429のRetry-Afterと停止期間を共有。成功結果は5分・64件・16MiB以内で再利用。制限はメモリ上で再起動時に失われ、複数プロセスには共有されない。候補の自動距離取得は1ページ8件まで、それ以降は手動。地図の帰属と修正リンクを維持。GitHub Discussionsへの公開利用の連絡は運営者が別途行う必要があり、コード変更だけで許諾済みとは扱わない。"
     },
     {
       "name": "openrouteserviceの徒歩ルート候補",
       "provider": "HeiGIT / OpenStreetMap contributors",
       "sourceUrl": "https://account.heigit.org/info/tos",
-      "additionalSources": ["https://ask.openrouteservice.org/t/free-plan-in-an-app-with-a-paid-tier-license-cc-by-sa-4-0-personal-data-and-attribution-questions/8079", "https://openrouteservice.org/"],
+      "additionalSources": ["https://ask.openrouteservice.org/t/free-plan-in-an-app-with-a-paid-tier-license-cc-by-sa-4-0-personal-data-and-attribution-questions/8079", "https://openrouteservice.org/", "https://ask.openrouteservice.org/t/deprecating-api-openrouteservice-org-in-favour-of-api-heigit-org/7912", "https://heigit.org/changes-in-the-openrouteservice-universe/", "https://heigit.org/privacy-policy/"],
       "license": "API結果はCC BY-SA 4.0。基礎地図のODbL・API利用規約・契約プランの制限も別途適用。",
       "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
-      "modified": "Python側の環境変数ORS_API_KEYで既存の徒歩ルート候補を取得。地図上に© openrouteservice by HeiGIT、結果のCC BY-SA 4.0と基礎地図のOSM帰属を表示。結果の加工・再配布には同ライセンス条件を適用し、プログラム全体には一括適用しない。2026-11-15に現行規約の動的本文を一時ブラウザで確認。APIの個別契約プランと利用上限は運営者による確認が必要。規約には個人データ送信禁止があり、現在地を含む座標の扱いは別途確認が必要。同意取得だけで禁止事項が免除されるとは扱わない。"
+      "modified": "PythonだけがORS_API_KEYを読み、https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojsonへAuthorizationヘッダーで送る。旧api.openrouteservice.orgへ戻す処理はない。アプリ側は1プロセス全利用者で同時1件・2秒以上・20回/60秒・500回/24時間、待機2件・最大2秒。429後の待機を共有。正常提案は5分・32件再利用。これらは契約上限の代替ではなく、個別プラン・別用途とのキー共用・再起動・複数インスタンスへの対応は運営者が確認する。地図に© openrouteservice by HeiGIT、CC BY-SA 4.0、基礎地図のOSM帰属を表示。2026-11-16に現行規約の動的本文を再確認。個人データ送信禁止があり、現在地等を含む座標が個人データに該当する場合の許容性は未確認。サーバー経由・座標丸め・利用者同意だけで禁止が解除されるとは判断しない。送信内容と保存期間はプライバシーポリシーに記載。"
     },
     {
       "name": "Leaflet 1.9.4",

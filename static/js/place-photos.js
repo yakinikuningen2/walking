@@ -116,6 +116,7 @@
   const link = (url, text) => { const a = element("a", text); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; };
   function credit(photo) {
     const caption = element("figcaption", "", "place-photo-credit");
+    caption.append(element("span", photo.title, "place-photo-attribution"));
     caption.append(element("span", `${photo.nearby ? "周辺の写真 · " : ""}${photo.author}`), document.createTextNode(" · "),
       link(photo.licenseUrl, photo.license), document.createTextNode(" · "), link(photo.sourceUrl, "出典"));
     if (photo.attribution) caption.append(element("span", photo.attribution, "place-photo-attribution"));

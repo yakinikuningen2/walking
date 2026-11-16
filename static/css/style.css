@@ -300,7 +300,7 @@ button.is-pressed:not(:disabled),summary.is-pressed{background-color:var(--contr
 .tour-line-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 12px; }
 .tour-line-legend > span { display: inline-flex; align-items: center; gap: 7px; }
 .tour-line-swatch { display: inline-block; width: 28px; height: 0; border-top: 4px solid var(--green); }
-.tour-line-swatch.return { border-top: 4px dashed var(--accent); }
+.tour-line-swatch.return { border-top: 4px solid var(--accent); }
 .tour-map-legend { margin: 0; padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
 .app-shell.tour-active .location-controls,.app-shell.tour-active .destination-map-icon,.app-shell.tour-active .tour-normal-destination { display: none; }
 @media(max-width:840px), (max-width:1080px) and (max-height:480px) {
@@ -393,3 +393,21 @@ button.is-pressed:not(:disabled),summary.is-pressed{background-color:var(--contr
 .photo-dialog figure { margin: 0; }
 .photo-dialog img { display: block; width: 100%; max-height: 65dvh; object-fit: contain; }
 @media (max-width: 700px) { .photo-dialog { padding: 12px; } }
+.nearby-place-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.leaflet-popup .nearby-place-actions { width: min(240px, calc(100vw - 104px)); }
+.nearby-place-actions button { min-width: 0; min-height: 44px; padding: 9px 10px; font-size: 13px; white-space: nowrap; }
+.nearby-action-note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted, #75857D); }
+.nearby-via-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.nearby-via-summary span { overflow-wrap: anywhere; min-width: 0; }
+.nearby-via-summary button { flex-shrink: 0; min-height: 44px; font-size: 12px; }
+.nearby-via-summary[hidden] { display: none; }
+.nearby-via-summary { flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius); background: var(--panel); }
+.nearby-via-summary span { flex: 1 1 140px; }
+.nearby-via-summary .status { flex-basis: 100%; padding: 0; border: 0; background: transparent; }
+.nearby-choice-open .location-controls { visibility: hidden; }
+.nearby-place-popup { display: flex; flex-direction: column; }
+.nearby-place-popup > .place-photo { order: 1; margin-top: 10px; }
+.candidate-distance-button { min-height: 44px; padding: 5px 10px; font-size: 12px; color: var(--green); }
+.settings-legal { margin-top: 20px; font-size: 12px; color: var(--muted); }
+.settings-legal a { display: inline-block; padding-block: 10px; color: var(--green); text-decoration: underline; }
+.onboarding-header > a { display: inline-flex; align-items: center; min-height: 44px; margin-left: auto; padding: 10px 4px; color: inherit; font-size: 12px; text-decoration: underline; }

@@ -290,8 +290,9 @@ def photo_from_page(page, nearby=False):
     # Do not omit long attribution statements or special restrictions.
     attribution = plain(meta.get("Attribution", {}).get("value", ""), 2000)
     credit = plain(meta.get("Credit", {}).get("value", ""), 2000)
+    title = plain(meta.get("ObjectName", {}).get("value", ""), 2000) or plain(page.get("title", "").removeprefix("File:"))
     if (not license_data or not author or normalized(author) in ("unknown", "unknownauthor", "anonymous", "不明", "作者不明")
-            or len(author) >= 800 or len(attribution) >= 2000 or len(credit) >= 2000):
+            or len(author) >= 800 or len(attribution) >= 2000 or len(credit) >= 2000 or len(title) >= 2000):
         return None
     if any(plain(meta.get(key, {}).get("value", "")) for key in ("Restrictions",)):
         return None
@@ -311,7 +312,7 @@ def photo_from_page(page, nearby=False):
             and not large_url.username and not large_url.password and large_url.path.startswith("/wikipedia/commons/")
             and re.search(r"\.(jpg|jpeg|png|webp)$", large_url.path, re.I)):
         large = urls[0]
-    return {"thumbnail": urls[0], "largeThumbnail": large, "sourceUrl": urls[1], "title": plain(page.get("title", "").removeprefix("File:")),
+    return {"thumbnail": urls[0], "largeThumbnail": large, "sourceUrl": urls[1], "title": title,
             "author": author, "credit": credit, "attribution": attribution,
             "license": license_data[0], "licenseUrl": license_data[1], "nearby": bool(nearby),
             "displayNote": "表示枠に合わせてトリミング", "provider": "Wikimedia Commons"}

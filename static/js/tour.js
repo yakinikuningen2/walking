@@ -12,7 +12,7 @@ const WalkingTour = (() => {
   badge.addEventListener("click",()=>document.querySelector('[data-view="tour"]').click());mapControls.append(legend,badge);appShell.append(mapControls);
   function renderLegend(target){
     target.replaceChildren();
-    for(const [kind,label,description] of [["outbound",course.settings.returnToStart?"行き":"周遊ルート","緑の実線"],...(course.settings.returnToStart?[["return","帰り","オレンジの破線"]]:[])]){
+    for(const [kind,label,description] of [["outbound",course.settings.returnToStart?"行き":"周遊ルート","緑の実線"],...(course.settings.returnToStart?[["return","帰り","オレンジの実線"]]:[])]){
       const item=document.createElement("span");item.setAttribute("aria-label",`${label}：${description}`);
       const swatch=document.createElement("span");swatch.className=`tour-line-swatch ${kind}`;swatch.setAttribute("aria-hidden","true");
       item.append(swatch,document.createTextNode(label));target.append(item);
@@ -59,7 +59,7 @@ const WalkingTour = (() => {
     // Draw each fetched leg separately; never invent straight connectors between snaps.
     const outbound=course.settings.returnToStart?course.legs.slice(0,-1):course.legs;
     const paths=[L.polyline(outbound.map(l=>l.points),{color:"#245744",weight:6,opacity:.9,interactive:false,className:"tour-outbound-line"})];
-    if(course.settings.returnToStart)paths.push(L.polyline(course.legs.at(-1).points,{color:"#E87524",weight:5,opacity:1,dashArray:"10 8",interactive:false,className:"tour-return-line"}));
+    if(course.settings.returnToStart)paths.push(L.polyline(course.legs.at(-1).points,{color:"#E87524",weight:5,opacity:1,interactive:false,className:"tour-return-line"}));
     line=L.featureGroup(paths).addTo(map);
     L.circleMarker([course.start.lat,course.start.lng],{radius:7,color:"#fff",weight:2,fillColor:"#267DCE",fillOpacity:1}).addTo(markers).bindTooltip(textElement("span",course.start.name));
     const first=course.stops.find(p=>!course.visited.includes(p.key));

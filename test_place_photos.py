@@ -55,6 +55,18 @@ class PhotoTests(unittest.TestCase):
         p["imageinfo"][0]["extmetadata"]["Restrictions"] = {"value": "Special use restrictions"}
         self.assertIsNone(photos.photo_from_page(p))
 
+    def test_old_cc_license_retains_the_supplied_work_title_without_html_or_silent_truncation(self):
+        p = page()
+        meta = p["imageinfo"][0]["extmetadata"]
+        meta["LicenseUrl"] = {"value": "https://creativecommons.org/licenses/by-sa/2.0/"}
+        meta["ObjectName"] = {"value": "<b>Morning &amp; Trees</b>"}
+        photo = photos.photo_from_page(p)
+        self.assertEqual(photo["title"], "Morning & Trees")
+        self.assertEqual(photo["license"], "CC BY-SA 2.0")
+        meta["ObjectName"] = {"value": "x" * 2001}
+        self.assertIsNone(photos.photo_from_page(p))
+        self.assertEqual(photos.photo_from_page(page())["title"], "Park.jpg")
+
     def test_licensed_maps_and_logos_are_not_counted_as_destination_photos(self):
         p = page(); p["title"] = "File:Japan Kyoto city urban topographic map.webp"
         self.assertIsNone(photos.photo_from_page(p))

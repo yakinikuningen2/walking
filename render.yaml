@@ -9,3 +9,5 @@ services:
 
 # Set ORS_API_KEY in Render's Environment settings to enable ORS routes.
 # API keys must never be committed to this file.
+# Keep one Python process/instance: routing admission budgets are shared in RAM.
+# Review API_USAGE.md before scaling; budgets reset on process restart.

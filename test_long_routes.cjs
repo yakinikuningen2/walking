@@ -117,6 +117,7 @@ function appContext(extra={}){
   currentWalkingSpeed:()=>({kmh:4}),prepareRouteReplacement(){},routesEquivalent:()=>false,
   displayWalkingRoute:(route,kind)=>{c.shown=route;c.routeLayer={};choices.set(kind,{route})},...extra});
  vm.runInContext(app.slice(app.indexOf('function routeErrorMessage('),app.indexOf('function abortableRouteDelay(')),c);
+ vm.runInContext(app.slice(app.indexOf('async function locateWalkingWaypoints('),app.indexOf('async function recoverLongWalkingRoute(')),c);
  vm.runInContext(app.slice(app.indexOf('async function fetchWalkingRoute('),app.indexOf('function beginWalkingRoute(')),c);
  return c;
 }

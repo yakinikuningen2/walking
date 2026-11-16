@@ -4,6 +4,14 @@ const {create}=require('./static/js/candidate-distances.js');
 const start={lat:35.68,lng:139.76},end={lat:35.69,lng:139.77};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
+test('automatic card lookups have a finite budget; cached results and explicit requests remain available',async()=>{
+ let calls=0;const service=create({automaticLimit:2,route:async()=>({distance:++calls*100,duration:60})});
+ await service.get(start,end,4);await service.get(start,{...end,lat:35.7},4);
+ await assert.rejects(service.get(start,{...end,lat:35.8},4),{routeCode:'AutoDistanceLimit'});assert.equal(calls,2);
+ await service.get(start,end,4);assert.equal(calls,2);
+ await service.get(start,{...end,lat:35.8},4,undefined,{manual:true});assert.equal(calls,3);
+});
+
 test('road metrics use provider values, deduplicate requests and cache no geometry',async()=>{
   let calls=0,release;
   const service=create({route:async()=>{calls++;await new Promise(r=>release=r);return {distance:2345,duration:2100,points:[[0,0],[1,1]]};}});

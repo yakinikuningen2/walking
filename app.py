@@ -19,6 +19,8 @@ import time
 import requests
 from walking_routes import RouteError, walking_suggestions
 from place_photos import PhotoError, place_photo
+from api_limits import ApiLimitError
+from valhalla_service import valhalla_data
 
 
 ROOT = Path(__file__).resolve().parent
@@ -161,12 +163,14 @@ class WalkingHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Private-Network", "true")
         super().end_headers()
 
-    def send_json(self, data, status=200):
+    def send_json(self, data, status=200, retry_after=None):
         body = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if retry_after is not None:
+            self.send_header("Retry-After", str(max(1, min(86400, int(retry_after)))))
         self.end_headers()
         if self.command != "HEAD":
             self.write_body(body)
@@ -178,7 +182,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
             pass  # The browser may have cancelled this search.
 
     def do_OPTIONS(self):
-        if urlsplit(self.path).path not in ("/api/overpass", "/api/walking-routes", "/api/parks", "/api/place-photo"):
+        if urlsplit(self.path).path not in ("/api/overpass", "/api/walking-routes", "/api/parks", "/api/place-photo", "/api/valhalla"):
             self.send_json({"error": "Not found"}, 404)
             return
         self.send_response(204)
@@ -193,7 +197,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
             return
         if path in ("/", "/index.html", "/templates/index.html"):
             file = ROOT / ("templates/index.html" if path.startswith("/templates/") else "index.html")
-        elif path in ("/README.md", "/THIRD_PARTY_NOTICES.md", "/DATA_RESEARCH.md"):
+        elif path in ("/README.md", "/THIRD_PARTY_NOTICES.md", "/DATA_RESEARCH.md", "/RIGHTS_REVIEW.md", "/API_USAGE.md", "/VALHALLA_DISCUSSION_DRAFT.md"):
             file = ROOT / path.lstrip("/")
         elif path.startswith("/static/"):
             from urllib.parse import unquote
@@ -247,18 +251,39 @@ class WalkingHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/overpass", "/api/walking-routes", "/api/parks", "/api/place-photo"):
+        if path not in ("/api/overpass", "/api/walking-routes", "/api/parks", "/api/place-photo", "/api/valhalla"):
             self.send_json({"error": "Not found"}, 404)
             return
         origin = self.headers.get("Origin", "")
-        if origin and not allowed_origin(origin):
-            self.send_json({"error": "Browser origin is not allowed"}, 403)
-            return
+        origin_ok = not origin or allowed_origin(origin)
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > (8192 if path in ("/api/walking-routes", "/api/parks", "/api/place-photo") else 262144):
+                if not origin_ok:
+                    self.send_json({"error": "Browser origin is not allowed"}, 403)
+                    return
                 raise ValueError("Invalid body size")
-            payload = json.loads(self.rfile.read(length))
+            # Consume only a bounded body before rejecting an origin. Otherwise
+            # Windows can reset the connection and discard the 403 response.
+            previous_timeout = self.connection.gettimeout()
+            self.connection.settimeout(5)
+            try:
+                body = self.rfile.read(length)
+            finally:
+                self.connection.settimeout(previous_timeout)
+            if not origin_ok:
+                self.send_json({"error": "Browser origin is not allowed"}, 403)
+                return
+            payload = json.loads(body)
+            if path == "/api/valhalla":
+                try:
+                    self.send_json(valhalla_data(payload))
+                except (ApiLimitError, RouteError) as error:
+                    self.send_json({"error": error.message, "code": error.code}, error.status,
+                                   getattr(error, "retry_after", 60 if error.status == 429 else None))
+                except Exception:
+                    self.send_json({"error": "徒歩ルートの情報を取得できませんでした。", "code": "ROUTING_UNAVAILABLE"}, 502)
+                return
             if path == "/api/place-photo":
                 try:
                     self.send_json(place_photo(payload))
@@ -279,7 +304,8 @@ class WalkingHandler(BaseHTTPRequestHandler):
                 try:
                     self.send_json(walking_suggestions(payload, map_data))
                 except RouteError as error:
-                    self.send_json({"error": error.message, "code": error.code}, error.status)
+                    self.send_json({"error": error.message, "code": error.code}, error.status,
+                                   getattr(error, "retry_after", 60 if error.status == 429 else None))
                 except Exception:
                     # Neither exception details nor upstream responses may expose credentials.
                     self.send_json({"error": "ルートの情報を取得できませんでした。", "code": "ROUTE_INTERNAL_ERROR"}, 502)
@@ -293,7 +319,7 @@ class WalkingHandler(BaseHTTPRequestHandler):
                 raise ValueError("Invalid provider")
             if type(timeout_ms) is not int or not 500 <= timeout_ms <= 120000:
                 raise ValueError("Invalid timeout")
-        except (ValueError, TypeError, KeyError, UnicodeError):
+        except (ValueError, TypeError, KeyError, UnicodeError, TimeoutError):
             self.send_json({"error": "Invalid map request"}, 400)
             return
         try:

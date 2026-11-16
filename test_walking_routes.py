@@ -133,6 +133,10 @@ class WalkingRoutesTest(unittest.TestCase):
             self.assertFalse(app.allowed_origin("https://walking.example"))
 
     def setUp(self):
+        # Provider admission is tested separately with concurrent callers and a clock.
+        limiter = patch.object(routes, "ORS_GATE")
+        limiter.start()
+        self.addCleanup(limiter.stop)
         routes._CACHE.clear()
         self.environment = patch.dict(os.environ, {"ORS_API_KEY": KEY})
         self.environment.start()
@@ -321,6 +325,7 @@ class WalkingRoutesTest(unittest.TestCase):
                 routes.normalized_route(bad, [START, END], 4)
 
     def test_fixed_endpoint_and_authorization_header_only(self):
+        self.assertEqual(routes.ORS_ENDPOINT, "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson")
         session = MagicMock()
         response = session.post.return_value.__enter__.return_value
         response.status_code = 200

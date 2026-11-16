@@ -33,6 +33,7 @@
           </fieldset>
           <p id="settings-status" class="status" role="status" aria-live="polite"></p>
           <div class="settings-actions"><button id="show-onboarding" type="button">使い方を見る</button><button id="open-map" class="open-map-button" type="submit">保存</button></div>
+          <p class="settings-legal"><a href="static/privacy.html" target="_blank" rel="noopener">プライバシーポリシー</a> · <a href="static/data-sources.html" target="_blank" rel="noopener">出典・ライセンス</a></p>
         </div>
       </form>
     </div>
@@ -239,7 +240,7 @@
     </div>
     <dialog id="onboarding-guide" class="onboarding-guide" aria-labelledby="onboarding-heading" hidden>
       <h2 id="onboarding-heading" class="sr-only">散歩アプリの使い方</h2>
-      <header class="onboarding-header"><span>散歩アプリ</span><button id="close-onboarding" type="button" autofocus>スキップ</button></header>
+      <header class="onboarding-header"><span>散歩アプリ</span><a href="static/privacy.html" target="_blank" rel="noopener">プライバシー</a><button id="close-onboarding" type="button" autofocus>スキップ</button></header>
       <div class="onboarding-content" aria-live="polite" aria-atomic="true">
         <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-location-heading">
           <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="onboarding-map-line" d="M30 20v140M100 20l-20 140M200 20l30 140M20 65h240M20 135l240-35"/><use href="#i-location" x="101" y="50" width="78" height="78"/></svg>
@@ -254,9 +255,9 @@
           <p class="onboarding-step">03 / 06</p><h3 id="onboarding-route-heading">徒歩ルートを表示</h3><p>候補の「ルート確認」から道順を表示。<br>距離と、歩く速さに応じた推定時間を確認できます。</p>
         </section>
         <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-tour-heading" hidden>
-          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="22" y="20" width="236" height="140" rx="6" fill="var(--panel)"/><path d="M58 123V82h74V49h89" stroke="var(--green)"/><path d="M221 49v83H58" stroke="var(--accent)" stroke-dasharray="8 7"/><circle cx="58" cy="123" r="6" fill="var(--green)"/><circle cx="132" cy="82" r="6" fill="var(--panel)" stroke="var(--green)"/><circle cx="221" cy="49" r="6" fill="var(--panel)" stroke="var(--green)"/></svg>
+          <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="22" y="20" width="236" height="140" rx="6" fill="var(--panel)"/><path d="M58 123V82h74V49h89" stroke="var(--green)"/><path d="M221 49v83H58" stroke="var(--accent)"/><circle cx="58" cy="123" r="6" fill="var(--green)"/><circle cx="132" cy="82" r="6" fill="var(--panel)" stroke="var(--green)"/><circle cx="221" cy="49" r="6" fill="var(--panel)" stroke="var(--green)"/></svg>
           <p class="onboarding-step">04 / 06</p><h3 id="onboarding-tour-heading">周遊でいろいろな場所へ</h3><p>「周遊」で時間とテーマを選ぶと、<br>複数の場所を巡るコースを作れます。</p>
-          <div class="onboarding-route-key tour-line-legend"><span aria-label="行き：緑の実線"><span class="tour-line-swatch outbound" aria-hidden="true"></span>行き</span><span aria-label="帰り：オレンジの破線"><span class="tour-line-swatch return" aria-hidden="true"></span>帰り</span></div>
+          <div class="onboarding-route-key tour-line-legend"><span aria-label="行き：緑の実線"><span class="tour-line-swatch outbound" aria-hidden="true"></span>行き</span><span aria-label="帰り：オレンジの実線"><span class="tour-line-swatch return" aria-hidden="true"></span>帰り</span></div>
         </section>
         <section class="onboarding-page" data-onboarding-page aria-labelledby="onboarding-saved-heading" hidden>
           <svg class="onboarding-illustration" viewBox="0 0 280 180" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="onboarding-map-line" d="M30 20v140M100 20l-20 140M200 20l30 140M20 65h240M20 135l240-35"/><rect x="87" y="29" width="106" height="122" rx="6" fill="var(--green)"/><use href="#i-bookmark" x="122" y="47" width="36" height="36"/><path d="M109 105h62M109 121h42"/></svg>
@@ -286,6 +287,7 @@
     <script src="static/js/candidate-distances.js"></script>
     <script src="static/js/natural-discovery.js"></script>
     <script src="static/js/route-nearby.js"></script>
+    <script src="static/js/nearby-routing.js"></script>
     <script src="static/js/tour-core.js"></script>
     <script src="static/js/tour.js"></script>
     <script src="static/js/ui.js"></script>

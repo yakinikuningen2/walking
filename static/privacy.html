@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>プライバシーポリシー | 散歩アプリ</title>
+  <style>
+    *{box-sizing:border-box}body{max-width:900px;margin:auto;padding:24px 18px 48px;background:#F8F9F6;color:#26332F;font:14px/1.9 "Noto Sans JP",system-ui,sans-serif}
+    h1{font-size:24px;font-weight:600}h2{margin-top:30px;font-size:18px;font-weight:500}a{color:#245744;overflow-wrap:anywhere;text-underline-offset:3px}a:focus{outline:none}
+    nav{display:flex;gap:18px;flex-wrap:wrap}table{width:100%;border-collapse:collapse;background:white}th,td{border:1px solid #DEE4DF;padding:10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{font-weight:500}
+    .table-wrap{overflow:auto}li{margin-bottom:6px}.date{color:#75857D}code{overflow-wrap:anywhere}
+  </style>
+</head>
+<body>
+  <nav><a href="../index.html">地図へ</a><a href="data-sources.html">出典・ライセンス</a></nav>
+  <h1>プライバシーポリシー</h1>
+  <p class="date">制定・更新：2026年11月16日</p>
+  <p>散歩アプリの運営者は <strong>yakinikuningen</strong> です。本ポリシーは、サーバーを経由する徒歩検索に対応した本アプリでの情報の取扱いを説明します。</p>
+
+  <h2>取得する情報と目的</h2>
+  <ul>
+    <li>現在地：ブラウザで位置情報を許可した場合、アプリを開いたときから取得し、開いている間は更新します。地図上の現在地・向きの表示、近くの場所の検索、徒歩ルートの作成・進行に伴う更新に使用します。</li>
+    <li>端末の方向・位置精度等：現在地表示やルート更新の判断に使用します。現在地の精度値や端末の生の方位センサー値を徒歩検索APIへ送信する処理はありません。</li>
+    <li>入力した検索語、出発地点・目的地・経由地、歩く速さ、検索条件：検索・ルート作成・時間計算に使用します。</li>
+    <li>登録地点、メモ、訪問日、本人が確認した散歩の記録、周遊コース：利用者の端末内への保存と表示に使用します。</li>
+    <li>接続情報：アプリや外部サービスへの通信には、IPアドレス、ブラウザ情報、接続日時等の情報が伴います。</li>
+  </ul>
+  <p>アカウント登録、広告配信、アクセス解析・広告目的の追跡は、この版のアプリには実装していません。写真検索や施設検索の入力に、他人の個人情報や公開したくない情報を含めないでください。</p>
+
+  <h2>外部サービスへの送信</h2>
+  <p>地図を表示するだけでも地図タイルとLeafletの配信先に通信します。地図の表示範囲はタイル番号から分かり得ます。位置情報を許可しなくても、手動で選んだ地点に基づく検索は外部通信を伴います。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>送信先</th><th>送る情報・目的</th><th>通信経路</th></tr></thead>
+    <tbody>
+      <tr><td>FOSSGIS Valhalla<br>valhalla1.openstreetmap.de</td><td>出発地点・目的地・経由候補の座標、選択した歩行速度、歩行条件、回避範囲。徒歩ルート・徒歩アクセス道路・標高を取得。座標はサーバーで原則小数6桁へ丸めますが、匿名化を保証するものではありません。</td><td>ブラウザ→本アプリのPythonサーバー→Valhalla。Valhallaへのアプリ側通信にはサーバーのIPと固定のアプリ識別子が伴います。ブラウザから同提供元へ直接再試行する処理はありません。</td></tr>
+      <tr><td>HeiGIT openrouteservice<br>api.heigit.org</td><td>出発地点・目的地・経由地・帰着地点の座標、回避範囲・経路条件。予備の徒歩検索や往復・景色の候補を取得。現在地を出発地点にした場合はその座標を含みます。</td><td>Pythonサーバー経由。運営者のAPIキーとサーバーのIPが伴います。利用者の氏名・端末ID・登録メモを付ける処理はありません。ただし位置情報自体が個人情報に該当しないと保証するものではありません。</td></tr>
+      <tr><td>Photon<br>photon.komoot.io</td><td>施設名・地名・住所等の検索語、検索範囲・基準点・施設種別。地名や施設を検索します。用途により基準点を約200m単位に丸めますが、検索範囲や入力した語から地点が分かる場合があります。</td><td>通常はブラウザから直接。公園検索の予備処理はPythonサーバー経由となる場合があります。</td></tr>
+      <tr><td>Overpass<br>overpass.private.coffee<br>overpass-api.de</td><td>周辺施設・自然・寄り道等の条件、検索範囲・中心座標・ルートに沿う座標。検索文に地理的な範囲が含まれます。</td><td>Pythonサーバー経由、または到達不能時等にブラウザから直接。サーバー経由の結果にも位置が含まれ得ます。</td></tr>
+      <tr><td>Wikimedia Commons・Wikidata・Wikipedia</td><td>対象地点の名称・住所・座標、Wikidata ID、Wikipedia記事・Commonsファイルやカテゴリ等。写真と施設の照合に使用。登録地点の名称・住所が照合に使われる場合もあります。登録メモ・訪問日・散歩実績は写真検索の送信項目に含めません。</td><td>照合APIはPythonサーバー経由。採用した写真はupload.wikimedia.org／thumb.wikimedia.orgからブラウザで読み込みます。</td></tr>
+      <tr><td>OpenStreetMap標準タイル<br>tile.openstreetmap.org</td><td>表示範囲・ズームに対応するタイル番号、IP、ブラウザ情報、Referer等。背景地図を表示します。</td><td>ブラウザから直接。HTTPキャッシュとRefererを維持し、オフライン向け一括取得はしません。</td></tr>
+      <tr><td>UNPKG<br>unpkg.com</td><td>LeafletのJavaScript・CSSや関連ファイルを取得するための接続情報。位置座標をパラメーターとして送る処理はありません。</td><td>ブラウザから直接。</td></tr>
+      <tr><td>Render等の公開ホスティング</td><td>本アプリへの接続情報、APIへ送った入力。配信・サーバー処理に使用します。</td><td>公開URLへアクセスした場合。本アプリのAPI処理に必要な座標等はサーバーで処理されます。</td></tr>
+    </tbody>
+  </table></div>
+  <p>外部サービスにはそれぞれの利用条件・プライバシーポリシーが適用されます。運営者の同意画面やブラウザの位置許可が、提供元の禁止事項を解除するものではありません。</p>
+
+  <h2>保存場所と期間</h2>
+  <ul>
+    <li>端末のlocalStorage：歩く速さ、登録地点・散歩記録、検索履歴、進行中／保存した周遊、初回ガイドの表示済み状態。利用者が削除するか、ブラウザが消去するまで残ります。アプリの通常の処理でこれらをサーバーの利用者データベースへ同期する機能はありません。</li>
+    <li>端末のsessionStorage：写真の照合メタデータ等。写真情報は最大50件・24時間以内の期限で保持し、タブのセッション終了やサイトデータ削除により消去されます。ブラウザのセッション復元設定によって保持される場合があります。</li>
+    <li>ブラウザのメモリ・HTTPキャッシュ：現在地、検索結果、経路、画像等。写真・地図のHTTPキャッシュは各提供元のヘッダーとブラウザの設定に従います。</li>
+    <li>Pythonサーバーのメモリ：Valhallaの成功結果は最大5分・64件・合計16MiB以内、ORSの正常な提案は最大5分・32件、Overpass・公園の成功結果は最大10分・各32件を再利用します。経路や検索範囲に位置情報が含まれ得ます。ファイルや利用者の永続データベースへ書き出しません。期限切れは次のアクセス時等に削除され、プロセス終了でも失われます。</li>
+    <li>写真のサーバーキャッシュ：照合結果は最大24時間・512件、照合API応答は最大10分・96件・合計6MiB以内。写真のバイナリをサーバーに保存・配布する処理はありません。</li>
+    <li>リクエスト制限：外部APIの呼出し時刻を最長24時間分、プロセスのメモリに保持します。この制限用の記録にIP・座標・氏名は保存しません。</li>
+    <li>アクセスログ：アプリのAPIパスへの標準アクセスログは抑制し、座標入りの本文・検索文・APIキーをアプリのログに記録しません。静的ページ等のアクセスでは標準ログにIP・日時・パス等が含まれます。Renderや外部提供元が別に生成するログの有無・保持期間は各サービス・運営設定に依存し、アプリが一律の削除期間を保証することはできません。</li>
+  </ul>
+  <p>キャッシュの時間は再利用の期限です。メモリ上の物理的な消去は、次のアクセス・上限超過による入替え・プロセス終了時等に行われます。期限になった瞬間の消去を保証するものではありません。</p>
+
+  <h2>許可の変更・削除・利用の選択</h2>
+  <ul>
+    <li>位置情報はブラウザや端末のサイト設定から拒否・取消できます。タブを閉じると、このページによる継続取得は終了します。現在地の代わりに検索や地図で出発地点を指定できます。端末OSの位置情報サービス自体の処理は、OS・ブラウザ側の条件に従います。</li>
+    <li>登録地点や履歴等はアプリの削除操作で削除できます。すべての端末内保存を消す場合は、ブラウザの「サイトデータ／Webサイトデータ」の削除を使ってください。歩く速さや初回ガイドの状態も初期化されます。</li>
+    <li>外部通信を避ける場合はアプリの利用を終了してください。位置許可を拒否しても、地図表示・検索・手動指定のルートには通信が必要です。</li>
+    <li>外部提供元が取得した情報の取扱いは提供元のポリシーに従います。アプリ内の記録を消す操作が、外部提供元やホスティングのログを同時に削除するわけではありません。</li>
+  </ul>
+
+  <h2>問い合わせ</h2>
+  <p>運営：yakinikuningen<br>問い合わせ：<a href="https://github.com/yakinikuningen2/walking/issues">GitHubリポジトリのIssues</a></p>
+  <p>Issuesは公開されます。氏名、自宅の住所、正確な現在地、移動履歴、APIキーなどは投稿しないでください。個人情報を含めずに、問い合わせの種類をお知らせください。</p>
+  <h2>提供元の情報と改定</h2>
+  <p><a href="data-sources.html">出典・サービス利用条件</a>、<a href="https://github.com/valhalla/valhalla#demo-server">Valhallaの利用案内</a>、<a href="https://account.heigit.org/info/tos">HeiGIT利用規約</a>、<a href="https://heigit.org/privacy-policy/">HeiGITプライバシーポリシー</a>、<a href="https://osmfoundation.org/wiki/Privacy_Policy">OSMFプライバシーポリシー</a>、<a href="https://render.com/privacy">Renderプライバシーポリシー</a>を参照できます。</p>
+  <p>機能や提供元の条件に変更がある場合、本ページと更新日を改定します。本ページの制定は、外部サービスの個別許諾・契約や、すべての法令への適合を取得済みと示すものではありません。</p>
+</body>
+</html>

@@ -1,9 +1,9 @@
 // Fetch road distances only for visible cards. Never substitute crow-flight estimates.
 ((root) => {
   "use strict";
-  function create({ route, timeout = 7000, ttl = 300000, limit = 100 }) {
+  function create({ route, timeout = 7000, ttl = 300000, limit = 100, automaticLimit = Infinity }) {
     const cache = new Map(), jobs = new Map(), queue = [];
-    let running = false;
+    let running = false, automaticRequests = 0;
     const abortError = () => new DOMException("Aborted", "AbortError");
     function key(start, end, speed) {
       return [start.lat, start.lng, end.lat, end.lng, speed].join(",");
@@ -40,13 +40,15 @@
         }
       } finally { running = false; }
     }
-    function get(start, end, speed, signal) {
+    function get(start, end, speed, signal, {manual = false} = {}) {
       if (signal?.aborted) return Promise.reject(abortError());
       const id = key(start, end, speed), hit = cache.get(id);
       if (hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.result);
       cache.delete(id);
       let job = jobs.get(id);
       if (!job || job.controller.signal.aborted) {
+        if(!manual && automaticRequests>=automaticLimit)return Promise.reject(Object.assign(new Error("Automatic distance budget"),{routeCode:"AutoDistanceLimit"}));
+        if(!manual)automaticRequests++;
         job = { key: id, start: { ...start }, end: { ...end }, speed, controller: new AbortController(), listeners: new Set() };
         jobs.set(id, job); queue.push(job);
       }
@@ -70,7 +72,7 @@
 })(globalThis);
 
 if (typeof document !== "undefined") (() => {
-  const service = WalkingDistances.create({ route: async (start, end, speed, signal) => {
+  const service = WalkingDistances.create({ automaticLimit: 8, route: async (start, end, speed, signal) => {
     // Explicit navigation has priority over background card measurements.
     const request = { controller: new AbortController() };
     const abort = () => request.controller.abort();
@@ -105,13 +107,21 @@ if (typeof document !== "undefined") (() => {
       element.textContent = "徒歩アクセス未確認・距離は未取得"; state.done = true; return;
     }
     const controller = new AbortController(); state.controller = controller;
-    service.get(current.start, place, current.speed, controller.signal).then(result => {
+    state.manualButton?.remove();state.manualButton=null;
+    const manual=!!state.manual;state.manual=false;
+    service.get(current.start, place, current.speed, controller.signal,{manual}).then(result => {
       if (controller.signal.aborted || !element.isConnected || context().key !== current.key) return;
       element.textContent = `距離 ${routeDistance(result.distance)}・徒歩約${routeDuration(result.duration)}`;
       state.done = true;
     }, error => {
       if (controller.signal.aborted || !element.isConnected || context().key !== current.key) return;
-      element.textContent = error.routeCode === "NoRoute" || [170, 171, 441, 442].includes(Number(error.routeCode))
+      if(error.routeCode==="AutoDistanceLimit"){
+        const button=document.createElement("button");button.type="button";button.className="candidate-distance-button";button.textContent="距離を確認";
+        button.addEventListener("click",event=>{event.stopPropagation();state.manual=true;state.done=false;update(element,state);});
+        const owner=element.closest("button");
+        if(owner && owner.parentNode){element.textContent="距離は未取得";owner.insertAdjacentElement("afterend",button);state.manualButton=button;}
+        else element.replaceChildren(button);
+      }else element.textContent = error.routeCode === "NoRoute" || [170, 171, 441, 442].includes(Number(error.routeCode))
         ? "徒歩ルートが見つかりませんでした" : "距離を取得できませんでした";
       state.done = true;
     }).finally(() => { if (state.controller === controller) state.controller = null; });
@@ -126,7 +136,7 @@ if (typeof document !== "undefined") (() => {
   });
   function scan() {
     for (const [element, state] of cards) if (!element.isConnected) {
-      state.controller?.abort(); observer.unobserve(element); cards.delete(element);
+      state.controller?.abort();state.manualButton?.remove();observer.unobserve(element); cards.delete(element);
     }
     for (const element of document.querySelectorAll(".candidate-road-metrics")) if (element.walkingPlace && !cards.has(element)) {
       cards.set(element, { visible: false, context: null, done: false, controller: null }); observer.observe(element);

@@ -6,12 +6,13 @@ const source=fs.readFileSync(path.join(__dirname,'static/js/app.js'),'utf8');
 const folder=path.join(os.tmpdir(),'walking-long-routes');
 function context(){
  const calls=[],routeData=[],c=vm.createContext({URL,URLSearchParams,AbortController,DOMException,setTimeout,clearTimeout,Date,Math,Number,Map,Set,
-   LongRoutes:R,ROUTE_ENDPOINT:'https://valhalla1.openstreetmap.de/route',ROUTE_ACCESS_ENDPOINT:'https://app.test/access',
+   LongRoutes:R,ROUTE_ENDPOINT:'https://valhalla1.openstreetmap.de/route',ROUTE_ACCESS_ENDPOINT:'https://app.test/access',MAP_PROXY_ENDPOINT:'http://127.0.0.1:8000/api/overpass',
    routeAccessCache:JSON.parse(fs.readFileSync(path.join(__dirname,'static/route-access.json'),'utf8')),routeTurn:Promise.resolve(),lastRouteAt:-Infinity,
    validCoordinates:(lat,lng)=>R.valid({lat,lng}),map:{distance:(a,b)=>R.meters(Array.isArray(a)?{lat:a[0],lng:a[1]}:a,Array.isArray(b)?{lat:b[0],lng:b[1]}:b)},
    DISCOVERY_MAP_ENDPOINTS:[],fetchMapProxy:async()=>null,
    fetch:async(url,options)=>{const t=performance.now();try{const response=await fetch(url,options);const data=await response.clone().json();
-     calls.push({path:url.pathname,http:response.status,seconds:Number(((performance.now()-t)/1000).toFixed(3)),code:data.error_code||data.code});routeData.push(data);return response;
+     const routePath=url.pathname==='/api/valhalla'?'/'+JSON.parse(options.body).action:url.pathname;
+     calls.push({path:routePath,http:response.status,seconds:Number(((performance.now()-t)/1000).toFixed(3)),code:data.error_code||data.code});routeData.push(data);return response;
    }catch(error){calls.push({path:url.pathname,error:error.name});throw error;}}});
  const load=(first,next)=>vm.runInContext(source.slice(source.indexOf(first),source.indexOf(next)),c);
  load('function abortableRouteDelay(','async function fetchMapProxy(');

@@ -143,9 +143,9 @@ const NEARBY_CONVENIENCE_RADIUS = 1000;
 const NEARBY_CONVENIENCE_CACHE_RADIUS = 1200;
 const NEARBY_CONVENIENCE_TIMEOUT_MS = 10000;
 const NEARBY_CONVENIENCE_LOOKUP_TIMEOUT_MS = 5000;
-const ROUTE_PROGRESS_REFRESH_METERS = 30;
+const ROUTE_PROGRESS_REFRESH_METERS = 50;
 const ROUTE_DEVIATION_METERS = 50;
-const ROUTE_REFRESH_INTERVAL_MS = 10000;
+const ROUTE_REFRESH_INTERVAL_MS = 20000;
 const ROUTE_POSITION_CONFIRM_MS = 2000;
 const ROUTE_ENDPOINT = "https://valhalla1.openstreetmap.de/route";
 const MAP_DATA_ENDPOINT = "https://overpass.private.coffee/api/interpreter";
@@ -1478,15 +1478,19 @@ function showNearbyConvenience(places, kind = "convenience", scope = "point") {
     const key = nearbyMarkerKey(place);
     if (existing.has(key)) continue;
     const popup = document.createElement("div");
+    popup.className = "nearby-place-popup";
     popup.append(textElement("strong", place.name));
     if (scope === "route") popup.append(textElement("p", `ルートから約${Math.round(place.distanceFromRoute)}m`));
     if (place.address) popup.append(textElement("p", place.address));
     if (place.openingHours) popup.append(textElement("p", place.openingHours, "popup-note"));
     if (place.note) popup.append(textElement("p", place.note, "popup-note"));
-    popup.append(destinationButton(place));
+    popup.append(typeof NearbyRouting !== "undefined" ? NearbyRouting.actions(place) : destinationButton(place));
     const marker = L.marker([place.lat, place.lng], { icon, pane: "nearbyStores", title: place.name, nearbyKey: key,
       alt: place.name, bubblingMouseEvents: false }).addTo(nearbyConvenienceMarkers)
-      .bindTooltip(textElement("span", place.name)).bindPopup(popup, { autoPan: false });
+      .bindTooltip(textElement("span", place.name)).bindPopup(popup, { autoPan: false,
+        maxHeight: Math.max(140, Math.min(360, (map.getSize?.().y || 600) - 240)) });
+    marker.on("popupopen", () => { if (typeof NearbyRouting !== "undefined") NearbyRouting.popupOpened(popup); });
+    marker.on("popupclose", () => { if (typeof NearbyRouting !== "undefined") NearbyRouting.popupClosed(); });
     if (typeof PlacePhotos !== "undefined") marker.on("popupopen", () => PlacePhotos.mount(popup, place));
   }
   ui["convenience-legend"].hidden = places.length === 0;
@@ -1594,6 +1598,7 @@ ui["clear-nearby-convenience"].addEventListener("click", () => {
 
 function setDestination(place) {
   if (!place || !validCoordinates(place.lat, place.lng)) return;
+  if (typeof NearbyRouting !== "undefined") NearbyRouting.clear();
   roundTripDestinationReached = false;
   destination = {
     name: typeof place.name === "string" ? place.name.trim().slice(0, 120) : "",
@@ -1719,6 +1724,7 @@ ui["toggle-route-details"].addEventListener("click", () => {
 });
 
 function stopWalkingRoute() {
+  if (typeof NearbyRouting !== "undefined") NearbyRouting.clear();
   const focusWasInside = ui["route-panel"].contains(document.activeElement);
   routeEnabled = false;
   walkingRouteMode = "standard";
@@ -1778,6 +1784,7 @@ function walkingRoutePosition(place, route, minAlong = 0, maxAlong = Infinity) {
 }
 
 function updateWalkingRouteFromLocation(position) {
+  if (typeof document !== "undefined" && document.hidden) return;
   if (!routeEnabled || !destination || searchedStart || routeAwaitingLocation || !currentPosition) return;
   const route = routeChoices.get(activeRouteKind)?.route;
   if (!route) return;
@@ -1817,6 +1824,7 @@ function updateWalkingRouteFromLocation(position) {
   if (routeTimer !== null || routeRequest?.replaceExisting) return;
   lastAutomaticRouteAt = now;
   state.pending = null;
+  if (typeof NearbyRouting !== "undefined") NearbyRouting.advance(route,progress,offRoute);
   requestWalkingRoute({ automatic: true });
 }
 
@@ -2001,6 +2009,7 @@ function displayWalkingRoute(route, kind = "standard", { background = false } = 
   message(ui["route-status"], "");
   // A background route update must not close the tool the user is editing.
   if (!background && !ui["route-details-content"].hidden) closeOverlappingTools(ui["route-panel"], true);
+  if (typeof NearbyRouting !== "undefined") NearbyRouting.mainRouteChanged();
 }
 
 function requestWalkingRoute({ preserveRoutes = false, automatic = false } = {}) {
@@ -2073,6 +2082,7 @@ async function fetchMapProxy(url, signal, timeoutMs) {
 }
 
 async function fetchRouteJson(url, request, timeoutMs = 18000) {
+  if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (request.controller.signal.aborted) abort();
@@ -2083,9 +2093,17 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
     const mapQuery = DISCOVERY_MAP_ENDPOINTS.includes(url.origin + url.pathname) && url.searchParams.get("data");
     const direct = () => fetch(mapQuery ? new URL(url.origin + url.pathname) : url, mapQuery
         ? { method: "POST", body: new URLSearchParams({ data: mapQuery }), signal: controller.signal }
-        : { signal: controller.signal, ...(url.hostname === "valhalla1.openstreetmap.de"
-          ? { headers: { "X-Client-Id": "walking-yakinikuningen2" } } : {}) });
-    let response = await fetchMapProxy(url, controller.signal, timeoutMs);
+        : { signal: controller.signal });
+    const routing = url.origin === "https://valhalla1.openstreetmap.de" && ["/route", "/locate", "/height"].includes(url.pathname);
+    let response;
+    if (routing) {
+      const base = typeof MAP_PROXY_ENDPOINT !== "undefined" && MAP_PROXY_ENDPOINT;
+      const endpoint = new URL("/api/valhalla", base || window.location.href);
+      response = await fetch(endpoint, {method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,
+        body:JSON.stringify({action:url.pathname.slice(1),params:JSON.parse(url.searchParams.get("json")),timeout_ms:Math.min(60000,timeoutMs)})});
+      if(response.status===404)throw Object.assign(new Error("Routing relay required"),{
+        routeCode:"ROUTING_RELAY_REQUIRED",userMessage:"徒歩検索には更新後のPythonサーバーが必要です。起動または再起動してください。"});
+    } else response = await fetchMapProxy(url, controller.signal, timeoutMs);
     if (!response) response = await direct();
     else if (mapQuery && [429, 502, 503, 504].includes(response.status)) {
       // A Render-to-provider failure need not mean the browser cannot reach that provider.
@@ -2100,10 +2118,12 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
     let data;
     try { data = await response.json(); }
     catch (error) { error.httpStatus = response.status; throw error; }
+    if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
     if (!response.ok || data.error || data.remark || (data.code && data.code !== "Ok")) {
       const error = new Error("Route data unavailable");
       error.routeCode = data.error_code || data.code;
       error.httpStatus = response.status;
+      if(routing && typeof data.error === "string")error.userMessage=data.error;
       throw error;
     }
     return data;
@@ -2427,6 +2447,14 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
   }
 }
 
+async function locateWalkingWaypoints(points,signal) {
+  const child={controller:{signal}};await waitForRouteTurn(child);
+  const url=new URL("/locate",ROUTE_ENDPOINT);
+  url.searchParams.set("json",JSON.stringify({locations:points.map(p=>({lat:p.lat,lon:p.lng,search_cutoff:1200})),verbose:true,costing:"pedestrian",
+    costing_options:{pedestrian:{max_hiking_difficulty:0,use_ferry:0,private_access_penalty:43200}}}));
+  return fetchRouteJson(url,child,15000);
+}
+
 async function recoverLongWalkingRoute(start,end,request,isCurrent,primaryError) {
   if (!isCurrent() || request.controller.signal.aborted) throw new DOMException("Aborted","AbortError");
   if (!request.deadlineAt) {
@@ -2446,13 +2474,7 @@ async function recoverLongWalkingRoute(start,end,request,isCurrent,primaryError)
   const route=await LongRoutes.segmented({start,end,signal:request.controller.signal,
     budgetMs:request.deadlineAt-Date.now(),
     progress:text=>{if(isCurrent())message(ui["route-status"],text);},
-    locate:async(points,signal)=>{
-      const child={controller:{signal}};await waitForRouteTurn(child);
-      const url=new URL("/locate",ROUTE_ENDPOINT);
-      url.searchParams.set("json",JSON.stringify({locations:points.map(p=>({lat:p.lat,lon:p.lng,search_cutoff:1200})),verbose:true,costing:"pedestrian",
-        costing_options:{pedestrian:{max_hiking_difficulty:0,use_ferry:0,private_access_penalty:43200}}}));
-      return fetchRouteJson(url,child,15000);
-    },
+    locate:locateWalkingWaypoints,
     route:(a,b,signal)=>calculateWalkingRoute(a,b,"standard",currentWalkingSpeed().kmh,{controller:{signal},routeTimeoutMs:30000})});
   if(!isCurrent() || request.controller.signal.aborted)return;
   prepareRouteReplacement(request);
@@ -2503,7 +2525,8 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
     const speed = currentWalkingSpeed().kmh;
     let stores = null;
     let primaryError = null;
-    const kinds = ROUTE_KINDS.filter((kind) => (request.longDistance ? ["standard"] : ["standard", "gentle", "convenience", "nature"]).includes(kind.id));
+    const kinds = ROUTE_KINDS.filter((kind) => (request.longDistance ? ["standard"] : automatic
+      ? ["standard", request.preferredKind] : ["standard", "gentle", "convenience", "nature"]).includes(kind.id));
     if (automatic) kinds.sort((a, b) => Number(b.id === request.preferredKind) - Number(a.id === request.preferredKind));
     for (const kind of kinds) {
       if (!isCurrent()) return;
@@ -2538,6 +2561,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
       } catch (error) {
         if (!isCurrent()) return;
         if (error.routeCode === "RouteDisplay") throw error;
+        if (error.routeCode === "ROUTING_RELAY_REQUIRED" || (kind.id === "standard" && !request.longDistance && [429,502,503,504].includes(error.httpStatus))) throw error;
         if (kind.id === "standard") primaryError = error;
         if ((["standard", "gentle"].includes(kind.id) && ["DistanceExceeded", 154,"154"].includes(error.routeCode))
           || (kind.id === "standard" && request.longDistance && !request.controller.signal.aborted)) {
@@ -2571,6 +2595,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
 
 function beginWalkingRoute(mode) {
   if (!destination || ui["route-button"].disabled) return;
+  if (mode !== "standard" && typeof NearbyRouting !== "undefined") NearbyRouting.clear();
   if (typeof WalkingTour !== "undefined") WalkingTour.deactivate();
   const starting = !routeEnabled;
   if (mode !== walkingRouteMode) {

@@ -10,8 +10,9 @@ import os
 import time
 
 import requests
+from api_limits import ApiLimitError, ORS_GATE
 
-ORS_ENDPOINT = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson"
+ORS_ENDPOINT = "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson"
 _CACHE = OrderedDict()
 _LOCK = Lock()
 _LOCAL = local()
@@ -121,6 +122,18 @@ def crosses_paid_area(shape):
 def _request_ors(coordinates, key, green=False, long_route=False, avoid_paid=False):
     if sum(distance(a,b) for a,b in zip(coordinates,coordinates[1:])) > 6000000:
         raise RouteError("ORS_LIMIT_EXCEEDED", "目的地が遠すぎるため、徒歩ルートを取得できませんでした（ORSの上限6,000km）。", 422)
+    try:
+        with ORS_GATE.slot():
+            return _request_ors_admitted(coordinates, key, green, long_route, avoid_paid)
+    except ApiLimitError as error:
+        failed = RouteError("ORS_RATE_LIMIT", error.message, 429)
+        failed.retry_after = error.retry_after
+        raise failed from None
+
+
+def _request_ors_admitted(coordinates, key, green=False, long_route=False, avoid_paid=False):
+    if sum(distance(a,b) for a,b in zip(coordinates,coordinates[1:])) > 6000000:
+        raise RouteError("ORS_LIMIT_EXCEEDED", "目的地が遠すぎるため、徒歩ルートを取得できませんでした（ORSの上限6,000km）。", 422)
     if not hasattr(_LOCAL, "session"):
         _LOCAL.session = requests.Session()
     body = {"coordinates": [[p["lng"], p["lat"]] for p in coordinates],
@@ -135,12 +148,17 @@ def _request_ors(coordinates, key, green=False, long_route=False, avoid_paid=Fal
     try:
         with _LOCAL.session.post(ORS_ENDPOINT, json=body,
                                  headers={"Authorization": key, "Accept": "application/geo+json",
-                                          "User-Agent": "WalkingMap/1.0"},
+                                          "User-Agent": "WalkingMap/1.0 (+https://walking-ctsh.onrender.com/)"},
                                  timeout=(5, 60 if long_route else 25), allow_redirects=False) as response:
             if response.status_code in (401, 403):
                 raise RouteError("ORS_AUTH_FAILED", "ORSのAPIキーを確認してください。", 503)
             if response.status_code == 429:
-                raise RouteError("ORS_RATE_LIMIT", "ORSの利用上限に達しました。時間を置いてお試しください。", 429)
+                wait = ORS_GATE.cooldown(response.headers.get("Retry-After"))
+                error = RouteError("ORS_RATE_LIMIT", "ORSの利用上限に達しました。時間を置いてお試しください。", 429)
+                error.retry_after = wait
+                raise error
+            if response.status_code >= 500:
+                ORS_GATE.cooldown(default=15)
             if response.status_code != 200:
                 try:
                     upstream_code = response.json().get("error", {}).get("code")

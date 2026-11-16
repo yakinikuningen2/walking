@@ -105,7 +105,7 @@ class NoticeDeliveryTest(unittest.TestCase):
             connection.close()
 
     def test_notice_links_and_machine_readable_derivative_are_public(self):
-        for path in ("/README.md", "/THIRD_PARTY_NOTICES.md", "/DATA_RESEARCH.md",
+        for path in ("/README.md", "/THIRD_PARTY_NOTICES.md", "/DATA_RESEARCH.md", "/RIGHTS_REVIEW.md", "/API_USAGE.md", "/VALHALLA_DISCUSSION_DRAFT.md",
                      "/static/data-sources.html", "/static/data-licenses.json", "/static/route-access.json", "/static/licenses/leaflet-1.9.4.txt"):
             with self.subTest(path=path):
                 status, body = self.get(path)
@@ -116,7 +116,7 @@ class NoticeDeliveryTest(unittest.TestCase):
         self.assertIn(b'walking-map-api', self.get("/")[1])
 
     def test_notice_allowlist_does_not_expose_source_or_private_files(self):
-        for path in ("/.env", "/.git/config", "/app.py", "/static/%2e%2e/app.py", "/static/../.env"):
+        for path in ("/.env", "/.git/config", "/app.py", "/api_limits.py", "/valhalla_service.py", "/static/%2e%2e/app.py", "/static/../.env"):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path)[0], 404)
 

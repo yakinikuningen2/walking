@@ -270,6 +270,7 @@ function renderRouteNearbyResults(places, scope) {
       nearbyConvenienceMarkers.getLayers().find(m => m.options.nearbyKey === nearbyMarkerKey(place))?.openPopup();
     });
     item.append(button);
+    if (typeof NearbyRouting !== "undefined") item.append(NearbyRouting.actions(place));
     if (typeof PlacePhotos !== "undefined") PlacePhotos.mount(item, place);
     return item;
   });
