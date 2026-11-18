@@ -57,7 +57,7 @@ def validated(payload):
             invalid()
         return action, {"shape": [coordinate(v) for v in shape], "range": False, "height_precision": 0}
     allowed = {"locations", "costing", "costing_options", "verbose"} if action == "locate" else {
-        "locations", "costing", "costing_options", "format", "shape_format", "directions_options", "exclude_polygons"}
+        "locations", "costing", "costing_options", "format", "shape_format", "directions_options", "exclude_polygons", "alternates"}
     if set(p) - allowed or p.get("costing") != "pedestrian":
         invalid()
     locations = p.get("locations")
@@ -95,6 +95,12 @@ def validated(payload):
                     invalid()
                 numeric(pair[0], -180, 180); numeric(pair[1], -90, 90)
         out["exclude_polygons"] = polygons
+        if "alternates" in p:
+            if type(p["alternates"]) is not int or not 0 <= p["alternates"] <= 2:
+                invalid()
+            if len(locations) != 2:
+                invalid()
+            out["alternates"] = p["alternates"]
     return action, out
 
 

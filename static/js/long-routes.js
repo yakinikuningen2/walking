@@ -70,7 +70,7 @@
       ||!Number.isFinite(route.distance)||route.distance<=0||!Number.isFinite(route.duration)||route.duration<=0
       ||!Array.isArray(route.steps)||!route.steps.length||route.steps.some(s=>s.mode!=="walking"||typeof s.maneuver?.type!=="string"||!Number.isFinite(s.distance)||s.distance<0))throw error("RouteResponse","徒歩ルートの情報を確認できませんでした。");
     const first={lat:route.points[0][0],lng:route.points[0][1]},last={lat:route.points.at(-1)[0],lng:route.points.at(-1)[1]},direct=meters(start,end);
-    if(meters(start,first)>100||meters(end,last)>100||route.distance<direct*.8-200)throw error("RouteResponse","ルートが指定地点につながっていません。");
+    if(meters(start,first)>100||meters(end,last)>(end.mapPoint?20:100)||route.distance<direct*.8-200)throw error("RouteResponse","ルートが指定地点につながっていません。");
     if(route.distance>Math.max(10000,direct*3+2000))throw error("RouteDetour","分割すると大きな迂回になるため、徒歩ルートを表示できませんでした。");
     return route;
   }

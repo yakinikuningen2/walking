@@ -3,6 +3,7 @@ const R=require('./static/js/long-routes.js'),app=fs.readFileSync(__dirname+'/st
 class Element {
  constructor(tag){this.tagName=tag;this.children=[];this.listeners={};this.dataset={};this.hidden=false;this.disabled=false;this.textContent='';}
  append(...nodes){this.children.push(...nodes);} prepend(...nodes){this.children.unshift(...nodes);}
+ replaceChildren(...nodes){this.children=nodes;}
  get firstElementChild(){return this.children[0];} setAttribute(key,value){this[key]=value;}
  addEventListener(event,fn){this.listeners[event]=fn;} click(){if(!this.disabled)this.listeners.click?.();}
  querySelectorAll(selector){return this.children.flatMap(p=>[...(selector==='.'+p.className?[p]:[]),...p.querySelectorAll(selector)]);}
@@ -114,4 +115,23 @@ test('a missing main route is created first, then its display schedules the sepa
  while(c.api.busy)await new Promise(setImmediate);
  assert.equal(c.routeChoices.get('standard').route.distance,900);let calls=0;c.calculateWalkingRoute=async()=>{calls++;throw Error('must not repeat')};
  c.api.mainRouteChanged();await new Promise(r=>setTimeout(r,5));assert.equal(calls,0);c.api.clear();
+});
+
+test('multiple detours share an ordered route while keeping the main route intact',async()=>{
+ const c=setup(),second={lat:35.009,lng:139.008,name:'Park'};
+ c.api.select(place);c.api.select(second);
+ const main={points:[[35,139],[35.02,139]],distance:2100};c.routeChoices.set('standard',{route:main});
+ await c.api.update(true);
+ assert.equal(c.api.stops.length,2);assert.equal(c.api.route.nearbyStops[1].name,'Park');
+ assert.equal(c.api.route.points.length,4);assert.equal(c.routeChoices.get('standard').route,main);
+ c.api.move(1,-1);await c.api.update(true);assert.equal(c.api.stops[0].name,'Park');
+ c.api.remove(1);await c.api.update(true);assert.equal(c.api.stops.length,1);assert.equal(c.api.route.nearbyVia.name,'Park');c.api.clear();
+});
+
+test('map selection is explicit, accepts multiple points and never adds a stop during normal map taps',()=>{
+ const c=setup();assert.equal(c.api.handleMapClick(place),false);assert.equal(c.api.stops.length,0);
+ c.api.startPicking();assert.equal(c.api.handleMapClick(place),true);assert.equal(c.api.stops.length,1);
+ c.api.handleMapClick(place);assert.equal(c.api.stops.length,1,'duplicate point');
+ for(let i=0;i<8;i++)c.api.handleMapClick({lat:35.007+i*.001,lng:139.01,name:`Stop ${i}`});
+ assert.equal(c.api.stops.length,5);c.api.stopPicking();assert.equal(c.api.handleMapClick({lat:35.015,lng:139.012}),false);c.api.clear();
 });

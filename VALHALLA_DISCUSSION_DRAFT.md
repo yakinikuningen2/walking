@@ -45,6 +45,8 @@ These controls are in memory and reset when the process restarts; they are not d
 We also limit work in the client:
 
 - no route queries simply to open or pan/zoom the map;
+- when local route comparison is enabled, two-location requests shorter than 20 km straight-line distance may request at most two alternates in the same request; overlap is ranked locally and stored tracks, body weight and notes are never attached to routing requests;
+- manually edited detours support at most five stops, six fetched legs, a 300 ms edit debounce and a 45-second overall budget; GPS recording itself makes no route requests;
 - automatic candidate road-distance lookups are limited to eight per page load, only for visible candidates; further lookups require an explicit click;
 - in-page duplicate requests share cached results; hidden cards and obsolete searches are cancelled;
 - location-based route refreshes require usable location fixes confirmed across multiple samples over at least 2 seconds and meaningful progress (normally 30 m) or off-route deviation, with at least 10 seconds between automatic refreshes; a pending confirmed fix is rechecked after the cooldown without requiring the map to be reopened, and pending timers stop when the page is hidden;

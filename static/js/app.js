@@ -1030,6 +1030,7 @@ function locationFixFromPosition(position) {
 
 function displayLocationFix(position, options) {
   lastLocationFix = position;
+  if (typeof WalkingSession !== "undefined") WalkingSession.fix(position);
   showCurrentLocation(position, options);
 }
 
@@ -1636,6 +1637,7 @@ function setDestination(place) {
     address: typeof place.address === "string" ? place.address.trim() : "",
     lat: place.lat, lng: place.lng,
     ...(discoveryNaturalPlaceReady(place) ? { accessAnchor: { ...place.accessAnchor }, accessNote: place.accessNote } : {}),
+    ...(place.mapPoint ? { mapPoint: true, accessNote: place.accessNote || "" } : {}),
   };
   if (destinationMarker) {
     destinationMarker.setLatLng([destination.lat, destination.lng]);
@@ -1658,13 +1660,24 @@ function setDestination(place) {
   ui["destination-address"].textContent = destination.address;
   ui["destination-address"].hidden = !destination.address;
   ui["destination-panel"].hidden = false;
-  if (typeof PlacePhotos !== "undefined") {
+  let accessNote = document.getElementById("destination-map-access-note");
+  if (!accessNote) {
+    accessNote = document.createElement("p"); accessNote.id = "destination-map-access-note"; accessNote.className = "address";
+    ui["destination-name"].after(accessNote);
+  }
+  accessNote.textContent = place.mapPoint ? place.accessNote || "" : "";
+  accessNote.hidden = !(place.mapPoint && place.offset > 15);
+  if (!place.mapPoint && typeof PlacePhotos !== "undefined") {
     let photos = document.getElementById("destination-photos");
     if (!photos) {
       photos = document.createElement("details"); photos.id = "destination-photos"; photos.className = "destination-photos";
       photos.append(textElement("summary", "写真")); ui["destination-panel"].append(photos);
     }
+    photos.hidden = false;
     PlacePhotos.mount(photos, place);
+  } else if (place.mapPoint) {
+    const photos = document.getElementById("destination-photos");
+    if (photos) photos.hidden = true;
   }
   ui["destination-legend"].hidden = false;
   map.closePopup();
@@ -2062,7 +2075,9 @@ function updateRouteChoiceNote(kind) {
   const stores = choice?.convenienceCount > 0 ? `ルートから約60m以内にコンビニ${choice.convenienceCount}件。` : "";
   const longNote = choice?.route?.distance >= 20000 ? "長距離ルートです。所要時間に休憩は含みません。" : "";
   const splitNote = choice?.route?.segmented ? "徒歩で通れる中継地点をつないだルートです。" : "";
-  ui["route-choice-note"].textContent = `${detail ? `${detail}。` : ""}${stores}${longNote}${splitNote}`;
+  const saved = choice?.route?.historyCompared ? `保存した道との重複 約${Math.round(choice.route.historyOverlap*100)}%（端末内での比較・目安）。${choice.route.historyAlternatives===1?"別の経路候補は取得できませんでした。":""}${choice.route.historySampleLimited?"長い経路・履歴は一部の区間だけで比較しています。":""}`
+    : typeof WalkingSession !== "undefined" && WalkingSession.hasHistory ? "保存した道との比較は、この経路では利用できません。" : "";
+  ui["route-choice-note"].textContent = `${detail ? `${detail}。` : ""}${stores}${longNote}${splitNote}${saved}`;
 }
 
 function displayWalkingRoute(route, kind = "standard", { background = false } = {}) {
@@ -2273,6 +2288,7 @@ async function calculateWalkingRoute(start, end, kind, speed, request, via = nul
   const url = new URL(ROUTE_ENDPOINT);
   url.searchParams.set("json", JSON.stringify({
     locations, costing: "pedestrian", format: "osrm", shape_format: "geojson",
+    ...(typeof WalkingSession !== "undefined" && WalkingSession.hasHistory && !viaPoints.length && map.distance(start,end)<20000 ? {alternates:2} : {}),
     exclude_polygons: [...access.areas.map((area) => area.ring), ...avoidPolygons],
     directions_options: { language: "ja-JP", units: "kilometers" },
     costing_options: { pedestrian: {
@@ -2283,8 +2299,19 @@ async function calculateWalkingRoute(start, end, kind, speed, request, via = nul
   }));
   const timeoutMs = request.routeTimeoutMs || (request.longDistance ? LongRoutes.timeoutMs(map.distance(start, end)) : 18000);
   const data = await fetchRouteJson(url, request, timeoutMs);
-  const route = parseWalkingRoute(data);
-  if (map.distance([start.lat,start.lng],route.points[0])>100 || map.distance([end.lat,end.lng],route.points.at(-1))>100) {
+  let route;
+  if (typeof WalkingSession !== "undefined" && WalkingSession.hasHistory) {
+    const candidates=[];
+    for(const entry of (data.routes||[]).slice(0,3)){
+      try {
+        const candidate=parseWalkingRoute({...data,routes:[entry]});
+        if(map.distance(start,candidate.points[0])<=100&&map.distance(end,candidate.points.at(-1))<=100
+          &&viaPoints.every(place=>distanceToRoute(place,candidate)<=45))candidates.push(candidate);
+      } catch { /* An invalid alternative is not displayed. */ }
+    }
+    route=candidates.length?WalkingSession.choose(candidates):parseWalkingRoute(data);
+  } else route = parseWalkingRoute(data);
+  if (map.distance([start.lat,start.lng],route.points[0])>100 || map.distance([end.lat,end.lng],route.points.at(-1))>(end.mapPoint?20:100)) {
     throw Object.assign(new Error("Route endpoints mismatch"), { userMessage: "ルートが指定地点につながっていません。別の地点を指定してください。", routeCode:"RouteResponse" });
   }
   for (const [index, place] of viaPoints.entries()) {
@@ -2495,9 +2522,12 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
   const permitted = mode === "roundtrip" ? ["roundtrip", "roundtrip_scenic"]
     : mode === "standard" ? ["ors_standard"] : ["ors_standard", "scenic"];
   const added = [];
+  let reachedDestination = false;
   for (const entry of data.routes) {
     if (!permitted.includes(entry.id)) continue;
     const route = parseWalkingRoute({ routes: [entry.route] });
+    if(end.mapPoint && mode !== "roundtrip" && map.distance(end,route.points.at(-1))>20)continue;
+    reachedDestination = true;
     route.roundTrip = mode === "roundtrip";
     if (route.roundTrip) route.destinationDistance = request.destinationReached ? 0
       : entry.route.legs[0].steps.reduce((sum, step) => sum + step.distance, 0);
@@ -2509,6 +2539,8 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
     routeChoices.set(entry.id, { route, detail: typeof entry.detail === "string" ? entry.detail : "" });
     added.push(entry.id);
   }
+  if(end.mapPoint && mode !== "roundtrip" && !reachedDestination)throw Object.assign(new Error("Endpoint mismatch"),{
+    routeCode:"NoRoute",userMessage:"指定した道までつながる徒歩ルートが見つかりませんでした。別の道路や入口を選んでください。"});
   const preferred = request.automatic && added.includes(request.preferredKind) ? request.preferredKind : [...added].reverse()[0];
   if (preferred) {
     selectedRouteKind = preferred;
@@ -2525,12 +2557,13 @@ async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent)
   }
 }
 
-async function locateWalkingWaypoints(points,signal) {
+async function locateWalkingWaypoints(points,signal,{searchCutoff=1200,timeoutMs=15000}={}) {
+  if(!Number.isFinite(searchCutoff)||searchCutoff<0||searchCutoff>1200||!Number.isFinite(timeoutMs)||timeoutMs<500||timeoutMs>60000)throw new Error("Invalid locate options");
   const child={controller:{signal}};await waitForRouteTurn(child);
   const url=new URL("/locate",ROUTE_ENDPOINT);
-  url.searchParams.set("json",JSON.stringify({locations:points.map(p=>({lat:p.lat,lon:p.lng,search_cutoff:1200})),verbose:true,costing:"pedestrian",
+  url.searchParams.set("json",JSON.stringify({locations:points.map(p=>({lat:p.lat,lon:p.lng,search_cutoff:searchCutoff})),verbose:true,costing:"pedestrian",
     costing_options:{pedestrian:{max_hiking_difficulty:0,use_ferry:0,private_access_penalty:43200}}}));
-  return fetchRouteJson(url,child,15000);
+  return fetchRouteJson(url,child,timeoutMs);
 }
 
 async function recoverLongWalkingRoute(start,end,request,isCurrent,primaryError) {
@@ -2822,7 +2855,7 @@ function renderVisits() {
 function walkRecordLabel(walk) {
   const distance = walk.distanceMeters === null ? "距離未入力" : routeDistance(walk.distanceMeters);
   const duration = walk.durationSeconds === null ? "時間未入力" : `${Math.round(walk.durationSeconds / 60 * 10) / 10}分`;
-  return `${walk.source === "route" ? "ルート推定" : "本人入力の実績"} · ${distance} ／ ${duration}`;
+  return `${distance} ／ ${duration}`;
 }
 
 function renderWalkStatistics() {
@@ -2831,10 +2864,8 @@ function renderWalkStatistics() {
   const stats = WalkingFeatures.monthlyStats(visits, month);
   const list = document.createElement("dl");
   for (const [label, value] of [["散歩回数", `${stats.count}回`],
-    ["距離・本人入力", `${(stats.manual.distance / 1000).toLocaleString("ja-JP", { maximumFractionDigits: 2 })} km`],
-    ["距離・ルート推定", `${(stats.route.distance / 1000).toLocaleString("ja-JP", { maximumFractionDigits: 2 })} km`],
-    ["時間・本人入力", `${Math.round(stats.manual.duration / 60)}分`],
-    ["時間・ルート推定", `${Math.round(stats.route.duration / 60)}分`]]) {
+    ["距離", `${((stats.manual.distance + stats.route.distance) / 1000).toLocaleString("ja-JP", { maximumFractionDigits: 2 })} km`],
+    ["時間", `${Math.round((stats.manual.duration + stats.route.duration) / 60)}分`]]) {
     const row = document.createElement("div");
     row.append(textElement("dt", label), textElement("dd", value));
     list.append(row);
@@ -2862,7 +2893,7 @@ ui["copy-route-walk"].addEventListener("click", () => {
   ui["visit-walk-source"].value = "route";
   ui["visit-distance"].value = Math.round(route.distance) / 1000;
   ui["visit-duration"].value = Math.round(route.duration / 6) / 10;
-  message(ui["visit-status"], "ルート検索の推定値を入力しました。歩いた記録は「保存」で登録できます。");
+  message(ui["visit-status"], "ルートの距離・時間を入力しました。歩いた記録は「保存」で登録できます。");
 });
 
 function japaneseCountry(properties) {
@@ -4833,13 +4864,15 @@ map.on("click", ({ latlng }) => {
   const place = { name: "", address: "", lat: latlng.lat,
     lng: ((latlng.lng + 180) % 360 + 360) % 360 - 180 };
   if (selectingStartOnMap) {
+    if (typeof NearbyRouting !== "undefined") NearbyRouting.stopPicking();
     stopStartMapSelection();
     setDiscoveryOpen(true, false);
     setStartPoint(place, { moveMap: false });
     return;
   }
-  if (!panelIsOpen()) return;
-  selectPlace(place, null, false);
+  if (typeof NearbyRouting !== "undefined" && NearbyRouting.handleMapClick(place)) return;
+  if (panelIsOpen()) { selectPlace(place, null, false); return; }
+  if (typeof MapPointSelection !== "undefined") MapPointSelection.show(place);
 });
 renderVisits();
 openMap();

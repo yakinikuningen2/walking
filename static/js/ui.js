@@ -2,7 +2,7 @@
 (() => {
   const mobile = window.matchMedia("(max-width: 840px), (max-width: 1080px) and (max-height: 480px)");
   const navigation = [...document.querySelectorAll("[data-view]")];
-  const screens = { search: ui["discovery-screen"], saved: searchPanel, tour: document.getElementById("tour-screen"), settings: ui["setup-screen"] };
+  const screens = { search: ui["discovery-screen"], saved: searchPanel, tour: document.getElementById("tour-screen"), settings: ui["setup-screen"], walk: document.getElementById("walk-screen") };
   let currentView = ui["setup-screen"].hidden ? "map" : "settings";
   let layoutFrame = null;
   const attribution = map.attributionControl.getContainer();
@@ -71,7 +71,7 @@
   }
 
   function syncNavigation() {
-    const visible = { search: !screens.search.hidden, saved: panelIsOpen(), tour: !screens.tour.hidden, settings: !screens.settings.hidden };
+    const visible = { search: !screens.search.hidden, saved: panelIsOpen(), tour: !screens.tour.hidden, settings: !screens.settings.hidden, walk: !screens.walk.hidden };
     if (!visible[currentView]) currentView = Object.keys(visible).find((key) => visible[key]) || "map";
     document.body.dataset.view = currentView;
     document.body.classList.toggle("workspace-open", currentView !== "map");
@@ -88,6 +88,7 @@
     if (view !== "search" && !screens.search.hidden) setDiscoveryOpen(false, false);
     if (view !== "settings" && !screens.settings.hidden) closeWalkingSettings(false);
     if (view !== "tour" && !screens.tour.hidden) WalkingTour.close();
+    if (view !== "walk" && !screens.walk.hidden) WalkingSession.close();
   }
 
   function openView(view) {
@@ -97,6 +98,7 @@
     if (view === "saved" && !panelIsOpen()) setPanelOpen(true, false);
     if (view === "settings" && screens.settings.hidden) openWalkingSettings();
     if (view === "tour" && screens.tour.hidden) WalkingTour.open();
+    if (view === "walk" && screens.walk.hidden) WalkingSession.open();
     syncNavigation();
   }
 
@@ -119,6 +121,7 @@
       if (record.target === screens.search && !screens.search.hidden) opened = "search";
       if (record.target === screens.settings && !screens.settings.hidden) opened = "settings";
       if (record.target === screens.tour && !screens.tour.hidden) opened = "tour";
+      if (record.target === screens.walk && !screens.walk.hidden) opened = "walk";
       if (record.target === appShell && panelIsOpen() && !String(record.oldValue).includes("panel-open")) opened = "saved";
     }
     if (opened) { closePeers(opened); currentView = opened; }
@@ -261,10 +264,14 @@
   const guideNext = document.getElementById("finish-onboarding");
   const guidePrevious = document.getElementById("previous-onboarding");
   const guideHint = document.getElementById("onboarding-hint");
+  const guideCard = guide.querySelector(".onboarding-card");
+  const guideWindow = document.getElementById("onboarding-window");
   const onboardingKey = "walking.onboarding.v1";
   const onboardingHintKey = "walking.onboarding-hint.v1";
   let guidePage = 0;
   let guideHintSeen = onboardingSeen(onboardingHintKey);
+  let guideFrame = null;
+  let guideLayout = null;
   function onboardingSeen(key = onboardingKey) {
     try { if (localStorage.getItem(key) === "seen") return true; } catch { /* Storage can be unavailable in private contexts. */ }
     try { return sessionStorage.getItem(key) === "seen"; } catch { return false; }
@@ -272,6 +279,58 @@
   function rememberOnboarding(key = onboardingKey) {
     try { localStorage.setItem(key, "seen"); return; } catch { /* Keep the app usable when persistent storage is blocked. */ }
     try { sessionStorage.setItem(key, "seen"); } catch { /* The guide can still be dismissed in this page. */ }
+  }
+  function placeOnboardingCard(target, card, viewport) {
+    const gap = 16, edge = 12;
+    const topEdge = edge + (viewport.topInset || 0), bottomEdge = edge + (viewport.bottomInset || 0);
+    const leftEdge = edge + (viewport.leftInset || 0), rightEdge = edge + (viewport.rightInset || 0);
+    const clamp = (value, min, max) => Math.max(min, Math.min(value, Math.max(min, max)));
+    const centeredLeft = clamp((target.left + target.right - card.width) / 2, leftEdge, viewport.width - card.width - rightEdge);
+    const centeredTop = clamp((target.top + target.bottom - card.height) / 2, topEdge, viewport.height - card.height - bottomEdge);
+    const choices = {
+      right: { left: target.right + gap, top: centeredTop },
+      left: { left: target.left - gap - card.width, top: centeredTop },
+      below: { left: centeredLeft, top: target.bottom + gap },
+      above: { left: centeredLeft, top: target.top - gap - card.height },
+    };
+    const order = viewport.width > 840 ? ["right", "left", "below", "above"] : ["above", "below", "right", "left"];
+    const side = order.find(key => {
+      const box = choices[key];
+      return box.left >= leftEdge && box.top >= topEdge && box.left + card.width <= viewport.width - rightEdge && box.top + card.height <= viewport.height - bottomEdge;
+    });
+    if (side) return { ...choices[side], side };
+    // A large target or a short landscape viewport may leave no full-sized gap.
+    const below = viewport.height - target.bottom >= target.top;
+    return { left: centeredLeft, top: clamp(below ? target.bottom + gap : target.top - gap - card.height, topEdge, viewport.height - card.height - bottomEdge), side: below ? "below" : "above" };
+  }
+  function positionGuide() {
+    guideFrame = null;
+    if (guide.hidden || !guide.open) return;
+    const page = guidePages[guidePage];
+    let target = document.querySelector(page.dataset.guideTarget);
+    if (guidePage === 2 && !ui["route-map-actions"].hidden && ui["route-map-actions"].getBoundingClientRect().height > 0) target = ui["route-map-actions"];
+    const width = guide.clientWidth, height = guide.clientHeight;
+    const box = target.getBoundingClientRect();
+    const focus = { left: Math.max(4, box.left - 6), right: Math.min(width - 4, box.right + 6),
+      top: Math.max(4, box.top - 6), bottom: Math.min(height - 4, box.bottom + 6) };
+    if (target === map.getContainer()) {
+      // Highlight a real area of the map, leaving room for the explanation.
+      focus.left += 20; focus.right -= 20; focus.top += 24;
+      focus.bottom = Math.min(focus.top + 160, height * .4);
+      if (width >= 600 && height <= 480) focus.right = Math.min(focus.right, width * .45);
+    }
+    for (const [name, value] of Object.entries({ x: focus.left, y: focus.top, width: Math.max(0, focus.right - focus.left), height: Math.max(0, focus.bottom - focus.top) })) guideWindow.setAttribute(name, value);
+    const style = getComputedStyle(guide);
+    const placement = placeOnboardingCard(focus, guideCard.getBoundingClientRect(), { width, height,
+      topInset: parseFloat(style.paddingTop), bottomInset: parseFloat(style.paddingBottom),
+      leftInset: parseFloat(style.paddingLeft), rightInset: parseFloat(style.paddingRight) });
+    guideCard.style.left = `${placement.left}px`;
+    guideCard.style.top = `${placement.top}px`;
+    guideCard.dataset.side = placement.side;
+  }
+  function scheduleGuidePosition() {
+    if (guide.hidden || guideFrame !== null) return;
+    guideFrame = requestAnimationFrame(positionGuide);
   }
   function showGuidePage(index) {
     guidePage = Math.max(0, Math.min(index, guidePages.length - 1));
@@ -282,21 +341,52 @@
     });
     guidePrevious.disabled = guidePage === 0;
     guideNext.textContent = guidePage === guidePages.length - 1 ? "地図を開く" : "次へ";
+    const page = guidePages[guidePage];
+    openView(page.dataset.guideView);
+    const scroller = screens[page.dataset.guideView]?.querySelector("#discovery-content, .sidebar-content, #tour-content, #walking-settings-content");
+    if (scroller) scroller.scrollTop = 0;
+    const target = document.querySelector(page.dataset.guideTarget);
+    target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
     guide.querySelector(".onboarding-content").scrollTop = 0;
+    scheduleGuidePosition();
     if (guidePrevious.disabled && document.activeElement === guidePrevious) guideNext.focus({ preventScroll: true });
   }
   function showOnboarding() {
     guideHint.hidden = true;
-    openView("map");
-    showGuidePage(0);
+    document.body.classList.add("onboarding-active");
+    guideLayout = {
+      offset: { ...discoveryPanelOffset },
+      expanded: Object.values(screens).map(screen => [screen, screen.classList.contains("is-expanded")]),
+      scroll: [...document.querySelectorAll("#discovery-content, .sidebar-content, #tour-content, #walking-settings-content")].map(element => [element,
+        element === ui["discovery-content"] && screens.search.hidden ? discoveryScrollTop : element.scrollTop]),
+    };
+    discoveryPanelOffset = { x: 0, y: 0 };
+    screens.search.style.setProperty("--discovery-drag-x", "0px");
+    screens.search.style.setProperty("--discovery-drag-y", "0px");
+    for (const [screen] of guideLayout.expanded) setExpanded(screen, false);
     guide.hidden = false;
     if (!guide.open) guide.showModal();
+    showGuidePage(0);
     rememberOnboarding();
   }
   function hideOnboarding() {
     if (guide.hidden) return;
     guide.close();
     guide.hidden = true;
+    document.body.classList.remove("onboarding-active");
+    if (guideFrame !== null) cancelAnimationFrame(guideFrame);
+    guideFrame = null;
+    openView("map");
+    if (guideLayout) {
+      discoveryPanelOffset = guideLayout.offset;
+      screens.search.style.setProperty("--discovery-drag-x", `${guideLayout.offset.x}px`);
+      screens.search.style.setProperty("--discovery-drag-y", `${guideLayout.offset.y}px`);
+      for (const [screen, expanded] of guideLayout.expanded) setExpanded(screen, expanded);
+      for (const [element, scroll] of guideLayout.scroll) element.scrollTop = scroll;
+      // setDiscoveryOpen restores this saved position on the next visit.
+      discoveryScrollTop = guideLayout.scroll.find(([element]) => element === ui["discovery-content"])[1];
+      guideLayout = null;
+    }
     if (!guideHintSeen) {
       guideHint.hidden = false;
       guideHintSeen = true;
@@ -319,6 +409,11 @@
       showGuidePage(guidePage + (event.key === "ArrowRight" ? 1 : -1));
     }
   });
+  const guideSizes = new ResizeObserver(scheduleGuidePosition);
+  for (const element of [guideCard, map.getContainer(), ...Object.values(screens)]) guideSizes.observe(element);
+  window.addEventListener("resize", scheduleGuidePosition);
+  window.visualViewport?.addEventListener("resize", scheduleGuidePosition);
+  document.addEventListener("scroll", scheduleGuidePosition, true);
   // Swiping changes only the guide's page; Leaflet keeps its own touch handling.
   const guideContent = guide.querySelector(".onboarding-content");
   let swipeStart = null;

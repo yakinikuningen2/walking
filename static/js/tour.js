@@ -80,7 +80,7 @@ const WalkingTour = (() => {
     const pending=course.stops.filter(p=>!course.visited.includes(p.key));
     $("tour-summary").textContent=`${routeDistance(course.distance)} ／ 徒歩約${routeDuration(course.duration)} ／ ${course.stops.length}地点`;
     renderLegend($("tour-route-legend"));
-    $("tour-route-note").textContent=`${TourCore.THEMES[course.settings.theme].label}${course.settings.direction!=="any"?` · ${TourCore.DIRECTIONS[course.settings.direction]}方面`:""} · ${course.settings.speed} km/h · ${course.settings.returnToStart?"出発地点に戻る":"最後の地点で終了"}（ルート検索の推定）${course.overlap>=.15||course.returnOverlap>.15?"。一部で同じ道を通ります。":""}`;
+    $("tour-route-note").textContent=`${TourCore.THEMES[course.settings.theme].label}${course.settings.direction!=="any"?` · ${TourCore.DIRECTIONS[course.settings.direction]}方面`:""} · ${course.settings.speed} km/h · ${course.settings.returnToStart?"出発地点に戻る":"最後の地点で終了"}${course.overlap>=.15||course.returnOverlap>.15?"。一部で同じ道を通ります。":""}`;
     $("tour-progress").textContent=`訪問済み ${course.visited.length}/${course.stops.length}地点${TourCore.complete(course)?" · 完了":""}`;
     $("tour-next").textContent=pending.length?`現在の目的地：${pending[0].name}${pending[1]?` ／ 次：${pending[1].name}`:course.settings.returnToStart?" ／ 次：出発地点":""}`:course.settings.returnToStart&&!course.returned?"現在の目的地：出発地点":"すべての経由地の訪問を確認しました。";
     $("tour-stops").replaceChildren();
@@ -116,7 +116,7 @@ const WalkingTour = (() => {
     $("tour-history").replaceChildren();$("tour-history-empty").hidden=saved.length>0;
     for(const entry of [...saved].sort((a,b)=>b.completedAt.localeCompare(a.completedAt))){
       const item=document.createElement("li");item.className="tour-history-card";
-      item.append(textElement("strong",`${TourCore.THEMES[entry.settings.theme].label}${entry.settings.direction!=="any"?` · ${TourCore.DIRECTIONS[entry.settings.direction]}方面`:""}`),textElement("p",`${new Date(entry.completedAt).toLocaleDateString("ja-JP")} · ${entry.stops.length}地点`,"tour-help"),textElement("p",`${routeDistance(entry.distance)} ／ 約${routeDuration(entry.duration)}（ルート推定）`,"tour-help"));
+      item.append(textElement("strong",`${TourCore.THEMES[entry.settings.theme].label}${entry.settings.direction!=="any"?` · ${TourCore.DIRECTIONS[entry.settings.direction]}方面`:""}`),textElement("p",`${new Date(entry.completedAt).toLocaleDateString("ja-JP")} · ${entry.stops.length}地点`,"tour-help"),textElement("p",`${routeDistance(entry.distance)} ／ 約${routeDuration(entry.duration)}`,"tour-help"));
       const show=textElement("button","コースを見る");show.type="button";show.onclick=()=>{cancel();course=TourCore.validateCourse(structuredClone(entry));$("tour-direction").value=course.settings.direction;pool=[];persistDraft();renderCourse();draw(true);$("tour-course").scrollIntoView({block:"nearest"});};
       const remove=textElement("button","削除");remove.type="button";remove.disabled=!historyWritable;remove.onclick=()=>{
         const next=saved.filter(c=>c.id!==entry.id);try{localStorage.setItem(historyKey,JSON.stringify({version:1,courses:next}));saved=next;renderHistory();tell("保存した周遊コースを削除しました。");}catch{tell("削除を保存できませんでした。元の記録は残しています。",true);}
@@ -148,7 +148,7 @@ const WalkingTour = (() => {
     if(unique.length<(config.autoCount?1:config.count)&&failures)throw new TourCore.TourError("SEARCH_API","一部の施設を検索できず、必要な候補を確認できませんでした。時間を置いて再試行してください。");
     return unique;
   }
-  const engine=TourCore.createEngine({search,progress:text=>{if(active)tell(text);},route:async(a,b,speed,signal,options={})=>{
+  const engine=TourCore.createEngine({search,historyKey:()=>typeof WalkingSession!=="undefined"?WalkingSession.historyKey():"",progress:text=>{if(active)tell(text);},route:async(a,b,speed,signal,options={})=>{
     const controller=new AbortController(),abort=()=>controller.abort();signal.addEventListener("abort",abort,{once:true});
     if(signal.aborted)controller.abort();
     try{

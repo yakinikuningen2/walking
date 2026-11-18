@@ -27,6 +27,16 @@ def payload():
 
 
 class LimitTest(unittest.TestCase):
+    def test_alternates_are_bounded_and_use_only_normal_route_inputs(self):
+        body = payload()
+        body["params"]["alternates"] = 2
+        _, checked = service.validated(body)
+        self.assertEqual(checked["alternates"], 2)
+        for invalid in [-1, 3, True, "2"]:
+            body["params"]["alternates"] = invalid
+            with self.assertRaises(RouteError):
+                service.validated(body)
+
     def test_concurrent_users_share_one_slot_and_minimum_interval(self):
         gate = RequestGate(interval=.02, minute=100, daily=100, wait=1)
         starts, active, highest = [], 0, 0

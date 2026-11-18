@@ -55,6 +55,7 @@ User-Agent: WalkingMap/1.0 (+https://walking-ctsh.onrender.com/; https://github.
 - 周遊は利用者操作で開始し、生成45秒・ルート取得14回の既存上限を維持。
 - 長距離分割は最大16区間・分割120秒・全体150秒、歩行道路の中継照合を維持。新しい制限に達した場合も、直線で補ったり無制限再試行したりしない。
 - 経由ルートの更新はメインと別に管理するが、通信は同じサーバー制限を通る。
+- 保存した道との重複は端末内で比較する。2地点・直線20km未満のValhalla検索は `alternates: 2` を同じ1リクエストに付け、取得できた最大3候補を比較する。保存軌跡・体重・メモを送信しない。候補追加がなくても再試行しない。複数寄り道は5地点まで・編集待機300ms・全体45秒・最大6区間。GPS計測自体は検索リクエストを発生させない。
 
 ## 位置情報の流れ
 
@@ -121,3 +122,6 @@ node --test test_nearby_routing.cjs test_long_routes.cjs test_candidate_distance
 `api_limits.py`（共有制限）、`valhalla_service.py`（固定先中継・検証・識別・キャッシュ）、`walking_routes.py`（ORS新URL・共有制限）、`app.py`（中継・429・入力とOrigin・公開文書の配信）、`static/js/app.js`（中継通信・自動更新抑制）、`static/js/candidate-distances.js`（自動予算・手動操作）、HTML2入口・CSS・出典台帳／ページ・プライバシーポリシー、関連テスト、`benchmark_routing_policy.py`、既存`benchmark_long_routes.cjs`のローカル中継対応、`render.yaml`の単一プロセス注記、README・THIRD_PARTY_NOTICES・本報告・英文案。新しいライブラリは追加していません。
 
 既存の長距離実通信ベンチマークも`http://127.0.0.1:8000/api/valhalla`を通ります。実行する場合は更新後のPythonサーバーを先に8000番で起動してください。通常のテストで長距離の実要求は再実行しません。
+
+
+地図タップの指定はボタン操作時だけ `/locate` を1地点・検索上限200m・8秒で使用し、150m以内の徒歩アクセス可能な道を確認します。既存の改札内通路データも候補除外に使用します。端末内で最大32件・成功5分／候補なし30秒を再利用し、エラーは候補なしとして保存しません。15mを超える変更は確認してから適用し、過去のGPS履歴を送信しません。

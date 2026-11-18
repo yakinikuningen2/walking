@@ -170,7 +170,7 @@
   function createEngine(deps) {
     const cache=new Map();
     async function getLeg(a,b,speed,state,signal,options={}) {
-      const key=`${a.lat.toFixed(6)},${a.lng.toFixed(6)}/${b.lat.toFixed(6)},${b.lng.toFixed(6)}/${speed}/${JSON.stringify(options.avoidPolygons||[])}`;
+      const key=`${a.lat.toFixed(6)},${a.lng.toFixed(6)}/${b.lat.toFixed(6)},${b.lng.toFixed(6)}/${speed}/${JSON.stringify(options.avoidPolygons||[])}/${deps.historyKey?.()||""}`;
       let leg=cache.get(key);
       if(!leg||Date.now()-leg.at>300000){
         if(state.calls>=LIMITS.routeCalls)throw new TourError("LIMIT","徒歩ルートの確認回数の上限に達しました。条件を変えて再試行してください。");
