@@ -5,14 +5,17 @@ const vm = require('node:vm');
 const source = fs.readFileSync(`${__dirname}/static/js/app.js`, 'utf8');
 
 function headingSetup(sensor = {}) {
-  const listeners = {}, markers = [];
+  const listeners = {}, markers = [], timers = new Map(), status = {textContent:"",hidden:true};
+  let now=1000000, timerId=0;
   const context = vm.createContext({
+    setTimeout(fn,ms){const id=++timerId;timers.set(id,{fn,at:now+ms});return id;},
+    clearTimeout(id){timers.delete(id);},
     window: { isSecureContext: true, DeviceOrientationEvent: sensor,
       screen: { orientation: { angle: 0, addEventListener() {} } },
       addEventListener(type, fn) { listeners[type] = fn; } },
-    document: { hidden: false, addEventListener(type, fn) { listeners[type] = fn; } },
+    document: { hidden: false, getElementById(){return status;}, addEventListener(type, fn) { listeners[type] = fn; } },
     headingListening: false, headingReading: null, currentHeadingMarker: null,
-    headingPermission: null, headingPermissionRequest: null,
+    headingPermission: null, headingPermissionRequest: null, headingAutoTried:false, headingMonitorTimer:null,
     currentPosition: { lat: 35, lng: 139 }, map: {},
     L: { divIcon: x => x, marker(point, options) {
       const marker = { point, options, angle: null, removed: false,
@@ -24,7 +27,8 @@ function headingSetup(sensor = {}) {
     } },
   });
   vm.runInContext(source.slice(source.indexOf('function screenOrientationAngle()'), source.indexOf('function showCurrentLocation(')), context);
-  return { context, listeners, markers };
+  const advance=ms=>{now+=ms;for(const [id,timer] of [...timers])if(timer.at<=now){timers.delete(id);timer.fn();}};
+  return { context, listeners, markers, status, advance, timers };
 }
 
 test('Safari heading permission is requested from the existing location controls, once per grant', async () => {
@@ -40,7 +44,7 @@ test('Safari heading permission is requested from the existing location controls
   assert.equal(calls, 1);
   for (const id of ['location-button', 'follow-location']) {
     const handler = source.slice(source.indexOf(`ui["${id}"].addEventListener("click"`));
-    assert.match(handler.slice(0, handler.indexOf('\n});')), /enableHeadingFromGesture\(\)/);
+    assert.match(handler.slice(0, handler.indexOf('\n});')), /enableHeadingFromGesture\(\{ retry: true \}\)/);
   }
 });
 
@@ -79,6 +83,61 @@ test('real compass updates the arrow at the GPS dot, including landscape and vis
   c.document.hidden = true;
   listeners.visibilitychange();
   assert.equal(c.currentHeadingMarker, null);
+});
+
+
+function headingTarget({inside=true,field=false,external=false}={}) {
+  return {closest(selector){
+    if(selector==='input, textarea, select, label')return field?{}:null;
+    if(selector==='a[href]')return external?{}:null;
+    if(selector==='.app-brand')return null;
+    return inside?{}:null;
+  }};
+}
+
+test('first real map/menu interaction requests permission synchronously, while scripted clicks do not consume it',async()=>{
+  let calls=0;const {context:c,listeners}=headingSetup({requestPermission(){calls++;return Promise.resolve('granted');}});
+  assert.equal(typeof listeners.click,'function');
+  listeners.click({isTrusted:false,target:headingTarget()});assert.equal(c.headingAutoTried,false);assert.equal(calls,0);
+  for(const options of [{inside:false},{field:true},{external:true}])listeners.click({isTrusted:true,target:headingTarget(options)});
+  assert.equal(calls,0);
+  listeners.click({isTrusted:true,target:headingTarget()});assert.equal(calls,1,'invoke before any deferred task');
+  await c.headingPermissionRequest;await Promise.resolve();assert.equal(c.headingPermission,'granted');
+  listeners.click({isTrusted:true,target:headingTarget()});assert.equal(calls,1);
+});
+
+test('refused permission is explained and can be retried after changing browser settings',async()=>{
+  let calls=0;const {context:c,status}=headingSetup({requestPermission(){return Promise.resolve(++calls===1?'denied':'granted');}});
+  assert.equal(await c.enableHeadingFromGesture(),false);assert.equal(status.hidden,false);assert.match(status.textContent,/許可/);
+  assert.equal(await c.enableHeadingFromGesture(),false);assert.equal(calls,1,'no repeated automatic prompts');
+  c.handleDeviceOrientation({webkitCompassHeading:75,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker,null,'ignore events while denied');
+  assert.equal(await c.enableHeadingFromGesture({retry:true}),true);assert.equal(calls,2);
+  c.handleDeviceOrientation({webkitCompassHeading:75,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker.angle,'75.0deg');assert.equal(status.hidden,true);
+});
+
+test('missing, insecure and unsupported sensors give a reason without inventing a facing direction',async()=>{
+  const {context:c,status,advance}=headingSetup({requestPermission:()=>Promise.resolve('granted')});
+  await c.enableHeadingFromGesture();advance(8000);assert.equal(c.currentHeadingMarker,null);assert.equal(status.hidden,false);assert.match(status.textContent,/取得できません/);
+  c.handleDeviceOrientation({alpha:45,beta:0,gamma:0,absolute:false});assert.equal(c.currentHeadingMarker,null);
+  c.window.isSecureContext=false;await c.enableHeadingFromGesture({retry:true});assert.match(status.textContent,/HTTPS/);
+  c.window.isSecureContext=true;c.window.DeviceOrientationEvent=undefined;await c.enableHeadingFromGesture({retry:true});assert.match(status.textContent,/利用できません/);
+});
+
+test('empty WebKit properties do not mask Android absolute readings or erase valid headings',()=>{
+  const {context:c,status}=headingSetup();
+  c.handleDeviceOrientation({webkitCompassHeading:null,alpha:270,beta:0,gamma:0,absolute:true});assert.equal(c.currentHeadingMarker.angle,'90.0deg');
+  c.handleDeviceOrientation({webkitCompassHeading:undefined,alpha:200,beta:0,gamma:0,absolute:false});assert.equal(c.currentHeadingMarker.angle,'90.0deg');
+  c.handleDeviceOrientation({webkitCompassHeading:45,webkitCompassAccuracy:-1,absolute:false});assert.equal(c.currentHeadingMarker,null);assert.match(status.textContent,/コンパス/);
+  c.handleDeviceOrientation({webkitCompassHeading:0,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker.angle,'0.0deg');assert.equal(status.hidden,true);
+});
+
+test('an idle phone keeps a valid arrow and resume waits for new direction data',()=>{
+  const {context:c,advance,listeners,status}=headingSetup();
+  c.handleDeviceOrientation({webkitCompassHeading:180,webkitCompassAccuracy:5});const marker=c.currentHeadingMarker;
+  advance(60000);assert.equal(c.currentHeadingMarker,marker);assert.equal(status.hidden,true,'no false missing-data warning on stationary devices');
+  c.document.hidden=true;listeners.visibilitychange();assert.equal(c.currentHeadingMarker,null);
+  c.document.hidden=false;listeners.visibilitychange();advance(8000);assert.equal(status.hidden,false);
+  c.handleDeviceOrientation({webkitCompassHeading:270,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker.angle,'270.0deg');assert.equal(status.hidden,true);
 });
 
 function navigationSetup() {

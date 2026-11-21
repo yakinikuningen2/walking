@@ -187,7 +187,8 @@
       <main id="map" aria-label="散歩用の地図"></main>
       <div id="start-map-selection" class="start-map-selection" role="group" aria-label="スタート地点の指定" hidden><span>スタート地点を地図で指定</span><button id="cancel-start-map" type="button">戻る</button></div>
       <div class="map-utility-actions" role="group" aria-label="地図の操作">
-        <button id="location-button" type="button">現在地</button>
+        <p id="heading-status" class="heading-status" role="status" aria-live="polite" hidden></p>
+        <button id="location-button" type="button" aria-describedby="heading-status">現在地</button>
         <button id="follow-location" type="button" aria-pressed="false">現在地を追従</button>
         <button id="edit-walking-settings" type="button" class="secondary" aria-expanded="false" aria-controls="setup-screen">歩く速さ</button>
       </div>

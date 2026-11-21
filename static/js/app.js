@@ -289,6 +289,8 @@ let headingReading = null;
 let headingListening = false;
 let headingPermissionRequest = null;
 let headingPermission = null;
+let headingAutoTried = false;
+let headingMonitorTimer = null;
 let searchedStart = null;
 let startMarker = null;
 let selectingStartOnMap = false;
@@ -836,21 +838,28 @@ function deviceHeading(reading) {
   if (!reading) return null;
   const screenAngle = screenOrientationAngle();
   if (Number.isFinite(reading.compass)) return (reading.compass + screenAngle + 360) % 360;
+  if (![reading.alpha, reading.beta, reading.gamma].every(Number.isFinite)) return null;
   const radians = Math.PI / 180;
   const a = reading.alpha * radians, b = reading.beta * radians, g = reading.gamma * radians;
   const s = screenAngle * radians;
   const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
   const cg = Math.cos(g), sg = Math.sin(g);
-  // Project the current screen's top edge onto east/north using the Z-X'-Y'' rotation.
+  // Project the screen's top edge onto east/north using the Z-X'-Y'' rotation.
   let east = (ca * cg - sa * sb * sg) * Math.sin(s) - sa * cb * Math.cos(s);
   let north = (sa * cg + ca * sb * sg) * Math.sin(s) + ca * cb * Math.cos(s);
   if (Math.hypot(east, north) < 0.5) {
-    // With an upright phone the top edge points up; use the direction behind its screen.
     east = -ca * sg - sa * sb * cg;
     north = -sa * sg + ca * sb * cg;
   }
   if (Math.hypot(east, north) < 0.01) return null;
   return (Math.atan2(east, north) / radians + 360) % 360;
+}
+
+function setHeadingStatus(text = "") {
+  const status = document.getElementById("heading-status");
+  if (!status) return;
+  if (status.textContent !== text) status.textContent = text;
+  status.hidden = !text;
 }
 
 function renderCurrentHeading() {
@@ -864,7 +873,7 @@ function renderCurrentHeading() {
     currentHeadingMarker = L.marker([currentPosition.lat, currentPosition.lng], {
       icon: L.divIcon({
         className: "current-heading-icon", iconSize: [56, 56], iconAnchor: [28, 28],
-        html: '<span class="current-heading-pointer" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M28 2 39 24 28 19 17 24Z" fill="#2476cf" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></span>',
+        html: '<span class="current-heading-pointer" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M28 1 41 25 28 19 15 25Z" fill="#2476cf" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/></svg></span>',
       }),
       interactive: false, keyboard: false, zIndexOffset: 1000,
     }).addTo(map);
@@ -874,22 +883,53 @@ function renderCurrentHeading() {
       currentHeadingMarker.setLatLng([currentPosition.lat, currentPosition.lng]);
     }
   }
-  currentHeadingMarker.getElement().style.setProperty("--heading-angle", `${heading.toFixed(1)}deg`);
+  currentHeadingMarker.getElement()?.style.setProperty("--heading-angle", `${heading.toFixed(1)}deg`);
+}
+
+function clearCurrentHeading() {
+  headingReading = null;
+  if (headingMonitorTimer !== null) clearTimeout(headingMonitorTimer);
+  headingMonitorTimer = null;
+  renderCurrentHeading();
+}
+
+function monitorHeading(delay = 8000) {
+  if (headingMonitorTimer !== null || document.hidden || headingReading) return;
+  headingMonitorTimer = setTimeout(() => {
+    headingMonitorTimer = null;
+    if (document.hidden) return;
+    // Some browsers emit only on changes; a stationary phone retains its reading.
+    if (headingReading) return;
+    clearCurrentHeading();
+    setHeadingStatus("向きを取得できません。「動作と方向」の許可を確認し、現在地を押して再試行してください。");
+  }, delay);
 }
 
 function handleDeviceOrientation(event) {
-  if (document.hidden) return;
-  if ("webkitCompassHeading" in event) {
-    headingReading = Number.isFinite(event.webkitCompassHeading) && event.webkitCompassHeading >= 0
-      && !(Number.isFinite(event.webkitCompassAccuracy) && event.webkitCompassAccuracy < 0)
-      ? { compass: event.webkitCompassHeading } : null;
-  } else {
-    // Relative rotation and GPS travel bearing cannot tell which way the phone faces.
-    if (!event.absolute && event.type !== "deviceorientationabsolute") return;
-    headingReading = [event.alpha, event.beta, event.gamma].every(Number.isFinite)
-      ? { alpha: event.alpha, beta: event.beta, gamma: event.gamma } : null;
+  if (document.hidden || headingPermission === "denied") return;
+  const compassAvailable = Number.isFinite(event.webkitCompassHeading)
+    && event.webkitCompassHeading >= 0 && event.webkitCompassHeading <= 360;
+  const compassInvalid = Number.isFinite(event.webkitCompassAccuracy) && event.webkitCompassAccuracy < 0;
+  const absoluteAvailable = (event.absolute === true || event.type === "deviceorientationabsolute")
+    && [event.alpha, event.beta, event.gamma].every(Number.isFinite);
+  let reading = null;
+  if (compassAvailable && !compassInvalid) reading = { compass: event.webkitCompassHeading };
+  else if (absoluteAvailable) reading = { alpha: event.alpha, beta: event.beta, gamma: event.gamma };
+  else if (compassAvailable && compassInvalid) {
+    clearCurrentHeading();
+    setHeadingStatus("コンパスの向きを確認できません。端末を動かして調整してください。");
+    return;
   }
+  // Empty WebKit properties must not mask a valid Android absolute reading.
+  // Relative rotation and GPS travel bearing do not establish the user's facing.
+  if (!reading || deviceHeading(reading) === null) return;
+  headingReading = reading;
+  if (headingMonitorTimer !== null) clearTimeout(headingMonitorTimer);
+  headingMonitorTimer = null;
+  headingPermission = "granted";
+  setHeadingStatus();
   renderCurrentHeading();
+  monitorHeading();
 }
 
 function startHeadingUpdates() {
@@ -901,44 +941,69 @@ function startHeadingUpdates() {
   window.addEventListener("orientationchange", renderCurrentHeading);
 }
 
-function clearCurrentHeading() {
-  headingReading = null;
-  renderCurrentHeading();
-}
-
-async function enableHeadingFromGesture() {
+async function enableHeadingFromGesture({ retry = false } = {}) {
   const sensor = window.DeviceOrientationEvent;
-  if (window.isSecureContext === false || !sensor) return false;
-  if (headingReading || headingPermission === "granted" || typeof sensor.requestPermission !== "function") {
+  if (window.isSecureContext === false) {
+    setHeadingStatus("向きの表示にはHTTPS接続が必要です。");
+    return false;
+  }
+  if (!sensor) {
+    if (retry) setHeadingStatus("この端末・ブラウザでは向きのセンサーを利用できません。");
+    return false;
+  }
+  if (((headingReading || headingPermission === "granted") && !retry) || typeof sensor.requestPermission !== "function") {
     startHeadingUpdates();
+    setHeadingStatus();
+    monitorHeading();
     return true;
   }
-  if (headingPermission === "denied") return false;
+  if (headingPermission === "denied" && !retry) return false;
   if (headingPermissionRequest) return headingPermissionRequest.then(state => state === "granted", () => false);
-  // Safari needs user activation. Absolute orientation includes the magnetometer.
+  // Safari requires a real user gesture. Invoke before any await or deferred task.
   try {
-    headingPermissionRequest = sensor.requestPermission(true);
+    headingPermissionRequest = Promise.resolve(sensor.requestPermission(true));
     headingPermission = await headingPermissionRequest;
-    if (headingPermission === "granted") startHeadingUpdates();
-    else clearCurrentHeading();
+    if (headingPermission === "granted") {
+      startHeadingUpdates();
+      setHeadingStatus();
+      monitorHeading();
+    } else {
+      clearCurrentHeading();
+      setHeadingStatus("向きの表示が許可されていません。端末の設定を確認し、現在地を押して再試行してください。");
+    }
     return headingPermission === "granted";
   } catch {
-    // A blocked sensor must not interrupt location or navigation.
     clearCurrentHeading();
+    setHeadingStatus("向きのセンサーを開始できません。現在地を押して再試行してください。");
     return false;
   } finally {
     headingPermissionRequest = null;
   }
 }
 
-if (window.isSecureContext !== false && window.DeviceOrientationEvent) {
-  // Listen on every visit: an already permitted sensor can resume without another tap.
-  startHeadingUpdates();
+function enableHeadingOnFirstInteraction(event) {
+  // Programmatic .click() calls during startup must not consume the first gesture.
+  if (headingAutoTried || event.isTrusted !== true || document.hidden) return;
+  const target = event.target;
+  if (!target?.closest || target.closest("input, textarea, select, label")) return;
+  if (target.closest("a[href]") && !target.closest(".app-brand")) return;
+  if (!target.closest(".app-shell, #setup-screen, #onboarding-guide")) return;
+  if (!window.DeviceOrientationEvent && window.isSecureContext !== false) return;
+  headingAutoTried = true;
+  void enableHeadingFromGesture();
 }
+
+if (window.isSecureContext !== false && window.DeviceOrientationEvent) startHeadingUpdates();
+document.addEventListener("click", enableHeadingOnFirstInteraction, true);
 window.addEventListener("pagehide", clearCurrentHeading);
+window.addEventListener("pageshow", () => {
+  if (headingPermission === "granted") { startHeadingUpdates(); monitorHeading(); }
+});
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) clearCurrentHeading();
+  else if (headingPermission === "granted") monitorHeading();
 });
+
 
 function showCurrentLocation(position, { center = true, keepZoom = routeEnabled, refreshRoute = true, updateRoute = true } = {}) {
   if (refreshRoute) setLocationBusy(false);
@@ -1169,13 +1234,13 @@ function requestCurrentLocation({ initial = false, recenter = false, preserveVie
 }
 
 ui["location-button"].addEventListener("click", () => {
-  void enableHeadingFromGesture();
+  void enableHeadingFromGesture({ retry: true });
   if (currentPosition) focusPlace(currentPosition, { keepZoom: true, preserveFollowing: true });
   requestCurrentLocation({ recenter: true });
 });
 
 ui["follow-location"].addEventListener("click", () => {
-  void enableHeadingFromGesture();
+  void enableHeadingFromGesture({ retry: true });
   setLocationFollowing(!followingLocation);
   if (!followingLocation) return;
   if (currentPosition) focusPlace(currentPosition, { keepZoom: true, preserveFollowing: true });
