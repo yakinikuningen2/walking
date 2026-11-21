@@ -447,3 +447,29 @@ button.is-pressed:not(:disabled),summary.is-pressed{background-color:var(--contr
 /* Explain unavailable heading without adding a direction toggle. */
 .heading-status{position:absolute;right:calc(100% + 8px);bottom:0;width:220px;max-width:calc(100vw - var(--map-left) - 180px);margin:0;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);color:var(--text);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 @media(max-width:840px),(max-width:1080px) and (max-height:480px){.heading-status{right:52px;top:0;bottom:auto;width:min(216px,calc(100vw - 84px));max-width:none}}
+
+/* Explicit mountain/access-point selection, separate from the normal destination. */
+.mountain-panel{position:absolute;z-index:1150;left:calc(var(--map-left) + 16px);top:16px;width:370px;max-width:calc(100vw - var(--map-left) - 32px);max-height:calc(100dvh - 48px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius)}
+.mountain-panel>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;border-bottom:1px solid var(--border)}.mountain-panel h2{font-size:18px;font-weight:500;margin:0}.mountain-panel h3{font-size:14px;font-weight:500;margin:20px 0 8px}
+.mountain-content{padding:16px;min-height:0;overflow-y:auto;overscroll-behavior:contain}.mountain-help{font-size:12px;color:var(--muted);line-height:1.7;margin:8px 0}.mountain-safety{font-size:12px;line-height:1.7;padding:10px;background:var(--tint);color:var(--text);margin:12px 0}
+.mountain-search-actions,.mountain-candidate-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.mountain-candidate-actions button{flex:1;font-size:12px;min-height:44px}.mountain-candidate-actions button:last-child{background:var(--green);color:#fff;border-color:var(--green)}
+#mountain-results{display:grid;gap:12px}.mountain-candidate{padding:12px;border:1px solid var(--border);border-radius:var(--radius)}.mountain-place-name{padding:0;min-height:36px;text-align:left;border:0;font-size:14px;background:transparent;font-weight:500}.mountain-candidate>a{font-size:12px}
+@media(max-width:840px),(max-width:1080px) and (max-height:480px){.mountain-panel{top:auto;left:0;right:0;bottom:calc(var(--navigation-height) + env(safe-area-inset-bottom,0px));width:100%;max-width:none;max-height:65dvh;border-radius:8px 8px 0 0}}
+
+/* Geographic search uses the existing search cards and map. */
+.candidate-geographic-relevance { display: block; margin-top: 8px; color: #245744; font-size: 13px; line-height: 1.6; font-weight: 400; overflow-wrap: anywhere; }
+.candidate-geographic-source { display: block; margin: 8px 12px 12px; font-size: 12px; color: #245744; text-decoration: underline; }
+.geo-search-cancel { min-height: 40px; margin: 4px 0 8px; padding: 6px 16px; }
+
+/* Clock-format walking-time range: 00:00 ～ 02:00, including hours beyond 24. */
+.discovery-time-range-fields { display: flex; align-items: center; gap: 8px; width: 100%; }
+.discovery-clock { display: flex; align-items: center; flex: 1; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.discovery-clock input { flex: 1; min-width: 0; width: 0; min-height: 44px; padding: 8px 4px; border: 0; border-radius: 0; background: transparent; text-align: center; font-variant-numeric: tabular-nums; appearance: textfield; -moz-appearance: textfield; }
+.discovery-clock input::-webkit-inner-spin-button, .discovery-clock input::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
+.discovery-clock > span { flex: 0 0 8px; text-align: center; font-variant-numeric: tabular-nums; }
+.discovery-time-separator { color: var(--muted); font-size: 14px; }
+
+.discovery-clock input[id$="-hours"] { padding-right: 0; text-align: right; }
+.discovery-clock input[id$="-minutes"] { padding-left: 0; text-align: left; }
+
+.ambience-unverified { color: var(--muted); font-weight: 400; }

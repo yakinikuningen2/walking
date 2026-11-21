@@ -53,7 +53,9 @@ const WalkingTour = (() => {
     badge.textContent=`周遊 ${course.visited.length}/${course.stops.length} · ${current}`;
   }
   function draw(fit=false){
-    if(!course)return;hideMap();stopWalkingRoute();
+    if(!course)return;
+    if(typeof MountainCore!=="undefined"&&course.stops.some(MountainCore.summit)){tell("山頂を含む保存済みコースは地点情報として確認してください。散歩のルートは再生成できます。",true);return;}
+    hideMap();stopWalkingRoute();
     appShell.classList.add("tour-active");
     destinationMarker?.getElement()?.classList.add("tour-normal-destination");
     // Draw each fetched leg separately; never invent straight connectors between snaps.

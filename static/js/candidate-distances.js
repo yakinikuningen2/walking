@@ -96,6 +96,9 @@ if (typeof document !== "undefined") (() => {
     return { start, speed, key: start ? `${start.lat.toFixed(4)},${start.lng.toFixed(4)},${speed}` : "" };
   }
   function update(element, state) {
+    if (typeof MountainCore !== "undefined" && MountainCore.summit(element.walkingPlace)) {
+      state.controller?.abort();state.controller=null;element.textContent="山・山頂は地点情報のみ";state.done=true;return;
+    }
     const current = context();
     if (current.key !== state.context) {
       state.controller?.abort(); state.controller = null; state.context = current.key; state.done = false;
@@ -103,7 +106,11 @@ if (typeof document !== "undefined") (() => {
     }
     if (document.hidden || !state.visible || state.done || state.controller || !current.start || routeRequest || (typeof WalkingTour !== "undefined" && WalkingTour.isBusy())) return;
     const place = element.walkingPlace;
+
     if (["forest", "waterside", "coast"].includes(place.kindId) && !discoveryNaturalPlaceReady(place)) {
+      element.textContent = "徒歩アクセス未確認・距離は未取得"; state.done = true; return;
+    }
+    if (typeof GeographicCore !== "undefined" && GeographicCore.unresolved(place)) {
       element.textContent = "徒歩アクセス未確認・距離は未取得"; state.done = true; return;
     }
     const controller = new AbortController(); state.controller = controller;

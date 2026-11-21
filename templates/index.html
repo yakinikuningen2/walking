@@ -71,10 +71,10 @@
           <form id="discovery-form" role="tabpanel" aria-labelledby="discovery-conditions-tab">
             <fieldset class="discovery-time">
               <legend>片道の歩く時間</legend>
-              <div class="discovery-time-row"><label><input id="discovery-hours" type="number" min="0" step="1" value="0" aria-label="歩ける時間の時間" aria-describedby="discovery-time-range" required />時間</label><label><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="歩ける時間の分" aria-describedby="discovery-time-range" required />分</label></div>
+              <div class="discovery-time-range-fields" role="group" aria-label="片道の歩く時間の下限から上限"><div class="discovery-clock"><input id="discovery-min-hours" type="number" min="0" step="1" value="00" inputmode="numeric" aria-label="歩く時間の下限（時間）" aria-describedby="discovery-time-range" required /><span aria-hidden="true">:</span><input id="discovery-min-minutes" type="number" min="0" max="59" step="1" value="00" inputmode="numeric" aria-label="歩く時間の下限（分）" aria-describedby="discovery-time-range" required /></div><span class="discovery-time-separator" aria-hidden="true">～</span><div class="discovery-clock"><input id="discovery-hours" type="number" min="0" step="1" value="01" inputmode="numeric" aria-label="歩く時間の上限（時間）" aria-describedby="discovery-time-range" required /><span aria-hidden="true">:</span><input id="discovery-minutes" type="number" min="0" max="59" step="1" value="00" inputmode="numeric" aria-label="歩く時間の上限（分）" aria-describedby="discovery-time-range" required /></div></div>
             </fieldset>
-            <p id="discovery-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
-            <div class="time-presets" role="group" aria-label="歩く時間の目安"><button type="button" data-minutes="30">30分</button><button type="button" data-minutes="60">1時間</button><button type="button" data-minutes="120">2時間</button></div>
+            <p id="discovery-time-range" class="discovery-help">上限に近い順に表示</p>
+            <div class="time-presets" role="group" aria-label="歩く時間の上限の目安"><button type="button" data-minutes="30">30分</button><button type="button" data-minutes="60">1時間</button><button type="button" data-minutes="120">2時間</button></div>
             <div class="discovery-kind-field"><div><label for="discovery-kind">場所の種類</label><select id="discovery-kind" required>
                 <option value="" disabled selected>条件を検索</option>
                 <option value="any">こだわらない</option>
@@ -92,8 +92,9 @@
             <div class="settings-actions primary-search-actions"><button id="discovery-cancel" type="button" disabled>中止</button><button id="discovery-submit" type="submit" class="primary-button">条件に合う場所を探す</button></div>
           </form>
           <form id="random-form" role="tabpanel" aria-labelledby="discovery-random" hidden>
-            <fieldset class="discovery-time"><legend>片道の歩く時間</legend><div class="discovery-time-row"><label><input id="random-hours" type="number" min="0" step="1" value="0" aria-label="ランダム検索の時間" aria-describedby="random-time-range" required />時間</label><label><input id="random-minutes" type="number" min="0" max="59" step="1" value="30" aria-label="ランダム検索の分" aria-describedby="random-time-range" required />分</label></div></fieldset>
-            <p id="random-time-range" class="discovery-help">0分〜1時間の場所を探します。</p>
+            <fieldset class="discovery-time"><legend>片道の歩く時間</legend><div class="discovery-time-range-fields" role="group" aria-label="片道の歩く時間の下限から上限"><div class="discovery-clock"><input id="random-min-hours" type="number" min="0" step="1" value="00" inputmode="numeric" aria-label="歩く時間の下限（時間）" aria-describedby="random-time-range" required /><span aria-hidden="true">:</span><input id="random-min-minutes" type="number" min="0" max="59" step="1" value="00" inputmode="numeric" aria-label="歩く時間の下限（分）" aria-describedby="random-time-range" required /></div><span class="discovery-time-separator" aria-hidden="true">～</span><div class="discovery-clock"><input id="random-hours" type="number" min="0" step="1" value="01" inputmode="numeric" aria-label="歩く時間の上限（時間）" aria-describedby="random-time-range" required /><span aria-hidden="true">:</span><input id="random-minutes" type="number" min="0" max="59" step="1" value="00" inputmode="numeric" aria-label="歩く時間の上限（分）" aria-describedby="random-time-range" required /></div></div>
+            </fieldset>
+            <p id="random-time-range" class="discovery-help"></p>
             <div class="settings-actions primary-search-actions"><button id="discovery-random-cancel" type="button" disabled>中止</button><button id="random-submit" type="submit" class="primary-button">ランダムに探す</button></div>
           </form>
           <div class="results-heading"><h3>散歩先の候補</h3><span id="discovery-count" aria-live="off">0件</span></div>
@@ -280,6 +281,8 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="../static/js/geographic-core.js"></script>
+    <script src="../static/js/mountain-core.js"></script>
     <script src="../static/js/walk-features.js"></script>
     <script src="../static/js/walk-steps-core.js"></script>
     <script src="../static/js/walk-session-core.js"></script>
@@ -287,8 +290,10 @@
     <script src="../static/js/place-photos.js"></script>
     <script src="../static/js/long-routes.js"></script>
     <script src="../static/js/app.js"></script>
+    <script src="../static/js/mountain-destinations.js"></script>
     <script src="../static/js/candidate-distances.js"></script>
     <script src="../static/js/natural-discovery.js"></script>
+    <script src="../static/js/geographic-search.js"></script>
     <script src="../static/js/route-nearby.js"></script>
     <script src="../static/js/nearby-routing.js"></script>
     <script src="../static/js/map-point.js"></script>

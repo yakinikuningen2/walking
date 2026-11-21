@@ -117,7 +117,7 @@ test('saved mood metadata cannot apply a hidden category filter or ranking after
   for (const mood of ['nature', 'relax', 'new', 'long', 'photo', 'free']) {
     const input = { ...base, mood, moodSeed: 42 };
     assert.deepEqual(Array.from(c.discoverySearchKinds(input, c.discoveryPreferences(input))), expectedKinds);
-    assert.equal(c.sortDiscoveryPlaces([b, a], input)[0].key, 'near');
+    assert.equal(c.sortDiscoveryPlaces([b, a], input)[0].key, 'far');
   }
 });
 
@@ -225,7 +225,8 @@ test('the initial one-second window keeps extra candidates and cancels outstandi
   const fast=timers.filter(t=>t.ms===1000);assert.equal(fast.length,1);
   advance(700);fast[0].callback();
   const result=await found;assert.equal(result.length,210);assert.equal(req.sufficientResults,true);
-  assert.equal(new Set(result.slice(0,5).map(p=>p.kindId)).size,2);
+  assert.equal(new Set(result.map(p=>p.kindId)).size,2);
+  assert.ok(result.every((p,i)=>i===0 || result[i-1].duration>=p.duration), 'upper-nearest order takes priority across kinds');
   assert.ok(timers.filter(t=>t.ms===8000).every(t=>t.cleared));
 });
 
@@ -504,8 +505,10 @@ test('rural candidates still require surrounding data and reject dense urban par
   c.mapData = async () => Array.from({ length: 6 }, (_, i) => ({ type: 'node', id: 800 + i,
     lat: point[1] + i * .0001, lon: point[0], tags: { shop: 'convenience' } }));
   const rural = { ...criteria, ambience: 'rural' }, updates = [];
-  const result = await c.findDiscoveryPlaces(rural, start, request(rural), places => updates.push(Array.from(places, p => p.osmId)));
-  assert.equal(updates[0].length, 0);
+  const result = await c.findDiscoveryPlaces(rural, start, request(rural), places => updates.push(Array.from(places)));
+  assert.ok(updates[0].length > 0);
+  assert.ok(updates[0].every(p=>p.ambienceStatus === 'unverified' && !p.ruralMatch));
+  assert.ok(updates.at(-1).every(p=>p.osmId !== 1 && p.ruralMatch && p.ambienceStatus !== 'unverified'));
   assert.equal(result.length, 5);
   assert.ok(result.every(p => p.osmId !== 1 && p.ruralMatch));
   assert.equal(mapCalls.length, 2);
@@ -916,7 +919,7 @@ test('many early parks stay selectable while other kinds are pending, rather tha
   assert.ok(tried.includes('shrine'));
 });
 
-test('unspecified ordering keeps diverse kinds before truncation, more pages and history; specific kinds keep original ranking', () => {
+test('upper-nearest ordering preserves kinds in the capped pool, pagination and history', () => {
   const { context: c } = setup();
   const pool = Array.from({ length: 260 }, (_, i) => ({name:`Park ${i}`,lat:35+i*.0001,lng:139, key: `park/${i}`, kindId: 'park', duration: i, distance: i, preferenceScore: 0 }));
   pool.push(...['cafe', 'mountain', 'shrine'].flatMap(kindId => Array.from({ length: 3 }, (_, i) => ({
@@ -925,12 +928,12 @@ test('unspecified ordering keeps diverse kinds before truncation, more pages and
   const broad = { ...criteria, kind: 'any' };
   const mixed = c.sortDiscoveryPlaces(pool, broad);
   assert.equal(mixed.length, 250);
-  assert.equal(new Set(mixed.slice(0, 5).map(place => place.kindId)).size, 4);
-  assert.equal(new Set(mixed.slice(5, 10).map(place => place.kindId)).size, 4);
+  assert.equal(new Set(mixed.map(place => place.kindId)).size, 4);
+  assert.ok(mixed.every((place,i)=>!i || mixed[i-1].duration>=place.duration));
   assert.equal(mixed.filter(place => place.kindId === 'cafe').length, 3);
   assert.deepEqual(c.sortDiscoveryPlaces(mixed, broad).map(place => place.key), mixed.map(place => place.key), 'rendering or restoring must preserve diversity');
-  assert.deepEqual(Array.from(mixed.filter(place => place.kindId === 'park').slice(0, 3), place => place.duration), [0, 1, 2]);
-  assert.ok(c.sortDiscoveryPlaces(pool, criteria).slice(0, 5).every(place => place.kindId === 'park'), 'a specific-kind search keeps the original ordering');
+  assert.deepEqual(Array.from(mixed.filter(place => place.kindId === 'park').slice(0, 3), place => place.duration), [259, 258, 257]);
+  assert.deepEqual(Array.from(c.sortDiscoveryPlaces(pool.filter(p=>p.kindId==='park'), criteria).slice(0,3),p=>p.duration), [259,258,257]);
 });
 
 test('unspecified search limits concurrent kinds, keeps filters and advances past stalled kinds within eight seconds', async () => {
@@ -1034,10 +1037,12 @@ test('removed legacy walking-place option restores as unspecified while preservi
   c.restoreDiscoverySearch({ id: 'old', criteria: { ...criteria, kind: 'places' }, places: [{ key: 'saved' }], elapsedSeconds: 1 }, false);
   assert.equal(c.ui['discovery-kind'].value, 'any'); assert.equal(c.restored[0].key, 'saved');
   assert.equal(c.restoredMode, 'conditions');
-  c.restoreDiscoverySearch({ id: 'random', criteria: { ...criteria, kind: 'random', minutes: 150 }, places: [{key:'random'}], elapsedSeconds: 1 }, false);
+  c.restoreDiscoverySearch({ id: 'random', criteria: { ...criteria, kind: 'random', minMinutes: 90, minutes: 150 }, places: [{key:'random'}], elapsedSeconds: 1 }, false);
   assert.equal(c.restoredMode, 'random');
-  assert.equal(c.ui['random-hours'].value, 2);
-  assert.equal(c.ui['random-minutes'].value, 0);
+  assert.equal(c.ui['random-hours'].value, '02');
+  assert.equal(c.ui['random-minutes'].value, '30');
+  assert.equal(c.ui['random-min-hours'].value, '01');
+  assert.equal(c.ui['random-min-minutes'].value, '30');
   assert.equal(c.ui['discovery-kind'].value, 'any', 'random history must preserve the other tab settings');
   assert.equal(vm.runInContext('DISCOVERY_SEARCH_TIMEOUT_MS', c), 60000);
 });
@@ -1143,4 +1148,41 @@ test('sea search includes harbours, fishing ports and marinas, retains beaches a
   assert.equal(c.discoveryCandidates(nodes, { ...sea, direction: 'w' }, start).length, 0);
   const far = { ...nodes[0], lat: start.lat, lon: start.lng };
   assert.equal(c.discoveryCandidates([far], sea, start).length, 0, 'walking-time limits remain enforced');
+});
+
+
+test('upper-bound closeness wins before score/elevation, before candidate truncation, and across unknown times', () => {
+  const {context:c}=setup();
+  const input={...criteria,minMinutes:0,minutes:60,highElevation:true};
+  const place=(key,duration,extra={})=>({key,name:key,lat:35+duration/1000000,lng:139,kindId:'park',duration,distance:duration,preferenceScore:0,...extra});
+  const places=[place('close',3550,{elevation:10}),place('short',300,{elevation:1000,preferenceScore:100}),place('middle',3000,{elevation:100})];
+  assert.deepEqual(Array.from(c.sortDiscoveryPlaces(places,input),p=>p.key),['close','middle','short']);
+  assert.equal(c.sortDiscoveryPlaces([place('unknown',NaN,{lat:35.1}),...places],input).at(-1).key,'unknown');
+  const candidates=c.discoveryCandidates(elements([feature(101,10),feature(102,40),feature(103,58)]),input,start,1);
+  assert.equal(candidates.length,1);assert.ok(candidates[0].duration>57*60,'a closer-to-upper candidate must survive the initial limit');
+});
+
+
+test('Akitsu 00:00-06:00 westward shrines remain visible as explicitly unverified when rural lookup fails',async()=>{
+ for(const minMinutes of [0,30,300]){
+  const {context:c,request,mapCalls}=setup();enableBundledIndexes(c);
+  c.shrineIndexCache=null;c.SHRINE_INDEX_ENDPOINT='https://local.test/static/shrines-jp-2026-11-13-v1.json';
+  const input={...criteria,kind:'shrine',minMinutes,minutes:360,ambience:'rural',direction:'w'},req=request(input),updates=[];
+  let fail; c.mapData=()=>new Promise((resolve,reject)=>{fail=()=>reject(Error('gateway unavailable'));});
+  const found=c.findDiscoveryPlaces(input,start,req,p=>updates.push(Array.from(p)));
+  for(let i=0;i<20&&!fail;i++)await new Promise(setImmediate);
+  assert.ok(fail);assert.equal(updates[0].length,10,'local facilities are shown before the external API returns');
+  assert.ok(updates[0].every(p=>p.kindId==='shrine'&&p.duration>=minMinutes*60&&p.duration<=360*60&&c.discoveryDirectionMatches(start,p,'w')));
+  assert.ok(updates[0].every(p=>p.ambienceStatus==='unverified'&&!p.ruralMatch&&p.ambienceNote==='田舎寄りは未確認'));
+  fail();assert.equal((await found).length,0,'unverified facilities must not be returned as confirmed rural matches');
+  assert.equal(req.ambienceUnavailable,true);assert.equal(updates.at(-1).length,10);assert.equal(mapCalls.length,1);assert.equal(c.discoveryContextCache.size,0);
+ }
+});
+
+test('rural verification recovery replaces provisional results with confirmed matches without dropping time/direction filters',async()=>{
+ const {context:c,request}=setup();enableBundledIndexes(c);c.shrineIndexCache=null;c.SHRINE_INDEX_ENDPOINT='https://local.test/static/shrines-jp-2026-11-13-v1.json';
+ c.mapData=async()=>[];const input={...criteria,kind:'shrine',minMinutes:0,minutes:360,ambience:'rural',direction:'w'},updates=[];
+ const found=await c.findDiscoveryPlaces(input,start,request(input),p=>updates.push(Array.from(p)));
+ assert.ok(found.length>=5);assert.ok(updates[0].every(p=>p.ambienceStatus==='unverified'));
+ assert.ok(updates.at(-1).every(p=>p.ruralMatch&&p.ambienceStatus!=='unverified'&&p.duration<=21600&&c.discoveryDirectionMatches(start,p,'w')));
 });

@@ -188,8 +188,13 @@
   }
   for (const button of document.querySelectorAll("[data-minutes]")) button.addEventListener("click", () => {
     const minutes = Number(button.dataset.minutes);
-    ui["discovery-hours"].value = Math.floor(minutes / 60);
-    ui["discovery-minutes"].value = minutes % 60;
+    const minimum = ui["discovery-min-hours"].valueAsNumber * 60 + ui["discovery-min-minutes"].valueAsNumber;
+    if (!Number.isFinite(minimum) || minimum > minutes) {
+      ui["discovery-min-hours"].value = "00";
+      ui["discovery-min-minutes"].value = "00";
+    }
+    ui["discovery-hours"].value = String(Math.floor(minutes / 60)).padStart(2, "0");
+    ui["discovery-minutes"].value = String(minutes % 60).padStart(2, "0");
     ui["discovery-hours"].dispatchEvent(new Event("input", { bubbles: true }));
   });
   for (const button of document.querySelectorAll("[data-kind]")) button.addEventListener("click", () => {

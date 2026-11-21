@@ -56,6 +56,7 @@ const NearbyRouting = (() => {
   function popupOpened(root) { refreshActions(root);appShell.classList.add("nearby-choice-open"); }
   function popupClosed() { appShell.classList.remove("nearby-choice-open"); }
   function select(place) {
+    if(typeof MountainCore!=="undefined"&&MountainCore.summit(place)){MountainDestinations.open(place);return;}
     if(!destination || !validCoordinates(place?.lat,place?.lng) || same(place,destination))return;
     if(!getStartPoint()){
       message(ui["nearby-convenience-status"],"出発地点を設定してから経由地を選んでください。",true);return;
@@ -63,6 +64,7 @@ const NearbyRouting = (() => {
     if(stops.some(p=>same(p,place)))return;
     if(stops.length>=5){message(ui["nearby-convenience-status"],"寄り道は5か所まで追加できます。",true);return;}
     stops.push(Object.freeze({name:place.name || `地図で指定した場所 ${stops.length+1}`,lat:place.lat,lng:place.lng,
+      ...(typeof MountainCore!=="undefined"?MountainCore.metadata(place):{}),
       ...(place.mapPoint && place.offset > 15 ? {accessNote:place.accessNote} : {})}));
     changed();
     map.closePopup();render();
@@ -116,6 +118,7 @@ const NearbyRouting = (() => {
         ...(stops.length>1?{routeTimeoutMs:Math.max(1,Math.min(12000,(request.deadlineAt||Date.now()+45000)-Date.now()))}:{})});}
       catch(e){
         check();
+        if(typeof MountainCore!=="undefined"&&MountainCore.related(a,b))throw MountainCore.routeError(e,MountainCore.access(b)?b:a);
         if(!["DistanceExceeded","154"].includes(String(e.routeCode)) || [429,502,503].includes(e.httpStatus))throw e;
         return LongRoutes.segmented({start:a,end:b,signal,budgetMs:request.deadlineAt?request.deadlineAt-Date.now():LongRoutes.LIMITS.budgetMs,
           progress:text=>{if(isCurrent())message(panel.children[2],text);},locate:locateWalkingWaypoints,

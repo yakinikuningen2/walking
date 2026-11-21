@@ -205,3 +205,17 @@ Pythonパッケージの版・ライセンスは、インストール済み配�
 - 開発時の比較検証：`benchmarks/photo-results.csv` は既存のWikidata（CC0）・GeoNames（CC BY 4.0）・国土数値情報（CC BY 4.0）と、日本大学文理学部のPhoton/OSM地点（ODbL）の取得結果を評価した表です。座標の統合索引、写真バイナリ、記事本文、生のAPI応答は同梱しません。各提供元の取得版・出典・加工は既存のデータ台帳と `benchmarks/PHOTO_BENCHMARK.md` を参照してください。撮影者・画像の出典はCSVの個別URLから確認できます。
 - 除外：利用条件不明、著作者情報不明、非商用限定、特別なRestrictionsのある画像、任意の外部画像URL、Commons外のWikipediaローカル画像。再利用条件を確認できなければ表示しません。フリー画像でも人物・商標など別の権利まで一律に保証されるものではありません。
 - [再利用案内](https://commons.wikimedia.org/wiki/Commons:First_steps/Reuse)、[API利用ガイドライン](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_API_Usage_Guidelines)、[User-Agent方針](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy)を確認。最大2件同時、外部呼び出し間隔250ms、タイムアウト・429/503の待機を実装。メタデータのキャッシュだけを行い、写真バイナリはリポジトリに追加しません。
+
+
+## 実行時の山・登山口・五合目の候補
+
+既存のOverpass APIとPhoton APIから取得するOpenStreetMapの要素を、実行時の候補選択に使用します。提供元：OpenStreetMap contributors。取得元：<https://overpass.private.coffee/api/interpreter>、<https://overpass-api.de/api/interpreter>、<https://photon.komoot.io/api/>。ライセンス：Open Database License 1.0（<https://opendatacommons.org/licenses/odbl/1-0/>）。出典・利用案内：<https://www.openstreetmap.org/copyright>。加工：候補分類、名前・座標・OSM IDの保持、制限のある候補の除外、重複排除、表示件数制限、短期メモリキャッシュ。選択画面に出典・ODbLと各OSM要素へのリンクを表示します。新しいOSM抽出データベースをGitHubに同梱する処理はありません。プログラム自体のライセンスとは区別します。
+
+
+## 地域の表現による場所検索（2026-11-21）
+
+- 提供元：© OpenStreetMap contributors。検索・加工データは [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/)、帰属と権利の案内は [OpenStreetMap著作権ページ](https://www.openstreetmap.org/copyright)。プログラム自体のライセンスとは別。
+- 取得元：既存の [Photon / komoot](https://github.com/komoot/photon)（地域の特定・Overpass失敗時の周辺検索）および `https://overpass.private.coffee/api/interpreter`、`https://overpass-api.de/api/interpreter`（地図要素・形状・周辺道路・アクセス制限）。[Overpassの公開利用指針](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html)と各提供元の条件に従う。Nominatim公開APIは新規導入しない。
+- 加工：定型表現の地域・条件抽出、範囲・タグの絞り込み、重複排除、既存の歩行アクセス判定、OSM IDへの出典リンク。地図要素の座標から施設・自然地形・眺望を生成しない。
+- 上限：最大30km・48要素、確認対象12要素・16周辺範囲、表示16件。地図検索2段階・各6.5秒・全体26秒以内。既存の最大2提供元と中継失敗時の直接接続を再利用し、無制限リトライはしない。Photonは必要時だけ、共有1秒間隔、取得失敗時の周辺検索1回。キャッシュを優先する。
+- 保存：ブラウザの短期メモリキャッシュと既存中継の短期キャッシュだけを利用し、新たなODbLデータベースや生データをリポジトリへ同梱しない。アプリ内「出典・ライセンス」および地図・候補のOSMリンクから出典を確認できる。

@@ -2,6 +2,7 @@
 ((root) => {
   "use strict";
   const identity = typeof module === "object" && module.exports ? require("./place-identity.js") : root.PlaceIdentity;
+  const mountains = typeof module === "object" && module.exports ? require("./mountain-core.js") : root.MountainCore;
   const THEMES = {
     any: { label: "おまかせ", kinds: ["park", "shrine", "neighborhood", "cafe", "sightseeing", "culture"] },
     nature: { label: "自然を楽しむ", kinds: ["park", "waterside", "forest", "mountain"] },
@@ -61,6 +62,7 @@
   function candidates(input, start, visits = [], unfamiliar = false,direction="any") {
     const unique = [];
     for (const raw of identity.dedupe(input)) {
+      if (mountains?.summit(raw)) continue;
       const p = cleanPlace(raw);
       if (!p || meters(start, p) < 80 || unique.some(other => other.key === p.key)) continue;
       if (!directionMatches(start,p,direction)) continue;

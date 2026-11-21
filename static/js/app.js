@@ -182,7 +182,7 @@ const DISCOVERY_KINDS = {
   places: { label: "散歩先", kinds: ["mountain", "forest", "waterside", "coast", "neighborhood", "park", "sightseeing"] },
   any: { label: "こだわらない", tags: null },
   random: { label: "ランダム", tags: null },
-  mountain: { label: "山", tags: { natural: ["peak"] } },
+  mountain: { label: "山", tags: { natural: ["peak", "volcano"] } },
   forest: { label: "森・林", tags: { natural: ["wood"] }, alternatives: [{ landuse: ["forest"] }, { boundary: ["forest"] }], geometry: true },
   waterside: { label: "川辺・湖畔", tags: { natural: ["water", "spring"] },
     alternatives: [{ waterway: ["river", "stream", "riverbank", "waterfall"] }, { water: ["lake", "pond"] }], geometry: true },
@@ -248,9 +248,9 @@ const ui = Object.fromEntries([
   "scenic-route-button", "roundtrip-route-button",
   "toggle-route-details", "route-details-content", "route-map-actions", "refresh-route-on-map",
   "discovery-screen", "discovery-content", "open-discovery", "close-discovery", "discovery-form", "discovery-kind",
-  "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
+  "discovery-min-hours", "discovery-min-minutes", "discovery-hours", "discovery-minutes", "discovery-time-range", "discovery-ambience", "discovery-keyword",
   "discovery-direction", "discovery-random", "discovery-random-cancel", "discovery-search-label",
-  "discovery-conditions-tab", "random-form", "random-hours", "random-minutes", "random-time-range", "random-submit",
+  "discovery-conditions-tab", "random-form", "random-min-hours", "random-min-minutes", "random-hours", "random-minutes", "random-time-range", "random-submit",
   "discovery-submit", "discovery-cancel", "discovery-status", "discovery-elapsed-label", "discovery-elapsed", "discovery-results",
   "discovery-more",
   "discovery-history", "discovery-history-list",
@@ -342,7 +342,6 @@ let discoveryStartedAt = null;
 let discoveryElapsedTimer = null;
 let discoveryHistory = loadDiscoveryHistory();
 let discoveryResultsRequest = null;
-let discoveryHasOpened = false;
 let discoveryScrollTop = 0;
 let walkingSettingsScrollTop = 0;
 const destinationMapIcon = L.divIcon({
@@ -762,6 +761,7 @@ function setStartPoint(place, { moveMap = true } = {}) {
     name: typeof place.name === "string" ? place.name.trim().slice(0, 120) : "",
     address: typeof place.address === "string" ? place.address.trim() : "",
     lat: place.lat, lng: place.lng,
+    ...(typeof MountainCore !== "undefined" ? MountainCore.metadata(place) : {}),
   };
   if (startMarker) startMarker.setLatLng([searchedStart.lat, searchedStart.lng]);
   else startMarker = L.circleMarker([searchedStart.lat, searchedStart.lng], {
@@ -1713,14 +1713,21 @@ ui["clear-nearby-convenience"].addEventListener("click", () => {
 
 function setDestination(place) {
   if (!place || !validCoordinates(place.lat, place.lng)) return;
+  if (typeof GeographicCore !== "undefined" && GeographicCore.unresolved(place)) return false;
+  if (typeof MountainCore !== "undefined" && MountainCore.summit(place)) {
+    if (typeof MountainDestinations !== "undefined") MountainDestinations.open(place);
+    return false;
+  }
   if (typeof NearbyRouting !== "undefined") NearbyRouting.clear();
   roundTripDestinationReached = false;
   destination = {
     name: typeof place.name === "string" ? place.name.trim().slice(0, 120) : "",
     address: typeof place.address === "string" ? place.address.trim() : "",
     lat: place.lat, lng: place.lng,
+    ...(typeof MountainCore !== "undefined" ? MountainCore.metadata(place) : {}),
     ...(discoveryNaturalPlaceReady(place) ? { accessAnchor: { ...place.accessAnchor }, accessNote: place.accessNote } : {}),
     ...(place.mapPoint ? { mapPoint: true, accessNote: place.accessNote || "" } : {}),
+    ...(place.geoAccess ? { geoAccess: true, accessNote: place.accessNote || "", accessAnchor: { ...place.accessAnchor } } : {}),
   };
   if (destinationMarker) {
     destinationMarker.setLatLng([destination.lat, destination.lng]);
@@ -1771,6 +1778,7 @@ function setDestination(place) {
   clearSearchDisplay(destinationSearch);
   destinationSearch.input.value = destination.name;
   if (typeof syncNaturalDestinationNote === "function") syncNaturalDestinationNote(place);
+  if (typeof MountainDestinations !== "undefined") MountainDestinations.destinationChanged(place);
   routePointsChanged();
 }
 
@@ -1794,7 +1802,7 @@ function clearDestination() {
 }
 
 function destinationButton(place) {
-  const button = textElement("button", "目的地に指定", "secondary destination-button");
+  const button = textElement("button", typeof MountainCore !== "undefined" && MountainCore.summit(place) ? "地点情報・目的地を選ぶ" : "目的地に指定", "secondary destination-button");
   button.type = "button";
   button.setAttribute("aria-label", `${place.name || "この場所"}を目的地に指定`);
   button.addEventListener("click", () => setDestination(place));
@@ -2361,6 +2369,7 @@ function routeCrossesRestrictedArea(points, rings) {
 }
 
 async function calculateWalkingRoute(start, end, kind, speed, request, via = null, avoidPolygons = []) {
+  if (typeof MountainCore !== "undefined") MountainCore.guard(start, end, via);
   const access = await loadRouteAccess(request);
   await waitForRouteTurn(request);
   const point = (place, type = "break") => ({ lat: place.lat, lon: place.lng, type, search_cutoff: 100 });
@@ -2593,6 +2602,7 @@ async function requestSuggestedRouteData(start, end, mode, request) {
 }
 
 async function fetchSuggestedWalkingRoutes(start, end, mode, request, isCurrent) {
+  if (typeof MountainCore !== "undefined" && MountainCore.related(start, end)) throw MountainCore.routeError(null, MountainCore.access(end) ? end : start);
   await loadRouteAccess(request);
   const data = await requestSuggestedRouteData(start,end,mode,request);
   if (!isCurrent()) return;
@@ -2650,6 +2660,7 @@ async function locateWalkingWaypoints(points,signal,{searchCutoff=1200,timeoutMs
 }
 
 async function recoverLongWalkingRoute(start,end,request,isCurrent,primaryError) {
+  if (typeof MountainCore !== "undefined" && MountainCore.related(start,end)) throw MountainCore.routeError(primaryError, MountainCore.access(end)?end:start);
   if (!isCurrent() || request.controller.signal.aborted) throw new DOMException("Aborted","AbortError");
   if (!request.deadlineAt) {
     request.deadlineAt=Date.now()+150000;
@@ -2719,7 +2730,8 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
     const speed = currentWalkingSpeed().kmh;
     let stores = null;
     let primaryError = null;
-    const kinds = ROUTE_KINDS.filter((kind) => (request.longDistance ? ["standard"] : automatic
+    const mountainRoute = typeof MountainCore !== "undefined" && MountainCore.related(start,end);
+    const kinds = ROUTE_KINDS.filter((kind) => (request.longDistance || mountainRoute ? ["standard"] : automatic
       ? ["standard", request.preferredKind] : ["standard", "gentle", "convenience", "nature"]).includes(kind.id));
     if (automatic) kinds.sort((a, b) => Number(b.id === request.preferredKind) - Number(a.id === request.preferredKind));
     for (const kind of kinds) {
@@ -2755,6 +2767,7 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
       } catch (error) {
         if (!isCurrent()) return;
         if (error.routeCode === "RouteDisplay") throw error;
+        if (mountainRoute) throw MountainCore.routeError(error, MountainCore.access(end)?end:start);
         if (error.routeCode === "ROUTING_RELAY_REQUIRED" || (kind.id === "standard" && !request.longDistance && [429,502,503,504].includes(error.httpStatus))) throw error;
         if (kind.id === "standard") primaryError = error;
         if ((["standard", "gentle"].includes(kind.id) && ["DistanceExceeded", 154,"154"].includes(error.routeCode))
@@ -2789,6 +2802,9 @@ async function fetchWalkingRoute(start, end, version, mode = walkingRouteMode, a
 
 function beginWalkingRoute(mode) {
   if (!destination || ui["route-button"].disabled) return;
+  if (typeof MountainCore !== "undefined" && MountainCore.related(getStartPoint(),destination) && mode !== "standard") {
+    message(ui["route-status"], "登山口・五合目は、通常の散歩向け徒歩ルートで確認してください。", true);return;
+  }
   if (mode !== "standard" && typeof NearbyRouting !== "undefined") NearbyRouting.clear();
   if (typeof WalkingTour !== "undefined") WalkingTour.deactivate();
   const starting = !routeEnabled;
@@ -3008,9 +3024,10 @@ function photonPlaces(data) {
     const kindLabel = kindId ? DISCOVERY_KINDS[kindId].label : {station:"駅",bus_stop:"バス停"}[transport]
       || ({platform:"ホーム",stop:"停車位置",subway_entrance:"駅の入口"})[tags.railway] || "場所";
     const photoKind = kindId || transport;
-    return [PlaceIdentity.attach({ name, address, lat, lng, ...(photoKind ? { kindId: photoKind } : {}), kindLabel,
+    const result = PlaceIdentity.attach({ name, address, lat, lng, ...(photoKind ? { kindId: photoKind } : {}), kindLabel,
       ...(typeof PlacePhotos !== "undefined" ? { photoHints: PlacePhotos.hints({ ...p, tags: p.extra }) } : {}),
-      ...(typeof p.description === "string" ? { description: p.description.slice(0, 300) } : {}) }, { ...p, tags })];
+      ...(typeof p.description === "string" ? { description: p.description.slice(0, 300) } : {}) }, { ...p, tags });
+    return [typeof MountainCore !== "undefined" ? MountainCore.decorate(result,tags) : result];
   })).slice(0, SEARCH_LIMIT);
 }
 
@@ -3031,6 +3048,10 @@ const destinationSearch = createSearchContext("destination-search", (place) => {
 });
 const startSearch = createSearchContext("start-search", (place) => setStartPoint(place));
 
+function discoveryClockValue(minutes) {
+  return [Math.floor(minutes / 60), minutes % 60].map(value => String(value).padStart(2, "0")).join(":");
+}
+
 function loadDiscoveryHistory() {
   try {
     const data = JSON.parse(localStorage.getItem(DISCOVERY_HISTORY_KEY));
@@ -3047,8 +3068,8 @@ function loadDiscoveryHistory() {
         || (criteria.highElevation !== undefined && typeof criteria.highElevation !== "boolean")
         || typeof criteria.keyword !== "string" || criteria.keyword.length > 80
         || !validWalkingSpeed(criteria.speed)
-        || !Number.isInteger(criteria.minutes) || criteria.minutes < 35
-        || criteria.minMinutes !== Math.max(0, criteria.minutes - 60)
+        || !Number.isSafeInteger(criteria.minutes) || criteria.minutes < 5
+        || !Number.isSafeInteger(criteria.minMinutes) || criteria.minMinutes < 0 || criteria.minMinutes > criteria.minutes
         || !Number.isFinite(entry.elapsedSeconds) || entry.elapsedSeconds < 0
         || !Array.isArray(entry.places) || !entry.places.length || entry.places.length > DISCOVERY_RESULT_LIMIT
         || (entry.visibleCount !== undefined && (!Number.isInteger(entry.visibleCount) || entry.visibleCount < 1 || entry.visibleCount > entry.places.length))
@@ -3095,9 +3116,9 @@ function renderDiscoveryHistory() {
   const moods = { any: "こだわらない", urban: "都会寄り", rural: "田舎寄り", nature: "自然が多い" };
   for (const entry of discoveryHistory) {
     const criteria = entry.criteria;
-    const title = `${routeDuration((criteria.minutes - 30) * 60)} / ${DISCOVERY_KINDS[criteria.kind].label}${criteria.kind === "random" ? "" : ` / ${moods[criteria.ambience]}`}${criteria.direction && criteria.direction !== "any" ? ` / ${DISCOVERY_DIRECTIONS[criteria.direction].label}` : ""}${discoveryPreferences(criteria).highElevation ? " / 標高が高め" : ""}`;
+    const title = `${discoveryClockValue(criteria.minMinutes)}～${discoveryClockValue(criteria.minutes)} / ${DISCOVERY_KINDS[criteria.kind].label}${criteria.kind === "random" ? "" : ` / ${moods[criteria.ambience]}`}${criteria.direction && criteria.direction !== "any" ? ` / ${DISCOVERY_DIRECTIONS[criteria.direction].label}` : ""}${discoveryPreferences(criteria).highElevation ? " / 標高が高め" : ""}`;
     const date = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(entry.at);
-    const button = textElement("button", title, "discovery-history-button");
+    const button = textElement("button", title + (entry.places.some(place => place.ambienceStatus === "unverified") ? " / 田舎寄り未確認" : ""), "discovery-history-button");
     button.type = "button";
     button.append(textElement("span", `${date}・${entry.places.length}件${criteria.keyword ? `・${criteria.keyword}` : ""}`, "place-detail"));
     button.addEventListener("click", () => restoreDiscoverySearch(entry));
@@ -3109,15 +3130,19 @@ function renderDiscoveryHistory() {
 
 function restoreDiscoverySearch(entry, focus = true) {
   if (discoveryRequest) stopDiscovery();
-  const minutes = entry.criteria.minutes - 30;
+  const minutes = entry.criteria.minutes;
+  const minMinutes = entry.criteria.minMinutes;
+  const prefix = entry.criteria.kind === "random" ? "random" : "discovery";
+  ui[`${prefix}-min-hours`].value = String(Math.floor(minMinutes / 60)).padStart(2, "0");
+  ui[`${prefix}-min-minutes`].value = String(minMinutes % 60).padStart(2, "0");
   ui["discovery-search-label"].textContent = entry.criteria.kind === "random" ? "ランダム検索" : "条件検索";
   if (entry.criteria.kind === "random") {
-    ui["random-hours"].value = Math.floor(minutes / 60);
-    ui["random-minutes"].value = minutes % 60;
+    ui["random-hours"].value = String(Math.floor(minutes / 60)).padStart(2, "0");
+    ui["random-minutes"].value = String(minutes % 60).padStart(2, "0");
   } else {
     ui["discovery-kind"].value = entry.criteria.kind === "places" ? "any" : entry.criteria.kind;
-    ui["discovery-hours"].value = Math.floor(minutes / 60);
-    ui["discovery-minutes"].value = minutes % 60;
+    ui["discovery-hours"].value = String(Math.floor(minutes / 60)).padStart(2, "0");
+    ui["discovery-minutes"].value = String(minutes % 60).padStart(2, "0");
     ui["discovery-ambience"].value = entry.criteria.ambience;
     ui["discovery-direction"].value = ["n", "e", "s", "w"].includes(entry.criteria.direction) ? entry.criteria.direction : "any";
     ui["discovery-keyword"].value = entry.criteria.keyword;
@@ -3322,10 +3347,6 @@ function setDiscoveryOpen(open, focus = true) {
     updateDiscoveryViewport();
     bringToolToFront(ui["discovery-screen"]);
     closeOverlappingTools(ui["discovery-screen"]);
-    if (!discoveryHasOpened) {
-      discoveryHasOpened = true;
-      if (discoveryHistory[0]) restoreDiscoverySearch(discoveryHistory[0], false);
-    }
     renderDiscoveryHistory();
     panel.scrollTop = discoveryScrollTop;
     updateDiscoveryTimeRange();
@@ -3560,11 +3581,13 @@ function discoveryCandidates(elements, criteria, start, limit = 8) {
       ...(natural ? { accessNote: String(access.note || "徒歩アクセス未確認").slice(0, 180), accessStatus: access.status,
         accessAnchor: { type: access.anchorType, id: access.anchorId }, naturalUnnamed: !!access.unnamed } : {}),
       kindId, kindLabel: kind.label, osmType: element.type, osmId: element.id }, element));
+    if (typeof MountainCore !== "undefined") places[places.length - 1] = MountainCore.decorate(places[places.length - 1], tags);
     if (typeof PlacePhotos !== "undefined") places[places.length - 1].photoHints = PlacePhotos.hints({ ...element, tags });
     const description = tags["description:ja"] || tags.description;
     if (typeof description === "string") places[places.length - 1].description = description.slice(0, 300);
   }
-  return PlaceIdentity.dedupe(places).sort((a, b) => compareDiscoveryElevation(a, b, preferences.highElevation)
+  return PlaceIdentity.dedupe(places).sort((a, b) => compareDiscoveryTime(a, b, criteria)
+    || compareDiscoveryElevation(a, b, preferences.highElevation)
     || b.preferenceScore - a.preferenceScore || a.directDistance - b.directDistance).slice(0, limit);
 }
 
@@ -3589,13 +3612,23 @@ function compareDiscoveryElevation(a, b, enabled) {
   return knownA !== knownB ? knownA ? -1 : 1 : knownA ? b.elevation - a.elevation : 0;
 }
 
+function compareDiscoveryTime(a, b, criteria) {
+  const upper = criteria.minutes * 60;
+  const gap = (place) => Number.isFinite(place.duration) && place.duration >= 0 ? Math.abs(upper - place.duration) : Infinity;
+  const aGap = gap(a), bGap = gap(b);
+  return aGap === bGap ? 0 : aGap < bGap ? -1 : 1;
+}
+
 function sortDiscoveryPlaces(places, criteria) {
   const highElevation = discoveryPreferences(criteria).highElevation;
-  const ordered = PlaceIdentity.dedupe(places).sort((a, b) => compareDiscoveryElevation(a, b, highElevation)
-    || b.preferenceScore - a.preferenceScore || a.duration - b.duration || a.distance - b.distance);
+  const compare = (a, b) => compareDiscoveryTime(a, b, criteria) || compareDiscoveryElevation(a, b, highElevation)
+    || b.preferenceScore - a.preferenceScore || a.distance - b.distance;
+  let unverifiedCount = 0;
+  const ordered = PlaceIdentity.dedupe(places).sort(compare)
+    .filter(place => place.ambienceStatus !== "unverified" || ++unverifiedCount <= 10);
   if (criteria.kind !== "any") return ordered.slice(0, DISCOVERY_RESULT_LIMIT);
-  // Mix kinds on every page rather than letting a large park result fill the list.
-  // Within each kind, retain the existing preference/time/elevation ranking.
+  // Retain kinds when capping the pool so parks do not remove all other kinds.
+  // Display the retained candidates in time order, including across page boundaries.
   const groups = new Map();
   for (const place of ordered) {
     if (!groups.has(place.kindId)) groups.set(place.kindId, []);
@@ -3608,7 +3641,7 @@ function sortDiscoveryPlaces(places, criteria) {
       if (mixed.length === DISCOVERY_RESULT_LIMIT) break;
     }
   }
-  return mixed;
+  return mixed.sort(compare);
 }
 
 function setDiscoveryProgress(request, stage) {
@@ -3623,7 +3656,9 @@ function renderDiscoveryProgress(request) {
   const count = discoveryDisplayedCount(request);
   const waiting = Date.now() - request.progressAt >= 10000 && !request.progressStage.includes("再試行")
     ? "（応答待ち）" : "";
-  const text = `${count ? `候補 ${count}件・` : ""}${request.progressStage}${waiting}`;
+  const unverified = (request.places || []).slice(0, count).filter(place => place.ambienceStatus === "unverified").length;
+  const countText = unverified ? `確認済み ${count - unverified}件・田舎寄り未確認 ${unverified}件・` : count ? `候補 ${count}件・` : "";
+  const text = `${countText}${request.progressStage}${waiting}`;
   if (ui["discovery-status"].textContent !== text) message(ui["discovery-status"], text);
 }
 
@@ -3791,7 +3826,7 @@ async function fetchDiscoveryContext(places, request) {
     const queries = missing.map((point) => filters.map((filter) => `nwr(${discoveryBounds(point, filter.radius)})${filter.tags}->.neighborhood;`
       + `.neighborhood out body center ${filter.limit};`).join("")).join("");
     const query = `[out:json][timeout:10];${queries}`;
-    const elements = await fetchDiscoveryMapData(query, request, 15000, false);
+    const elements = await fetchDiscoveryMapData(query, request, rural ? 6000 : 15000, false);
     for (const point of missing) {
       const nearby = elements.filter((element) => {
         const other = discoveryPoint(element);
@@ -4208,7 +4243,7 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
     if (controller.signal.aborted) return;
     byKind.set(kind, places);
     const candidates = combined();
-    acceptedCount = candidates.filter(place => !preferences.highElevation || validDiscoveryElevation(place.elevation)).length;
+    acceptedCount = candidates.filter(place => place.ambienceStatus !== "unverified" && (!preferences.highElevation || validDiscoveryElevation(place.elevation))).length;
     onUpdate(candidates);
     if (controller.signal.aborted || acceptedCount < DISCOVERY_ANY_TARGET) return;
     const remaining = fastWindowEnds - Date.now();
@@ -4239,7 +4274,7 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
               publish(kind, places);
             });
             if (controller.signal.aborted || child.controller.signal.aborted) return;
-            publish(kind, found);
+            if (found.length || !child.ambienceUnavailable) publish(kind, found);
           }
         }, Math.min(DISCOVERY_KIND_TIMEOUT_MS, remaining));
       } catch (error) {
@@ -4279,7 +4314,7 @@ async function findAnyDiscoveryPlaces(criteria, start, request, onUpdate = () =>
               matched.add(kind); publish(kind, places);
             }
           } catch { /* The normal lookup below handles missing parts and unconfirmed conditions. */ }
-          finally { controller.signal.removeEventListener("abort", cancel); child.controller.abort(); }
+          finally { request.ambienceUnavailable ||= child.ambienceUnavailable; controller.signal.removeEventListener("abort", cancel); child.controller.abort(); }
         }
       };
       // Publish local categories first; an unavailable external category cannot hold them up.
@@ -4343,8 +4378,16 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
     let candidates = discoveryCandidates(elements, criteria, start, candidateLimit);
     if (ambience !== "rural") { onUpdate(candidates); return candidates; }
     const confirmed = () => candidates.filter((place) => ruralChecked.has(assessmentKey(place)) && place.ruralMatch);
+    // Time, type and direction are already checked. Publish actual facilities now;
+    // never call an unverified atmosphere a rural match or hide all facilities on API failure.
+    const publish = () => {
+      const matches = confirmed();
+      const unverified = matches.length >= targetCount && !request.ambienceUnavailable ? [] : candidates.filter((place) => !ruralChecked.has(assessmentKey(place)) && !place.ruralRejected)
+        .slice(0, 10).map((place) => ({ ...place, ruralMatch: false, ambienceStatus: "unverified", ambienceNote: "田舎寄りは未確認" }));
+      onUpdate([...matches, ...unverified]);
+    };
     let matches = confirmed();
-    onUpdate(matches);
+    publish();
     while (matches.length < 5 && !request.ambienceUnavailable) {
       const batch = candidates.filter((place) => !place.ruralRejected && !ruralAttempted.has(assessmentKey(place))).slice(0, 4);
       if (!batch.length) break;
@@ -4358,7 +4401,7 @@ async function findDiscoveryPlaces(criteria, start, request, onUpdate = () => {}
       }
       candidates = discoveryCandidates(elements, criteria, start, candidateLimit);
       matches = confirmed();
-      onUpdate(matches);
+      publish();
     }
     return matches;
   };
@@ -4507,11 +4550,17 @@ function updateCandidateActions(item, place) {
     item.append(actions);
   }
   const [route, save] = actions.children;
+  const summit = typeof MountainCore !== "undefined" && MountainCore.summit(place);
+  route.textContent = summit ? "目的地を選ぶ" : "ルート確認";
   const natural = ["forest", "waterside", "coast"].includes(place.kindId);
   route.disabled = natural && !discoveryNaturalPlaceReady(place);
+  const geographicUnresolved = typeof GeographicCore !== "undefined" && GeographicCore.unresolved(place);
+  route.disabled ||= geographicUnresolved;
+  save.disabled = geographicUnresolved;
   route.setAttribute("aria-label", `${place.name}へのルート確認`);
   save.setAttribute("aria-label", `${place.name}を地点登録`);
   route.onclick = () => {
+    if (summit) { MountainDestinations.open(place); return; }
     setDiscoveryOpen(false, false);
     setDestination(place);
     beginWalkingRoute("standard");
@@ -4521,7 +4570,8 @@ function updateCandidateActions(item, place) {
 }
 
 function candidateDistanceElement(place) {
-  const span = textElement("span", "距離を確認中…", "candidate-metrics candidate-road-metrics");
+  const summit = typeof MountainCore !== "undefined" && MountainCore.summit(place);
+  const span = textElement("span", summit ? "山・山頂は地点情報のみ" : "距離を確認中…", "candidate-metrics candidate-road-metrics");
   span.walkingPlace = place;
   return span;
 }
@@ -4552,12 +4602,13 @@ function renderDiscoveryResults(results, request) {
     if (highElevation && validDiscoveryElevation(place.elevation)) content.append(textElement("span", `標高 約${Math.round(place.elevation).toLocaleString("ja-JP")} m`, "place-detail"));
     const matched = [place.free ? "無料" : "", place.toilets ? "トイレ100m以内" : "", place.benches ? "ベンチ100m以内" : ""].filter(Boolean);
     if (matched.length) content.append(textElement("span", matched.join("・"), "place-detail"));
-    if (place.ambienceNote) content.append(textElement("span", place.ambienceNote, "place-detail"));
+    if (place.ambienceNote) content.append(textElement("span", place.ambienceNote,
+      place.ambienceStatus === "unverified" ? "place-detail ambience-unverified" : "place-detail"));
     const natural = ["forest", "waterside", "coast"].includes(place.kindId);
     if (natural) content.append(textElement("span", place.accessNote || "以前の候補・徒歩アクセスを再検索してください", "place-detail natural-access-note"));
     if (place.address) content.append(textElement("span", place.address, "place-detail"));
     appendCandidateEvidence(content, place);
-    content.append(textElement("span", natural && !discoveryNaturalPlaceReady(place) ? "徒歩アクセスの再検索が必要" : "目的地に指定", "discovery-result-action"));
+    content.append(textElement("span", typeof MountainCore !== "undefined" && MountainCore.summit(place) ? "地点情報・目的地を選ぶ" : natural && !discoveryNaturalPlaceReady(place) ? "徒歩アクセスの再検索が必要" : "目的地に指定", "discovery-result-action"));
     if (!button) {
       const item = document.createElement("li");
       button = content;
@@ -4624,7 +4675,9 @@ async function fetchDiscoverySuggestions(request) {
       return found;
     });
     if (isCurrent()) message(ui["discovery-status"], results.length
-      ? request.ambienceUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・周辺情報の取得に失敗しました。`
+      ? request.ambienceUnavailable ? results.some(place => place.ambienceStatus === "unverified")
+          ? `確認済み ${results.filter(place => place.ambienceStatus !== "unverified").length}件・田舎寄り未確認 ${results.filter(place => place.ambienceStatus === "unverified").length}件（周辺情報の取得に失敗）`
+          : `候補 ${discoveryDisplayedCount(request)}件・周辺情報の取得に失敗しました。`
         : request.elevationUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・標高の取得に一部失敗しました。`
           : request.kindsUnavailable || request.natureUnavailable ? `候補 ${discoveryDisplayedCount(request)}件・一部を取得できませんでした。`
             : request.natureLimited ? `候補 ${discoveryDisplayedCount(request)}件・範囲と件数を制限して確認`
@@ -4667,20 +4720,35 @@ ui["discovery-screen"].addEventListener("keydown", (event) => {
   }
 });
 function discoveryTimeWindow(random = false) {
-  const hours = ui[random ? "random-hours" : "discovery-hours"].valueAsNumber;
-  const minutePart = ui[random ? "random-minutes" : "discovery-minutes"].valueAsNumber;
-  const minutes = hours * 60 + minutePart;
-  if (!Number.isInteger(hours) || hours < 0 || !Number.isInteger(minutePart) || minutePart < 0 || minutePart > 59
-    || !Number.isFinite(minutes) || minutes < 5) return null;
-  return { minMinutes: Math.max(0, minutes - 30), minutes: minutes + 30 };
+  const prefix = random ? "random" : "discovery";
+  const read = (bound) => {
+    const hours = ui[`${prefix}${bound}-hours`].valueAsNumber;
+    const minutePart = ui[`${prefix}${bound}-minutes`].valueAsNumber;
+    const minutes = hours * 60 + minutePart;
+    return Number.isSafeInteger(hours) && hours >= 0 && Number.isInteger(minutePart) && minutePart >= 0 && minutePart <= 59
+      && Number.isSafeInteger(minutes) ? minutes : null;
+  };
+  const minMinutes = read("-min"), minutes = read("");
+  if (minMinutes === null || minutes === null || minutes < 5 || minMinutes > minutes) return null;
+  return { minMinutes, minutes };
 }
 
 function updateDiscoveryTimeRange() {
   const time = discoveryTimeWindow();
-  message(ui["discovery-time-range"], time
-    ? `${time.minMinutes ? routeDuration(time.minMinutes * 60) : "0分"}〜${routeDuration(time.minutes * 60)}の場所を探します。` : "");
+  message(ui["discovery-time-range"], time ? "上限に近い順に表示" : "下限は上限以下、上限は5分以上にしてください。", !time);
   const random = discoveryTimeWindow(true);
-  message(ui["random-time-range"], random ? `${random.minMinutes ? routeDuration(random.minMinutes * 60) : "0分"}〜${routeDuration(random.minutes * 60)}の場所を探します。` : "");
+  message(ui["random-time-range"], random ? "" : "下限は上限以下、上限は5分以上にしてください。", !random);
+}
+
+for (const prefix of ["discovery", "random"]) {
+  for (const bound of ["-min", ""]) for (const unit of ["hours", "minutes"]) {
+    const input = ui[`${prefix}${bound}-${unit}`];
+    input.addEventListener("blur", () => {
+      if (Number.isSafeInteger(input.valueAsNumber) && input.valueAsNumber >= 0 && (unit === "hours" || input.valueAsNumber <= 59)) {
+        input.value = String(input.valueAsNumber).padStart(2, "0");
+      }
+    });
+  }
 }
 
 for (const type of ["input", "change"]) ui["discovery-form"].addEventListener(type, () => {
@@ -4704,7 +4772,7 @@ ui["discovery-form"].addEventListener("submit", (event) => {
   if (!Object.hasOwn(DISCOVERY_KINDS, kind) || kind === "random" || !["any", "urban", "rural", "nature"].includes(ambience)) return;
   if (!["any", "n", "e", "s", "w"].includes(direction)) return;
   if (!time) {
-    message(ui["discovery-status"], "徒歩時間は5分以上で指定してください。", true);
+    message(ui["discovery-status"], "下限は上限以下、上限は5分以上にしてください。", true);
     ui["discovery-hours"].focus({ preventScroll: true });
     return;
   }
@@ -4737,7 +4805,7 @@ ui["random-form"].addEventListener("submit", event => {
   if (discoveryRequest || !ui["random-form"].reportValidity()) return;
   const time = discoveryTimeWindow(true);
   if (!time) {
-    message(ui["discovery-status"], "徒歩時間は5分以上で指定してください。", true);
+    message(ui["discovery-status"], "下限は上限以下、上限は5分以上にしてください。", true);
     ui["random-hours"].focus({ preventScroll: true });
     return;
   }
@@ -4765,7 +4833,10 @@ function renderSearch(places, context = placeSearch) {
     if (place.kindId === "bus_stop" && places.some(other=>other.kindId === "station" && PlaceIdentity.normalize(other.name) === PlaceIdentity.normalize(place.name))) {
       button.querySelector(".place-title").textContent = `${place.name}（バス停）`;
     }
-    button.addEventListener("click", () => context.onSelect(place));
+    button.addEventListener("click", () => {
+      if (place.geographicSearch && typeof GeographicSearch !== "undefined") GeographicSearch.select(place, context);
+      else context.onSelect(place);
+    });
     item.append(button);
     if (context !== startSearch) {
       item.className = "candidate-card";
@@ -4774,6 +4845,13 @@ function renderSearch(places, context = placeSearch) {
       appendCandidateEvidence(button, place);
       updateCandidateActions(item, place);
       if (typeof PlacePhotos !== "undefined") PlacePhotos.mount(item, place);
+    }
+    if (place.geographicSearch) {
+      button.append(textElement("span", place.geoRelevance, "candidate-geographic-relevance"));
+      button.append(textElement("span", place.accessNote, "natural-access-note"));
+      const source = textElement("a", "OpenStreetMapの地点情報", "candidate-geographic-source");
+      source.href = place.sourceUrl; source.target = "_blank"; source.rel = "noopener";
+      item.append(source);
     }
     context.results.append(item);
   }
@@ -4811,6 +4889,7 @@ function scheduleSearch(context = placeSearch) {
   clearSearchDisplay(context);
   const query = context.input.value.trim();
   if (!query) return;
+  if (typeof GeographicSearch !== "undefined" && GeographicSearch.search(query, context)) return;
   if (searchCache.has(query)) { renderSearch(searchCache.get(query), context); return; }
   // Explicit searches share a minimum one-second request interval.
   const wait = Math.max(0, 1000 - (Date.now() - lastSearchAt));
@@ -4820,6 +4899,7 @@ function scheduleSearch(context = placeSearch) {
 async function searchPlaces(query, context = placeSearch) {
   context.timer = null;
   if (context.input.value.trim() !== query) return;
+  if (typeof GeographicSearch !== "undefined" && GeographicSearch.search(query, context)) return;
   if (searchCache.has(query)) { renderSearch(searchCache.get(query), context); return; }
   // Both search fields share the request interval, even when their timers overlap.
   const wait = 1000 - (Date.now() - lastSearchAt);

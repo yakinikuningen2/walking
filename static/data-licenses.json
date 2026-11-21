@@ -8,19 +8,30 @@
       "name": "条件検索用のWikidata日本地点索引（2026-11-13取得）",
       "provider": "Wikidata contributors",
       "sourceUrl": "https://query.wikidata.org/sparql",
-      "additionalSources": ["https://www.wikidata.org/wiki/Wikidata:Licensing"],
+      "additionalSources": [
+        "https://www.wikidata.org/wiki/Wikidata:Licensing"
+      ],
       "license": "CC0 1.0",
       "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
       "files": [
-        "discovery-wikidata-jp-2026-11-13-v1/index.json", "discovery-wikidata-jp-2026-11-13-v1/index.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/mountain.json", "discovery-wikidata-jp-2026-11-13-v1/mountain.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/park.json", "discovery-wikidata-jp-2026-11-13-v1/park.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/neighborhood.json", "discovery-wikidata-jp-2026-11-13-v1/neighborhood.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/culture.json", "discovery-wikidata-jp-2026-11-13-v1/culture.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/cafe.json", "discovery-wikidata-jp-2026-11-13-v1/cafe.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/restaurant.json", "discovery-wikidata-jp-2026-11-13-v1/restaurant.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/shopping.json", "discovery-wikidata-jp-2026-11-13-v1/shopping.json.gz",
-        "discovery-wikidata-jp-2026-11-13-v1/sightseeing.json", "discovery-wikidata-jp-2026-11-13-v1/sightseeing.json.gz"
+        "discovery-wikidata-jp-2026-11-13-v1/index.json",
+        "discovery-wikidata-jp-2026-11-13-v1/index.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/mountain.json",
+        "discovery-wikidata-jp-2026-11-13-v1/mountain.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/park.json",
+        "discovery-wikidata-jp-2026-11-13-v1/park.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/neighborhood.json",
+        "discovery-wikidata-jp-2026-11-13-v1/neighborhood.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/culture.json",
+        "discovery-wikidata-jp-2026-11-13-v1/culture.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/cafe.json",
+        "discovery-wikidata-jp-2026-11-13-v1/cafe.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/restaurant.json",
+        "discovery-wikidata-jp-2026-11-13-v1/restaurant.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/shopping.json",
+        "discovery-wikidata-jp-2026-11-13-v1/shopping.json.gz",
+        "discovery-wikidata-jp-2026-11-13-v1/sightseeing.json",
+        "discovery-wikidata-jp-2026-11-13-v1/sightseeing.json.gz"
       ],
       "modified": "日本語名・日本・分類・座標を確認できた8種類5,132レコード。QIDで種類内集約、座標を小数6桁に丸め、解散日・公式閉鎖日ありや座標不明・域外を除外。本文・写真なし。分類・クエリ・原本SHA-256を各ファイルに保持。種類間や他提供元との重複があり、全国の完全な施設台帳ではありません。",
       "attribution": "Wikidata contributors（CC0 1.0）の構造化データを抽出・分類・軽量化"
@@ -30,19 +41,32 @@
       "name": "条件検索用のGeoNames日本語地名索引（2026-11-13取得）",
       "provider": "GeoNames",
       "sourceUrl": "https://download.geonames.org/export/dump/JP.zip",
-      "additionalSources": ["https://download.geonames.org/export/dump/alternatenames/JP.zip", "https://download.geonames.org/export/dump/readme.txt", "https://www.geonames.org/export/codes.html"],
+      "additionalSources": [
+        "https://download.geonames.org/export/dump/alternatenames/JP.zip",
+        "https://download.geonames.org/export/dump/readme.txt",
+        "https://www.geonames.org/export/codes.html"
+      ],
       "license": "CC BY 4.0",
       "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "files": [
-        "discovery-geonames-jp-2026-11-13-v1/index.json", "discovery-geonames-jp-2026-11-13-v1/index.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/mountain.json", "discovery-geonames-jp-2026-11-13-v1/mountain.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/park.json", "discovery-geonames-jp-2026-11-13-v1/park.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/neighborhood.json", "discovery-geonames-jp-2026-11-13-v1/neighborhood.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/culture.json", "discovery-geonames-jp-2026-11-13-v1/culture.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/restaurant.json", "discovery-geonames-jp-2026-11-13-v1/restaurant.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/shopping.json", "discovery-geonames-jp-2026-11-13-v1/shopping.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/shrine.json", "discovery-geonames-jp-2026-11-13-v1/shrine.json.gz",
-        "discovery-geonames-jp-2026-11-13-v1/sightseeing.json", "discovery-geonames-jp-2026-11-13-v1/sightseeing.json.gz"
+        "discovery-geonames-jp-2026-11-13-v1/index.json",
+        "discovery-geonames-jp-2026-11-13-v1/index.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/mountain.json",
+        "discovery-geonames-jp-2026-11-13-v1/mountain.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/park.json",
+        "discovery-geonames-jp-2026-11-13-v1/park.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/neighborhood.json",
+        "discovery-geonames-jp-2026-11-13-v1/neighborhood.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/culture.json",
+        "discovery-geonames-jp-2026-11-13-v1/culture.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/restaurant.json",
+        "discovery-geonames-jp-2026-11-13-v1/restaurant.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/shopping.json",
+        "discovery-geonames-jp-2026-11-13-v1/shopping.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/shrine.json",
+        "discovery-geonames-jp-2026-11-13-v1/shrine.json.gz",
+        "discovery-geonames-jp-2026-11-13-v1/sightseeing.json",
+        "discovery-geonames-jp-2026-11-13-v1/sightseeing.json.gz"
       ],
       "modified": "日本データと日本向け別名ファイルから言語jaの非歴史的な日本語名・分類・座標・明示された標高のみを抽出。山、街並み・集落、公園、博物館、寺院、展望地点・城・記念物、食事、商業施設の8種類50,764件。日本語名不明・過去の別名・対象外分類を除外し、座標を小数6桁に丸め、種類別・gzip化。DEM・写真・解説文は未使用。現在の利用可否や正確な入口を保証するものではありません。",
       "attribution": "GeoNames（CC BY 4.0）を本アプリで抽出・分類・座標丸め・軽量化。加工後データもCC BY 4.0。"
@@ -52,10 +76,16 @@
       "name": "Wikidataの日本の神社索引（2026-11-13取得）",
       "provider": "Wikidata contributors",
       "sourceUrl": "https://query.wikidata.org/sparql",
-      "additionalSources": ["https://www.wikidata.org/wiki/Q845945", "https://www.wikidata.org/wiki/Wikidata:Licensing"],
+      "additionalSources": [
+        "https://www.wikidata.org/wiki/Q845945",
+        "https://www.wikidata.org/wiki/Wikidata:Licensing"
+      ],
       "license": "CC0 1.0",
       "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "files": ["shrines-jp-2026-11-13-v1.json", "shrines-jp-2026-11-13-v1.json.gz"],
+      "files": [
+        "shrines-jp-2026-11-13-v1.json",
+        "shrines-jp-2026-11-13-v1.json.gz"
+      ],
       "modified": "神社（Q845945と下位分類）・国が日本・日本語名・座標のある構造化データから、解散日あり・座標不明・日本域外を除外。QIDで集約し16,983件を収録。名称・QID・小数6桁の座標のみ。本文・写真は未使用。抽出クエリと原本SHA-256をJSONに記録。寺院は未収録で、全国の神社を網羅するものではありません。",
       "attribution": "Wikidata contributors（CC0 1.0）の構造化データを加工"
     },
@@ -238,10 +268,29 @@
   ],
   "services": [
     {
+      "name": "地域の表現による場所検索",
+      "provider": "OpenStreetMap contributors / komoot Photon / Overpass API",
+      "sourceUrl": "https://www.openstreetmap.org/copyright",
+      "additionalSources": [
+        "https://github.com/komoot/photon/blob/master/docs/api-v1.md",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass-api.de/api/interpreter",
+        "https://dev.overpass-api.de/overpass-doc/en/preface/commons.html"
+      ],
+      "license": "地図データはODbL 1.0。公開APIの合理的な利用量・各提供元の条件は別。プログラムのライセンスとは区別。",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "modified": "日本語の定型表現を地域・条件に分け、実在地物・形状と道路を検索。通常8km・山周辺最大30km、最大48地物、徒歩確認12地物・16周辺範囲、表示16件。地図検索は2段階・各6.5秒・全体26秒。Photon予備検索は失敗時だけ1回・最大5秒。1秒以上の共有間隔と短期キャッシュを利用。候補にOSM出典リンクを表示。徒歩入口未確認の候補は情報表示のみ。山頂・湖・森の中心をそのままルート目的地にしない。新たな同梱データは追加しない。"
+    },
+    {
       "name": "目的地の写真（Wikimedia Commons／Wikidata／Wikipedia API）",
       "provider": "Wikimedia Commonsの各写真の著作者／Wikidata・Wikipedia contributors",
       "sourceUrl": "https://commons.wikimedia.org/wiki/Commons:First_steps/Reuse",
-      "additionalSources": ["https://www.mediawiki.org/wiki/API:Imageinfo", "https://www.wikidata.org/wiki/Wikidata:Data_access", "https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_API_Usage_Guidelines", "https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy"],
+      "additionalSources": [
+        "https://www.mediawiki.org/wiki/API:Imageinfo",
+        "https://www.wikidata.org/wiki/Wikidata:Data_access",
+        "https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_API_Usage_Guidelines",
+        "https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy"
+      ],
       "license": "画像ごとのCC BY／CC BY-SA（1.0・2.0・2.5・3.0・4.0）、CC0 1.0、Public Domain Mark 1.0。関連付けのWikidata構造化データはCC0。",
       "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia",
       "modified": "写真は同梱しない。Commonsの個別メタデータで著作者とライセンスを確認後、縮小画像を16:9の枠でトリミング表示。拡大画面は画像全体を表示。正式名・別名・英語名・リダイレクト・施設の所在地・座標・関連ID・施設専用カテゴリを信頼度で照合。座標なしでもID等の強い根拠があれば採用し、既知の位置矛盾、条件不明・追加制限、確認できた地図・ロゴ等は除外。周辺検索の写真は周辺の写真と表示。Wikipedia本文は住所フィールドの照合に一時利用し、表示・同梱しない。最大2件同時の遅延取得とメモリキャッシュを使用。取得先の失敗時は既存の回数・時間上限内で別手段を試し、未完了後の手動再取得では成功済み照合応答だけを期限内で再利用。失敗を写真なしとして保存しない。",
@@ -251,10 +300,16 @@
       "name": "自然スポットと周辺の徒歩アクセス検索",
       "provider": "OpenStreetMap contributors（既存のOverpass API提供元経由）",
       "sourceUrl": "https://www.openstreetmap.org/copyright",
-      "additionalSources": ["https://overpass.private.coffee/", "https://overpass-api.de/", "https://wiki.openstreetmap.org/wiki/Overpass_API", "https://wiki.openstreetmap.org/wiki/Key:access", "https://wiki.openstreetmap.org/wiki/Key:foot"],
+      "additionalSources": [
+        "https://overpass.private.coffee/",
+        "https://overpass-api.de/",
+        "https://wiki.openstreetmap.org/wiki/Overpass_API",
+        "https://wiki.openstreetmap.org/wiki/Key:access",
+        "https://wiki.openstreetmap.org/wiki/Key:foot"
+      ],
       "license": "ODbL 1.0（データベース）。個別コンテンツはDbCL 1.0。",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
-      "modified": "森・河川・湖沼・海岸・浜辺・港をnode/way/relationから検索し、地形の中心ではなく周辺の歩道・入口付近の道を候補化。既知の私有地・立入制限・歩行禁止・閉鎖を除外。通行条件や周辺制限を確認できない候補は未確認と表示。範囲・件数・処理量・待ち時間を制限し、生データを端末内で10分間再利用。生データや全国抽出DBはGitHubに同梱しない。コードのライセンスとは分離し、OSMの出典表示を維持。派生DBを公開・再配布する場合はODbLの条件を適用。"
+      "modified": "森・河川・湖沼・海岸・浜辺・港をnode/way/relationから検索し、地形の中心ではなく周辺の歩道・入口付近の道を候補化。既知の私有地・立入制限・歩行禁止・閉鎖を除外。通行条件や周辺制限を確認できない候補は未確認と表示。範囲・件数・処理量・待ち時間を制限し、生データを端末内で10分間再利用。生データや全国抽出DBはGitHubに同梱しない。コードのライセンスとは分離し、OSMの出典表示を維持。派生DBを公開・再配布する場合はODbLの条件を適用。 山・山頂の座標は情報用に保持し、登山口・五合目のOSM実在要素を半径15km・最大160要素から候補化。名称だけで通常施設を五合目に分類せず、禁止・制限のある候補を除外。利用者の明示的な選択で目的地を設定し、最大24地点分・5分の短期メモリキャッシュを使用。新しい抽出データは同梱しない。"
     },
     {
       "name": "背景地図・施設検索・徒歩ルートの基礎地図",
@@ -278,13 +333,16 @@
       "sourceUrl": "https://github.com/komoot/photon#demo-server",
       "license": "基礎データはODbL 1.0。公開デモの合理的な利用量という条件は別。",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
-      "modified": "既存の名称・施設検索に利用。ソフトウェア自体のApache-2.0を検索データのライセンスに転用しない。同梱索引・キャッシュを優先。大量利用は制限・停止の対象であり、大規模公開時の利用許諾や負荷条件は別途確認が必要。"
+      "modified": "既存の名称・施設検索に利用。ソフトウェア自体のApache-2.0を検索データのライセンスに転用しない。同梱索引・キャッシュを優先。大量利用は制限・停止の対象であり、大規模公開時の利用許諾や負荷条件は別途確認が必要。 山のアクセス候補をOverpassで取得できない場合に限り、山の公開座標による位置バイアスと登山口・五合目の検索語で最大2回取得。共有間隔1秒以上・各3秒・検索全体16秒以内。返されたOSM ID・要素型・カテゴリ・座標を照合し、記念碑や売店等を除外する。"
     },
     {
       "name": "Valhalla公開デモによる徒歩ルート・距離",
       "provider": "FOSSGIS / Valhalla contributors / OpenStreetMap contributors",
       "sourceUrl": "https://github.com/valhalla/valhalla#demo-server",
-      "additionalSources": ["https://routing.openstreetmap.de/about.html", "https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/"],
+      "additionalSources": [
+        "https://routing.openstreetmap.de/about.html",
+        "https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/"
+      ],
       "license": "基礎データはODbL 1.0。公開デモのfair-use条件は別。",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
       "modified": "通常の徒歩案内、周遊、候補の道のり、アクセス道路、標高に利用。ブラウザはPythonの/api/valhallaへPOSTし、提供元へ直接フォールバックしない。上流はhttps://valhalla1.openstreetmap.de/のroute・locate・heightだけに固定。X-Client-Idはwalking-ctsh.onrender.com、識別User-Agentを付ける。1プロセス全利用者で同時1件・1秒以上・45回/60秒・1000回/24時間、待機2件・最大2秒。429のRetry-Afterと停止期間を共有。成功結果は5分・64件・16MiB以内で再利用。制限はメモリ上で再起動時に失われ、複数プロセスには共有されない。候補の自動距離取得は1ページ8件まで、それ以降は手動。地図の帰属と修正リンクを維持。GitHub Discussionsへの公開利用の連絡は運営者が別途行う必要があり、コード変更だけで許諾済みとは扱わない。"
@@ -293,7 +351,13 @@
       "name": "openrouteserviceの徒歩ルート候補",
       "provider": "HeiGIT / OpenStreetMap contributors",
       "sourceUrl": "https://account.heigit.org/info/tos",
-      "additionalSources": ["https://ask.openrouteservice.org/t/free-plan-in-an-app-with-a-paid-tier-license-cc-by-sa-4-0-personal-data-and-attribution-questions/8079", "https://openrouteservice.org/", "https://ask.openrouteservice.org/t/deprecating-api-openrouteservice-org-in-favour-of-api-heigit-org/7912", "https://heigit.org/changes-in-the-openrouteservice-universe/", "https://heigit.org/privacy-policy/"],
+      "additionalSources": [
+        "https://ask.openrouteservice.org/t/free-plan-in-an-app-with-a-paid-tier-license-cc-by-sa-4-0-personal-data-and-attribution-questions/8079",
+        "https://openrouteservice.org/",
+        "https://ask.openrouteservice.org/t/deprecating-api-openrouteservice-org-in-favour-of-api-heigit-org/7912",
+        "https://heigit.org/changes-in-the-openrouteservice-universe/",
+        "https://heigit.org/privacy-policy/"
+      ],
       "license": "API結果はCC BY-SA 4.0。基礎地図のODbL・API利用規約・契約プランの制限も別途適用。",
       "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
       "modified": "PythonだけがORS_API_KEYを読み、https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojsonへAuthorizationヘッダーで送る。旧api.openrouteservice.orgへ戻す処理はない。アプリ側は1プロセス全利用者で同時1件・2秒以上・20回/60秒・500回/24時間、待機2件・最大2秒。429後の待機を共有。正常提案は5分・32件再利用。これらは契約上限の代替ではなく、個別プラン・別用途とのキー共用・再起動・複数インスタンスへの対応は運営者が確認する。地図に© openrouteservice by HeiGIT、CC BY-SA 4.0、基礎地図のOSM帰属を表示。2026-11-16に現行規約の動的本文を再確認。個人データ送信禁止があり、現在地等を含む座標が個人データに該当する場合の許容性は未確認。サーバー経由・座標丸め・利用者同意だけで禁止が解除されるとは判断しない。送信内容と保存期間はプライバシーポリシーに記載。"
@@ -304,14 +368,21 @@
       "sourceUrl": "https://github.com/Leaflet/Leaflet/tree/v1.9.4",
       "license": "BSD-2-Clause",
       "licenseUrl": "https://github.com/Leaflet/Leaflet/blob/v1.9.4/LICENSE",
-      "files": ["licenses/leaflet-1.9.4.txt"],
+      "files": [
+        "licenses/leaflet-1.9.4.txt"
+      ],
       "modified": "CDNから原ファイルを読み込み。本アプリにはライブラリ本体を同梱していない。原ファイルの著作権表示を維持し、BSD-2-Clauseの全文も上記ファイルから提供。Leafletのロゴを地図に表示することはライセンス条件ではない。"
     },
     {
       "name": "requests 2.34.2 / urllib3 2.8.0 / charset-normalizer 3.5.2 / idna 3.20 / certifi 2026.10.19",
       "provider": "各Pythonパッケージの著作権者・開発者",
       "sourceUrl": "https://github.com/psf/requests",
-      "additionalSources": ["https://github.com/urllib3/urllib3", "https://github.com/jawah/charset_normalizer", "https://github.com/kjd/idna", "https://github.com/certifi/python-certifi"],
+      "additionalSources": [
+        "https://github.com/urllib3/urllib3",
+        "https://github.com/jawah/charset_normalizer",
+        "https://github.com/kjd/idna",
+        "https://github.com/certifi/python-certifi"
+      ],
       "license": "requests: Apache-2.0 / urllib3・charset-normalizer: MIT / idna: BSD-3-Clause / certifi: MPL-2.0",
       "licenseUrl": "https://github.com/psf/requests/blob/main/LICENSE",
       "modified": "requirements.txtからインストールし、配布物に含まれるLICENSE・NOTICEを保持。2026-11-15にインストール済み各版のLicense / License-Expressionと同梱ライセンスファイルの存在を確認。本体の改変・リポジトリへのコピーは行わない。ライセンスごとのURLと条件はTHIRD_PARTY_NOTICES.mdを参照。"
