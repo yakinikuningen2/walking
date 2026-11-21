@@ -108,26 +108,26 @@ test('first real map/menu interaction requests permission synchronously, while s
 
 test('refused permission is explained and can be retried after changing browser settings',async()=>{
   let calls=0;const {context:c,status}=headingSetup({requestPermission(){return Promise.resolve(++calls===1?'denied':'granted');}});
-  assert.equal(await c.enableHeadingFromGesture(),false);assert.equal(status.hidden,false);assert.match(status.textContent,/許可/);
+  assert.equal(await c.enableHeadingFromGesture(),false);assert.equal(status.hidden,false);assert.equal(status.textContent,"向きを取得できませんでした。");
   assert.equal(await c.enableHeadingFromGesture(),false);assert.equal(calls,1,'no repeated automatic prompts');
   c.handleDeviceOrientation({webkitCompassHeading:75,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker,null,'ignore events while denied');
   assert.equal(await c.enableHeadingFromGesture({retry:true}),true);assert.equal(calls,2);
   c.handleDeviceOrientation({webkitCompassHeading:75,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker.angle,'75.0deg');assert.equal(status.hidden,true);
 });
 
-test('missing, insecure and unsupported sensors give a reason without inventing a facing direction',async()=>{
+test('missing, insecure and unsupported sensors report only the failure without inventing a direction',async()=>{
   const {context:c,status,advance}=headingSetup({requestPermission:()=>Promise.resolve('granted')});
   await c.enableHeadingFromGesture();advance(8000);assert.equal(c.currentHeadingMarker,null);assert.equal(status.hidden,false);assert.match(status.textContent,/取得できません/);
   c.handleDeviceOrientation({alpha:45,beta:0,gamma:0,absolute:false});assert.equal(c.currentHeadingMarker,null);
-  c.window.isSecureContext=false;await c.enableHeadingFromGesture({retry:true});assert.match(status.textContent,/HTTPS/);
-  c.window.isSecureContext=true;c.window.DeviceOrientationEvent=undefined;await c.enableHeadingFromGesture({retry:true});assert.match(status.textContent,/利用できません/);
+  c.window.isSecureContext=false;await c.enableHeadingFromGesture({retry:true});assert.equal(status.textContent,"向きを取得できませんでした。");
+  c.window.isSecureContext=true;c.window.DeviceOrientationEvent=undefined;await c.enableHeadingFromGesture({retry:true});assert.equal(status.textContent,"向きを取得できませんでした。");
 });
 
 test('empty WebKit properties do not mask Android absolute readings or erase valid headings',()=>{
   const {context:c,status}=headingSetup();
   c.handleDeviceOrientation({webkitCompassHeading:null,alpha:270,beta:0,gamma:0,absolute:true});assert.equal(c.currentHeadingMarker.angle,'90.0deg');
   c.handleDeviceOrientation({webkitCompassHeading:undefined,alpha:200,beta:0,gamma:0,absolute:false});assert.equal(c.currentHeadingMarker.angle,'90.0deg');
-  c.handleDeviceOrientation({webkitCompassHeading:45,webkitCompassAccuracy:-1,absolute:false});assert.equal(c.currentHeadingMarker,null);assert.match(status.textContent,/コンパス/);
+  c.handleDeviceOrientation({webkitCompassHeading:45,webkitCompassAccuracy:-1,absolute:false});assert.equal(c.currentHeadingMarker,null);assert.equal(status.textContent,"向きを取得できませんでした。");
   c.handleDeviceOrientation({webkitCompassHeading:0,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker.angle,'0.0deg');assert.equal(status.hidden,true);
 });
 
@@ -141,53 +141,39 @@ test('an idle phone keeps a valid arrow and resume waits for new direction data'
 });
 
 
-function permissionDialogSetup(sensor) {
-  const qa=headingSetup(sensor),nodes={};
-  for(const id of ['heading-permission-dialog','allow-heading-startup','skip-heading-startup'])nodes[id]={
-    hidden:true,open:false,disabled:false,events:{},
-    addEventListener(type,fn){this.events[type]=fn;},removeEventListener(type,fn){if(this.events[type]===fn)delete this.events[type];},
-    showModal(){this.open=true;},close(){this.open=false;},
-  };
-  qa.context.document.getElementById=id=>id==='heading-status'?qa.status:nodes[id];
-  return {...qa,nodes};
-}
 
 test('already permitted heading starts on page initialization with no map interaction',async()=>{
-  let calls=0;const {context:c,nodes}=permissionDialogSetup({requestPermission(){calls++;return Promise.resolve('granted');}});
+  let calls=0;const {context:c}=headingSetup({requestPermission(){calls++;return Promise.resolve('granted');}});
   await c.initializeHeadingPermission();await c.initializeHeadingPermission();
-  assert.equal(calls,1);assert.equal(c.headingPermission,'granted');assert.equal(nodes['heading-permission-dialog'].open,false);
+  assert.equal(calls,1);assert.equal(c.headingPermission,'granted');
   c.handleDeviceOrientation({webkitCompassHeading:90,webkitCompassAccuracy:5});assert.equal(c.currentHeadingMarker.angle,'90.0deg');
   assert.deepEqual(Array.from(c.currentHeadingMarker.options.icon.iconSize),[44,44]);
 });
 
-test('gesture-only Safari opens startup permission before continuing and requests directly on its button',async()=>{
-  let calls=0;const {context:c,nodes}=permissionDialogSetup({requestPermission(){
+test('gesture-only Safari continues startup and requests native permission on the next normal action',async()=>{
+  let calls=0;const {context:c,listeners,status}=headingSetup({requestPermission(){
     if(++calls===1)return Promise.reject(Object.assign(Error('user activation required'),{name:'NotAllowedError'}));
     return Promise.resolve('granted');
   }});
-  let finished=false;const startup=c.initializeHeadingPermission().then(()=>{finished=true;});
-  for(let i=0;i<5;i++)await Promise.resolve();
-  assert.equal(nodes['heading-permission-dialog'].open,true);assert.equal(finished,false);
-  const clicked=nodes['allow-heading-startup'].events.click();assert.equal(calls,2,'no async work before the native request');
-  await clicked;await startup;assert.equal(c.headingPermission,'granted');assert.equal(nodes['heading-permission-dialog'].hidden,true);assert.equal(finished,true);
+  await c.initializeHeadingPermission();assert.equal(calls,1);assert.equal(c.headingAutoTried,false);assert.equal(status.hidden,true);
+  listeners.click({isTrusted:false,target:headingTarget()});assert.equal(calls,1);
+  listeners.click({isTrusted:true,target:headingTarget()});assert.equal(calls,2,'direct native request within the normal user gesture');
+  await c.headingPermissionRequest;await Promise.resolve();assert.equal(c.headingPermission,'granted');
 });
 
-test('startup permission can be skipped or refused without blocking the app',async()=>{
-  for(const choice of ['skip-heading-startup','allow-heading-startup']){
-    let calls=0;const {context:c,nodes,status}=permissionDialogSetup({requestPermission(){
-      return ++calls===1?Promise.reject(Object.assign(Error('gesture'),{name:'NotAllowedError'})):Promise.resolve('denied');
-    }});
-    const startup=c.initializeHeadingPermission();for(let i=0;i<5;i++)await Promise.resolve();
-    await nodes[choice].events.click();await startup;assert.equal(nodes['heading-permission-dialog'].open,false);assert.equal(c.currentHeadingMarker,null);
-    if(choice==='allow-heading-startup')assert.match(status.textContent,/許可/);
+test('startup permission errors never block the app or show instructions',async()=>{
+  const {context:c,status}=headingSetup({requestPermission(){throw Error('sensor unavailable');}});
+  await c.initializeHeadingPermission();assert.equal(c.currentHeadingMarker,null);assert.equal(status.textContent,'向きを取得できませんでした。');
+  for(const entry of ['index.html','templates/index.html']){
+    const html=fs.readFileSync(`${__dirname}/${entry}`,'utf8');assert.doesNotMatch(html,/heading-permission-dialog|allow-heading-startup|skip-heading-startup/);
   }
 });
 
-test('unsupported sensors and a cached native denial do not trap startup in a modal',async()=>{
-  const unsupported=permissionDialogSetup(undefined);unsupported.context.window.DeviceOrientationEvent=undefined;
-  await unsupported.context.initializeHeadingPermission();assert.equal(unsupported.nodes['heading-permission-dialog'].open,false);
-  const denied=permissionDialogSetup({requestPermission:()=>Promise.resolve('denied')});
-  await denied.context.initializeHeadingPermission();assert.equal(denied.context.headingPermission,'denied');assert.equal(denied.nodes['heading-permission-dialog'].open,false);
+test('unsupported sensors and a cached native denial do not trap startup',async()=>{
+  const unsupported=headingSetup();unsupported.context.window.DeviceOrientationEvent=undefined;
+  await unsupported.context.initializeHeadingPermission();assert.equal(unsupported.context.currentHeadingMarker,null);
+  const denied=headingSetup({requestPermission:()=>Promise.resolve('denied')});
+  await denied.context.initializeHeadingPermission();assert.equal(denied.context.headingPermission,'denied');assert.equal(denied.context.currentHeadingMarker,null);
 });
 
 function navigationSetup() {
