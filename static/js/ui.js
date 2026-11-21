@@ -433,5 +433,7 @@
   document.getElementById("close-onboarding-hint").addEventListener("click", () => { guideHint.hidden = true; });
   for (const button of navigation) button.addEventListener("click", () => { guideHint.hidden = true; });
   document.querySelector(".app-brand").addEventListener("click", () => { guideHint.hidden = true; });
-  if (!onboardingSeen()) showOnboarding();
+  initializeHeadingPermission().then(() => {
+    if (!onboardingSeen()) showOnboarding();
+  });
 })();

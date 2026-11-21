@@ -291,6 +291,8 @@ let headingPermissionRequest = null;
 let headingPermission = null;
 let headingAutoTried = false;
 let headingMonitorTimer = null;
+let headingNeedsGesture = false;
+let headingStartupPromise = null;
 let searchedStart = null;
 let startMarker = null;
 let selectingStartOnMap = false;
@@ -872,7 +874,7 @@ function renderCurrentHeading() {
   if (!currentHeadingMarker) {
     currentHeadingMarker = L.marker([currentPosition.lat, currentPosition.lng], {
       icon: L.divIcon({
-        className: "current-heading-icon", iconSize: [56, 56], iconAnchor: [28, 28],
+        className: "current-heading-icon", iconSize: [44, 44], iconAnchor: [22, 22],
         html: '<span class="current-heading-pointer" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M28 1 41 25 28 19 15 25Z" fill="#2476cf" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/></svg></span>',
       }),
       interactive: false, keyboard: false, zIndexOffset: 1000,
@@ -901,7 +903,7 @@ function monitorHeading(delay = 8000) {
     // Some browsers emit only on changes; a stationary phone retains its reading.
     if (headingReading) return;
     clearCurrentHeading();
-    setHeadingStatus("向きを取得できません。「動作と方向」の許可を確認し、現在地を押して再試行してください。");
+    setHeadingStatus("向きを取得できませんでした。");
   }, delay);
 }
 
@@ -941,7 +943,7 @@ function startHeadingUpdates() {
   window.addEventListener("orientationchange", renderCurrentHeading);
 }
 
-async function enableHeadingFromGesture({ retry = false } = {}) {
+async function enableHeadingFromGesture({ retry = false, startup = false } = {}) {
   const sensor = window.DeviceOrientationEvent;
   if (window.isSecureContext === false) {
     setHeadingStatus("向きの表示にはHTTPS接続が必要です。");
@@ -961,6 +963,7 @@ async function enableHeadingFromGesture({ retry = false } = {}) {
   if (headingPermissionRequest) return headingPermissionRequest.then(state => state === "granted", () => false);
   // Safari requires a real user gesture. Invoke before any await or deferred task.
   try {
+    headingNeedsGesture = false;
     headingPermissionRequest = Promise.resolve(sensor.requestPermission(true));
     headingPermission = await headingPermissionRequest;
     if (headingPermission === "granted") {
@@ -972,13 +975,65 @@ async function enableHeadingFromGesture({ retry = false } = {}) {
       setHeadingStatus("向きの表示が許可されていません。端末の設定を確認し、現在地を押して再試行してください。");
     }
     return headingPermission === "granted";
-  } catch {
+  } catch (error) {
+    headingNeedsGesture = error?.name === "NotAllowedError" || /gesture|user activation|user interaction/i.test(error?.message || "");
     clearCurrentHeading();
-    setHeadingStatus("向きのセンサーを開始できません。現在地を押して再試行してください。");
+    if (!startup || !headingNeedsGesture) setHeadingStatus("向きのセンサーを開始できません。現在地を押して再試行してください。");
     return false;
   } finally {
     headingPermissionRequest = null;
   }
+}
+
+function initializeHeadingPermission() {
+  if (headingStartupPromise) return headingStartupPromise;
+  headingStartupPromise = (async () => {
+    const sensor = window.DeviceOrientationEvent;
+    if (window.isSecureContext === false || !sensor) return;
+    headingAutoTried = true;
+    // Already granted permissions can resolve without activation; never infer a
+    // browser permission from a localStorage flag.
+    const enabled = await enableHeadingFromGesture({ startup: true });
+    if (enabled || headingReading || !headingNeedsGesture) return;
+    const dialog = document.getElementById("heading-permission-dialog");
+    const allow = document.getElementById("allow-heading-startup");
+    const later = document.getElementById("skip-heading-startup");
+    if (!dialog || !allow || !later || typeof dialog.showModal !== "function") {
+      setHeadingStatus("向きの表示には動作と方向の許可が必要です。現在地を押して許可してください。");
+      return;
+    }
+    await new Promise(resolve => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        allow.removeEventListener("click", request);
+        later.removeEventListener("click", finish);
+        dialog.removeEventListener("cancel", cancel);
+        window.removeEventListener("deviceorientation", onReading);
+        window.removeEventListener("deviceorientationabsolute", onReading);
+        if (dialog.open) dialog.close();
+        dialog.hidden = true;
+        resolve();
+      };
+      const request = async () => {
+        allow.disabled = later.disabled = true;
+        // This call must precede await, directly inside the button gesture.
+        await enableHeadingFromGesture({ retry: true });
+        finish();
+      };
+      const cancel = event => { event.preventDefault(); finish(); };
+      const onReading = () => { if (headingReading && headingPermission === "granted") finish(); };
+      allow.addEventListener("click", request);
+      later.addEventListener("click", finish);
+      dialog.addEventListener("cancel", cancel);
+      window.addEventListener("deviceorientation", onReading);
+      window.addEventListener("deviceorientationabsolute", onReading);
+      dialog.hidden = false;
+      dialog.showModal();
+    });
+  })();
+  return headingStartupPromise;
 }
 
 function enableHeadingOnFirstInteraction(event) {
