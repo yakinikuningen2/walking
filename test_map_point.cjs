@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {roadPoint,createResolver}=require('./static/js/map-point.js');
-const {meters}=require('./static/js/walk-session-core.js');
+const {meters}=require('./static/js/route-book-core.js');
 const origin={lat:35,lng:139},point=n=>({lat:35+n/111195,lng:139});
 const edge=(n=0,change={})=>({correlated_lat:point(n).lat,correlated_lon:139,inbound_reach:20,outbound_reach:20,
  edge:{access:{pedestrian:true},classification:{use:'footway'}},...change});

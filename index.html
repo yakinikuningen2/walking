@@ -52,7 +52,7 @@
             <ul id="destination-search-results" class="place-list" aria-label="目的地の検索結果"></ul>
           </section>
           <section class="destination-start-search" aria-label="スタート地点の選択">
-            <div class="start-point-row"><span>スタート地点</span><button id="start-name" type="button" aria-label="スタート地点の検索を閉じる" aria-controls="start-picker">現在地</button><button id="change-start" type="button" aria-label="スタート地点を検索" aria-expanded="false" aria-controls="start-picker">検索</button><button id="pick-start-on-map" type="button">地図で指定</button></div>
+            <div id="start-point-controls" class="start-point-row"><span>スタート地点</span><button id="start-name" type="button" aria-label="スタート地点の検索を閉じる" aria-controls="start-picker">現在地</button><button id="change-start" type="button" aria-label="スタート地点を検索" aria-expanded="false" aria-controls="start-picker">検索</button><button id="pick-start-on-map" type="button">地図で指定</button></div>
             <div id="start-picker" class="start-picker" hidden>
               <label class="sr-only" for="start-search-input">スタート地点の名前・住所</label>
               <form id="start-search-form" class="search-form" role="search">
@@ -67,7 +67,7 @@
           <section class="destination-condition-search" aria-labelledby="destination-condition-heading">
             <h3 id="destination-condition-heading" class="destination-search-title">散歩の条件</h3>
           <details id="discovery-history" class="discovery-history" hidden><summary>検索履歴</summary><ul id="discovery-history-list" class="place-list" aria-label="過去の条件検索"></ul></details>
-          <div class="discovery-mode-tabs" role="tablist" aria-label="散歩先の探し方"><button id="discovery-conditions-tab" type="button" role="tab" aria-selected="true" aria-controls="discovery-form">条件検索</button><button id="discovery-random" type="button" role="tab" aria-selected="false" aria-controls="random-form" tabindex="-1">ランダムに探す</button></div>
+          <div id="discovery-mode-tabs" class="discovery-mode-tabs" role="tablist" aria-label="散歩先の探し方"><button id="discovery-conditions-tab" type="button" role="tab" aria-selected="true" aria-controls="discovery-form">条件検索</button><button id="discovery-random" type="button" role="tab" aria-selected="false" aria-controls="random-form" tabindex="-1">ランダムに探す</button></div>
           <form id="discovery-form" role="tabpanel" aria-labelledby="discovery-conditions-tab">
             <fieldset class="discovery-time">
               <legend>片道の歩く時間</legend>
@@ -194,7 +194,7 @@
         <button id="edit-walking-settings" type="button" class="secondary" aria-expanded="false" aria-controls="setup-screen">歩く速さ</button>
       </div>
       <div class="nearby-convenience-controls">
-        <div class="nearby-convenience-actions"><label class="sr-only" for="nearby-scope">検索する範囲</label><select id="nearby-scope" class="nearby-scope" aria-label="検索する範囲"><option value="point">近くの</option><option id="nearby-route-option" value="route" disabled>ルート沿い</option></select><label class="sr-only" for="nearby-kind">近くで探す場所</label><select id="nearby-kind"><option value="convenience">コンビニ</option><option value="station">駅</option><option value="toilet">トイレ</option><option value="bus_stop">バス停</option><option value="cafe">カフェ</option><option value="park">公園・緑地</option><option value="viewpoint">景色</option><option value="shrine">神社・寺院</option></select><button id="nearby-convenience" type="button" aria-label="近くのコンビニを探す" aria-describedby="nearby-convenience-status">探す</button><button id="clear-nearby-convenience" type="button" aria-label="コンビニの表示を消す" hidden>消す</button></div>
+        <div id="nearby-search-controls" class="nearby-convenience-actions"><label class="sr-only" for="nearby-scope">検索する範囲</label><select id="nearby-scope" class="nearby-scope" aria-label="検索する範囲"><option value="point">近くの</option><option value="map">地図の中心</option><option id="nearby-route-option" value="route" disabled>ルート沿い</option></select><label class="sr-only" for="nearby-kind">近くで探す場所</label><select id="nearby-kind"><option value="convenience">コンビニ</option><option value="station">駅</option><option value="toilet">トイレ</option><option value="bus_stop">バス停</option><option value="cafe">カフェ</option><option value="restaurant">食事処</option><option value="park">公園・緑地</option><option value="viewpoint">景色</option><option value="shrine">神社・寺院</option></select><button id="nearby-convenience" type="button" aria-label="近くのコンビニを探す" aria-describedby="nearby-convenience-status">探す</button><button id="clear-nearby-convenience" type="button" aria-label="コンビニの表示を消す" hidden>消す</button></div>
         <p id="nearby-convenience-status" class="status" role="status" aria-live="polite"></p>
         <details id="nearby-results-panel" class="nearby-results-panel" hidden><summary>寄り道の候補<span id="nearby-results-count"></span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><use href="#i-chevron"></use></svg></summary><ul id="nearby-results" class="place-list" aria-label="ルート沿いの寄り道候補"></ul><button id="nearby-more" type="button" hidden>もっと見る</button></details>
       </div>
@@ -250,27 +250,36 @@
       <header class="onboarding-header"><span>散歩アプリ</span><a href="static/privacy.html" target="_blank" rel="noopener">プライバシー</a><button id="close-onboarding" type="button" autofocus>スキップ</button></header>
       <div class="onboarding-content" aria-live="polite" aria-atomic="true">
         <section class="onboarding-page" data-onboarding-page data-guide-view="map" data-guide-target="#location-button" aria-labelledby="onboarding-location-heading">
-          <p class="onboarding-step">01 / 06</p><h3 id="onboarding-location-heading">現在地を確認する</h3><p>このボタンで現在地へ戻ります。<br>出発地点は「探す」で検索や地図から変更できます。</p>
+          <p class="onboarding-step">01 / 09</p><h3 id="onboarding-location-heading">現在地と地図</h3><p>「現在地」で自分の位置へ戻ります。<br>移動に合わせて地図を動かすときは「現在地を追従」を押します。</p>
+        </section>
+        <section class="onboarding-page" data-onboarding-page data-guide-view="search" data-guide-target="#start-point-controls" aria-labelledby="onboarding-start-heading" hidden>
+          <p class="onboarding-step">02 / 09</p><h3 id="onboarding-start-heading">出発地点を決める</h3><p>出発地点は、はじめは現在地です。<br>「検索」で場所を探すか、「地図で指定」で出発する場所を選べます。</p>
         </section>
         <section class="onboarding-page" data-onboarding-page data-guide-view="search" data-guide-target="#destination-search-form" aria-labelledby="onboarding-search-heading" hidden>
-          <p class="onboarding-step">02 / 06</p><h3 id="onboarding-search-heading">行きたい場所を探す</h3><p>ここに場所の名前や住所を入力し、虫眼鏡かEnterで検索します。<br>下の「散歩の条件」では、時間や場所の種類から探せます。</p>
+          <p class="onboarding-step">03 / 09</p><h3 id="onboarding-search-heading">名前や住所で探す</h3><p>場所の名前や住所を入力し、虫眼鏡かEnterで検索します。<br>候補を選ぶと地図で位置を確認できます。地図をタップして目的地を選ぶこともできます。</p>
         </section>
-        <section class="onboarding-page" data-onboarding-page data-guide-view="map" data-guide-target="#map" aria-labelledby="onboarding-route-heading" hidden>
-          <p class="onboarding-step">03 / 06</p><h3 id="onboarding-route-heading">ルートを地図で確認する</h3><p>検索した候補の「ルート確認」を押すと、この地図に道順を表示します。<br>案内中は距離・時間の確認や「更新」ができます。</p>
+        <section class="onboarding-page" data-onboarding-page data-guide-view="search" data-guide-target="#discovery-mode-tabs" aria-labelledby="onboarding-conditions-heading" hidden>
+          <p class="onboarding-step">04 / 09</p><h3 id="onboarding-conditions-heading">時間や条件から探す</h3><p>「片道の歩く時間」は下限～上限で指定します。<br>「条件検索」では場所の種類を選び、雰囲気や方角は「詳細な条件」で絞れます。<br>行き先を任せるなら「ランダムに探す」を選びます。</p>
+        </section>
+        <section class="onboarding-page" data-onboarding-page data-guide-view="map" data-guide-target="#map" data-guide-route-target="#route-map-actions" aria-labelledby="onboarding-route-heading" hidden>
+          <p class="onboarding-step">05 / 09</p><h3 id="onboarding-route-heading">徒歩ルートを確認する</h3><p>候補の「ルート確認」や、目的地の「徒歩ルートを表示」で道順を表示します。<br>距離・所要時間はルートの詳細で確認できます。スマホでは詳細を閉じると地図を広く見られます。</p>
+        </section>
+        <section class="onboarding-page" data-onboarding-page data-guide-view="map" data-guide-target="#nearby-search-controls" aria-labelledby="onboarding-nearby-heading" hidden>
+          <p class="onboarding-step">06 / 09</p><h3 id="onboarding-nearby-heading">近くの施設と寄り道</h3><p>種類を選んで「探す」を押すと、食事処・カフェ・駅・トイレなどを探せます。<br>「近くの」「地図の中心」は半径2km、「ルート沿い」は道順の周辺が対象です。<br>マーカーから「目的地にする」、案内中は「経由地にする」を選べます。</p>
         </section>
         <section class="onboarding-page" data-onboarding-page data-guide-view="tour" data-guide-target="#tour-theme" aria-labelledby="onboarding-tour-heading" hidden>
-          <p class="onboarding-step">04 / 06</p><h3 id="onboarding-tour-heading">周遊コースを作る</h3><p>時間と、この欄のテーマを選んで「コースを作る」を押します。<br>複数の場所を巡り、出発地点に戻るコースも作れます。</p>
+          <p class="onboarding-step">07 / 09</p><h3 id="onboarding-tour-heading">いくつかの場所を巡る</h3><p>時間・テーマ・方角を選び、「コースを作る」を押します。<br>「出発地点に戻る」で帰り道も含む周遊を選べます。経由地の順番や訪問済みの状態は後から変更できます。</p>
           <div class="onboarding-route-key tour-line-legend"><span aria-label="行き：緑の実線"><span class="tour-line-swatch outbound" aria-hidden="true"></span>行き</span><span aria-label="帰り：オレンジの実線"><span class="tour-line-swatch return" aria-hidden="true"></span>帰り</span></div>
         </section>
         <section class="onboarding-page" data-onboarding-page data-guide-view="saved" data-guide-target="#search-form" aria-labelledby="onboarding-saved-heading" hidden>
-          <p class="onboarding-step">05 / 06</p><h3 id="onboarding-saved-heading">歩いた場所を残す</h3><p>ここで検索するか、地図をタップして場所を選びます。<br>日付・メモや散歩の記録を保存できます。</p>
+          <p class="onboarding-step">08 / 09</p><h3 id="onboarding-saved-heading">場所とルートを保存する</h3><p>「登録地点」で検索するか、地図をタップして場所を選び、日付・メモを保存します。<br>表示中のルートもここで保存できます。「保存した道をなるべく避ける」も設定できます。</p>
         </section>
         <section class="onboarding-page" data-onboarding-page data-guide-view="settings" data-guide-target="#custom-walking-speed" aria-labelledby="onboarding-speed-heading" hidden>
-          <p class="onboarding-step">06 / 06</p><h3 id="onboarding-speed-heading">歩く速さを合わせる</h3><p>このスライダーで歩く速さを調整します。<br>「保存」を押すと所要時間に反映され、次回も使われます。</p>
+          <p class="onboarding-step">09 / 09</p><h3 id="onboarding-speed-heading">歩く速さを合わせる</h3><p>スライダーで歩く速さを2.5～6.5km/hから調整し、「保存」を押します。<br>候補の徒歩時間やルートの所要時間に使われ、次回も同じ設定が残ります。</p>
         </section>
       </div>
       <footer class="onboarding-footer">
-        <nav class="onboarding-pagination" aria-label="使い方のページ"><button type="button" data-onboarding-go="0" aria-label="1ページ目：出発地点を決める" aria-current="step"></button><button type="button" data-onboarding-go="1" aria-label="2ページ目：行きたい場所を探す"></button><button type="button" data-onboarding-go="2" aria-label="3ページ目：徒歩ルートを表示"></button><button type="button" data-onboarding-go="3" aria-label="4ページ目：周遊でいろいろな場所へ"></button><button type="button" data-onboarding-go="4" aria-label="5ページ目：歩いた場所を残す"></button><button type="button" data-onboarding-go="5" aria-label="6ページ目：自分のペースで歩く"></button></nav>
+        <nav class="onboarding-pagination" aria-label="使い方のページ"><button type="button" data-onboarding-go="0" aria-label="1ページ目：現在地と地図" aria-current="step"></button><button type="button" data-onboarding-go="1" aria-label="2ページ目：出発地点を決める"></button><button type="button" data-onboarding-go="2" aria-label="3ページ目：名前や住所で探す"></button><button type="button" data-onboarding-go="3" aria-label="4ページ目：時間や条件から探す"></button><button type="button" data-onboarding-go="4" aria-label="5ページ目：徒歩ルートを確認する"></button><button type="button" data-onboarding-go="5" aria-label="6ページ目：近くの施設と寄り道"></button><button type="button" data-onboarding-go="6" aria-label="7ページ目：いくつかの場所を巡る"></button><button type="button" data-onboarding-go="7" aria-label="8ページ目：場所とルートを保存する"></button><button type="button" data-onboarding-go="8" aria-label="9ページ目：歩く速さを合わせる"></button></nav>
         <div class="onboarding-actions"><button id="previous-onboarding" type="button" disabled>戻る</button><button id="finish-onboarding" class="onboarding-next" type="button">次へ</button></div>
       </footer>
       </div>
@@ -284,8 +293,8 @@
     <script src="static/js/geographic-core.js"></script>
     <script src="static/js/mountain-core.js"></script>
     <script src="static/js/walk-features.js"></script>
-    <script src="static/js/walk-steps-core.js"></script>
-    <script src="static/js/walk-session-core.js"></script>
+
+    <script src="static/js/route-book-core.js"></script>
     <script src="static/js/place-identity.js"></script>
     <script src="static/js/place-photos.js"></script>
     <script src="static/js/long-routes.js"></script>
@@ -299,8 +308,8 @@
     <script src="static/js/map-point.js"></script>
     <script src="static/js/tour-core.js"></script>
     <script src="static/js/tour.js"></script>
-    <script src="static/js/walk-session.js"></script>
-    <script src="static/js/walk-steps.js"></script>
+    <script src="static/js/registered-routes.js"></script>
+
     <script src="static/js/ui.js"></script>
   </body>
 </html>

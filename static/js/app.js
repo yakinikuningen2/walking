@@ -139,8 +139,8 @@ const SEASONAL_KIND_WORDS = {
   cherry_blossom: ["桜", "さくら", "サクラ", "花見", "お花見", "桜の名所", "桜が見たい", "桜を見たい"],
   autumn_leaves: ["紅葉", "もみじ", "モミジ", "黄葉", "紅葉狩り", "紅葉の名所", "紅葉が見たい", "紅葉を見たい"],
 };
-const NEARBY_CONVENIENCE_RADIUS = 1000;
-const NEARBY_CONVENIENCE_CACHE_RADIUS = 1200;
+const NEARBY_CONVENIENCE_RADIUS = 2000;
+const NEARBY_CONVENIENCE_CACHE_RADIUS = NEARBY_CONVENIENCE_RADIUS + 200;
 const NEARBY_CONVENIENCE_TIMEOUT_MS = 10000;
 const NEARBY_CONVENIENCE_LOOKUP_TIMEOUT_MS = 5000;
 const ROUTE_PROGRESS_REFRESH_METERS = 30;
@@ -1113,7 +1113,6 @@ function locationFixFromPosition(position) {
 
 function displayLocationFix(position, options) {
   lastLocationFix = position;
-  if (typeof WalkingSession !== "undefined") WalkingSession.fix(position);
   showCurrentLocation(position, options);
 }
 
@@ -1281,7 +1280,33 @@ function clearNearbyConvenience({ preserveRoute = false } = {}) {
 }
 
 function nearbyKindLabel(kind) {
-  return { station: "駅", toilet: "トイレ", bus_stop: "バス停", cafe: "カフェ", park: "公園・緑地", viewpoint: "景色", shrine: "神社・寺院" }[kind] || "コンビニ";
+  return { station: "駅", toilet: "トイレ", bus_stop: "バス停", cafe: "カフェ", restaurant: "食事処", park: "公園・緑地", viewpoint: "景色", shrine: "神社・寺院" }[kind] || "コンビニ";
+}
+
+function nearbyCuisineLabel(value) {
+  const labels = { japanese: "和食", chinese: "中華料理", italian: "イタリア料理", french: "フランス料理", indian: "インド料理", thai: "タイ料理", korean: "韓国料理",
+    sushi: "寿司", ramen: "ラーメン", soba: "そば", udon: "うどん", noodle: "麺料理", curry: "カレー", japanese_curry: "日本式カレー",
+    burger: "ハンバーガー", pizza: "ピザ", sandwich: "サンドイッチ", seafood: "魚介料理", steak_house: "ステーキ", yakiniku: "焼肉", barbecue: "バーベキュー",
+    chicken: "チキン", kebab: "ケバブ", regional: "郷土料理", international: "各国料理", okonomiyaki: "お好み焼き", takoyaki: "たこ焼き" };
+  return [...new Set(String(value || "").normalize("NFKC").split(";").map(word => word.trim()).filter(Boolean))]
+    .slice(0, 6).map(word => labels[word.toLowerCase()] || word).join("・");
+}
+
+function nearbySearchOrigin() {
+  const useCurrentLocation = ui["nearby-scope"].value !== "map" && Boolean(currentPosition);
+  const point = useCurrentLocation ? currentPosition : map.getCenter();
+  const source = useCurrentLocation ? "現在地" : "地図の中心";
+  return { useCurrentLocation, source, origin: { lat: point.lat, lng: ((point.lng + 180) % 360 + 360) % 360 - 180, distanceSource: source } };
+}
+
+function nearbyDistanceLabel(place, scope = "point") {
+  const position = typeof currentPosition === "undefined" ? null : currentPosition;
+  const fromCurrent = position && validCoordinates(position.lat, position.lng);
+  const distance = fromCurrent ? map.distance([position.lat, position.lng], [place.lat, place.lng]) : place.distance;
+  if (!Number.isFinite(distance)) return "";
+  const source = fromCurrent ? "現在地" : scope === "route" ? "出発地点" : place.distanceSource || "検索地点";
+  const text = distance >= 1000 ? `${(distance / 1000).toFixed(1)}km` : `${Math.round(distance)}m`;
+  return `${source}から約${text}（直線距離）`;
 }
 
 function nearbyCategorySelectors(kind) {
@@ -1289,7 +1314,7 @@ function nearbyCategorySelectors(kind) {
     convenience: ['nwr[shop="convenience"]'], station: ['nwr[railway~"^(station|halt)$"]'],
     toilet: ['nwr[amenity="toilets"]'],
     bus_stop: ['nwr[highway="bus_stop"]', 'nwr[public_transport="platform"][bus="yes"]', 'nwr[amenity="bus_station"]'],
-    cafe: ['nwr[amenity="cafe"]'], park: ['nwr[leisure~"^(park|nature_reserve)$"]'],
+    cafe: ['nwr[amenity="cafe"]'], restaurant: ['nwr[amenity~"^(restaurant|fast_food|food_court)$"]'], park: ['nwr[leisure~"^(park|nature_reserve)$"]'],
     viewpoint: ['nwr[tourism="viewpoint"]'],
     shrine: ['nwr[amenity="place_of_worship"][religion~"^(shinto|buddhist)$"]'],
   }[kind] || [];
@@ -1305,6 +1330,7 @@ function nearbyConveniencePlaces(elements, origin, kind = "convenience", { plan 
         : kind === "bus_stop" ? tags.highway === "bus_stop" || tags.amenity === "bus_station"
           || (tags.public_transport === "platform" && tags.bus === "yes")
           : kind === "cafe" ? tags.amenity === "cafe"
+            : kind === "restaurant" ? ["restaurant", "fast_food", "food_court"].includes(tags.amenity)
             : kind === "park" ? ["park", "nature_reserve"].includes(tags.leisure)
               : kind === "viewpoint" ? tags.tourism === "viewpoint"
                 : kind === "shrine" ? tags.amenity === "place_of_worship" && ["shinto", "buddhist"].includes(tags.religion)
@@ -1312,7 +1338,8 @@ function nearbyConveniencePlaces(elements, origin, kind = "convenience", { plan 
     if (!matches || ["private", "no"].includes(tags.access)
       || tags.opening_hours === "closed" || tags.disused === "yes" || tags.abandoned === "yes") continue;
     if (["toilet", "bus_stop"].includes(kind) && ["customers", "permit", "members", "military"].includes(tags.access)) continue;
-    if (["cafe", "park", "viewpoint", "shrine"].includes(kind) && ["permit", "members", "military"].includes(tags.access)) continue;
+    if (["cafe", "restaurant", "park", "viewpoint", "shrine"].includes(kind) && ["permit", "members", "military"].includes(tags.access)) continue;
+    if (kind === "restaurant" && ["private", "no"].includes(tags.foot)) continue;
     const lat = element.lat ?? element.center?.lat, lng = element.lon ?? element.center?.lon;
     if (!validCoordinates(lat, lng)) continue;
     const distance = map.distance([origin.lat, origin.lng], [lat, lng]);
@@ -1324,7 +1351,9 @@ function nearbyConveniencePlaces(elements, origin, kind = "convenience", { plan 
     const address = [...new Set([tags["addr:province"], tags["addr:city"], tags["addr:suburb"],
       tags["addr:street"], tags["addr:housenumber"]].filter((value) => typeof value === "string" && value))].join("、");
     places.push(PlaceIdentity.attach({ name, key, address: address || (["station", "bus_stop"].includes(kind) ? [tags.operator, tags["railway:line"]].filter(Boolean).join(" ／ ") : ""),
-      lat, lng, distance, source: element.source, openingHours: tags.opening_hours || "", note: tags.note || "",
+      lat, lng, distance, distanceSource: origin.distanceSource || "検索地点", source: element.source,
+      cuisine: String(tags["cuisine:ja"] || tags.cuisine || "").slice(0, 180),
+      openingHours: String(tags.opening_hours || "").slice(0, 300), note: tags.note || "",
       kindId: kind, kindLabel: label,
       ...(typeof PlacePhotos !== "undefined" ? { photoHints: PlacePhotos.hints(element) } : {}),
       ...(position ? { distanceFromRoute: position.distance, alongRoute: position.along } : {}) }, element));
@@ -1333,7 +1362,7 @@ function nearbyConveniencePlaces(elements, origin, kind = "convenience", { plan 
 }
 
 function nearbyConvenienceArea(origin) {
-  // One cell is at most 223m across. Its padded box covers every point's 1km circle,
+  // One cell is at most 223m across. Its padded box covers every point's 2km circle,
   // so GPS drift can reuse the same data without losing places at the search edge.
   const center = { lat: Math.round(origin.lat * 500) / 500, lng: Math.round(origin.lng * 500) / 500 };
   return { center, origin: { lat: origin.lat, lng: origin.lng }, key: `${center.lat.toFixed(3)},${center.lng.toFixed(3)}`,
@@ -1485,7 +1514,85 @@ async function localNearbyToilets(area, request) {
   return toiletIndexCache.filter((place) => place.lat >= south && place.lat <= north && place.lon >= west && place.lon <= east);
 }
 
+function photonFoodElements(data) {
+  if (!Array.isArray(data?.features)) throw new Error("Invalid nearby food response");
+  return data.features.flatMap((feature) => {
+    const p = feature?.properties, coordinates = feature?.geometry?.coordinates;
+    const type = ({ N: "node", W: "way", R: "relation" })[p?.osm_type];
+    if (!type || p.osm_key !== "amenity" || !["restaurant", "fast_food", "food_court"].includes(p.osm_value)
+      || feature?.geometry?.type !== "Point" || !Array.isArray(coordinates)
+      || !validCoordinates(coordinates[1], coordinates[0])) return [];
+    const extra = p.extra && typeof p.extra === "object" ? p.extra : {};
+    return [{ type, id: p.osm_id, lat: coordinates[1], lon: coordinates[0], source: "photon", tags: {
+      ...extra, amenity: p.osm_value, name: typeof p.name === "string" ? p.name : extra.name,
+      "addr:province": p.state, "addr:city": p.city, "addr:suburb": p.district || p.locality,
+      "addr:street": p.street, "addr:housenumber": p.housenumber,
+    } }];
+  });
+}
+
+async function fetchNearbyFoodData(area, request) {
+  // Retain Overpass metadata, but do not make all shops depend on its availability.
+  const controller = new AbortController(), signal = controller.signal;
+  const abort = () => controller.abort();
+  if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+  request.controller.signal.addEventListener("abort", abort, { once: true });
+  const child = { ...request, controller, skipMapDirectFallback: true };
+  let releaseFallback;
+  const firstFinished = new Promise(resolve => { releaseFallback = resolve; });
+  const query = '[out:json][timeout:8][maxsize:16777216];('
+    + nearbyCategorySelectors("restaurant").map(selector => `${selector}[access!~"^(private|no|permit|members|military)$"][opening_hours!="closed"][disused!="yes"][abandoned!="yes"][foot!~"^(no|private)$"](${area.bounds});`).join("")
+    + ');out body center qt 500;';
+  const lookups = [
+    (async () => {
+      try {
+        const elements = await fetchDiscoveryMapData(query, child, NEARBY_CONVENIENCE_TIMEOUT_MS, false,
+          { providerDelayMs: 1000, ignoreCooldown: true });
+        if (!nearbyConveniencePlaces(elements, area.origin || area.center, "restaurant").length) releaseFallback();
+        return elements;
+      } catch (error) { releaseFallback(); throw error; }
+    })(),
+    (async () => {
+      await Promise.race([firstFinished, abortableRouteDelay(1000, signal)]);
+      // Share the rate limit with the existing name and park searches.
+      while (Date.now() - lastSearchAt < 1000) {
+        await abortableRouteDelay(1000 - (Date.now() - lastSearchAt), signal);
+      }
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      lastSearchAt = Date.now();
+      const [south, west, north, east] = area.bounds.split(",");
+      const url = new URL(SEARCH_ENDPOINT);
+      url.search = new URLSearchParams({
+        include: "osm.amenity.restaurant,osm.amenity.fast_food,osm.amenity.food_court",
+        bbox: `${west},${south},${east},${north}`, lat: area.center.lat.toFixed(3), lon: area.center.lng.toFixed(3),
+        limit: "50", lang: "default", location_bias_scale: "0", dedupe: "0",
+      }).toString();
+      return photonFoodElements(await fetchRouteJson(url, child, NEARBY_CONVENIENCE_LOOKUP_TIMEOUT_MS));
+    })(),
+  ];
+  const empty = new Error("No nearby food from this provider");
+  let emptyCount = 0;
+  try {
+    return await Promise.any(lookups.map(async lookup => {
+      const elements = await lookup;
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      if (nearbyConveniencePlaces(elements, area.origin || area.center, "restaurant").length) return elements;
+      emptyCount++;
+      throw empty;
+    }));
+  } catch (error) {
+    if (request.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (emptyCount === lookups.length) return [];
+    // An empty index plus an unavailable provider does not confirm absence.
+    throw error.errors?.find(item => item !== empty) || error;
+  } finally {
+    controller.abort();
+    request.controller.signal.removeEventListener("abort", abort);
+  }
+}
+
 async function fetchNearbyConvenienceData(area, request, kind = "convenience") {
+  if (kind === "restaurant") return fetchNearbyFoodData(area, request);
   let localElements = [];
   if (kind === "toilet") {
     try {
@@ -1564,6 +1671,45 @@ function nearbyMarkerKey(place) {
   return `${place.key}:${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
 }
 
+// Keep food details and destination actions visible after an async photo resizes the popup.
+// Only adjust when opening/resizing the content; normal map gestures remain unrestricted.
+function fitNearbyFoodPopup(marker, content) {
+  let observer = null, frame = null;
+  const fit = () => {
+    frame = null;
+    if (!marker.isPopupOpen()) return;
+    const popup = marker.getPopup(), container = map.getContainer().getBoundingClientRect();
+    const controls = ui["nearby-convenience"].closest(".nearby-convenience-controls")?.getBoundingClientRect();
+    const controlsAtTop = controls && controls.top < container.top + container.height / 2;
+    const legend = document.querySelector(".legend-control")?.getBoundingClientRect();
+    const legendBottom = legend && legend.top < container.top + container.height / 2 ? legend.bottom + 12 : container.top;
+    const top = Math.max(container.top + 12, controlsAtTop ? controls.bottom + 12 : container.top, legendBottom);
+    const bottom = !controlsAtTop && controls ? Math.min(container.bottom - 12, controls.top - 12) : container.bottom - 12;
+    popup.options.maxHeight = Math.max(100, Math.min(360, bottom - top - 70));
+    popup.update();
+    const box = popup.getElement()?.getBoundingClientRect();
+    if (!box) return;
+    const x = box.left < container.left + 12 ? box.left - container.left - 12
+      : box.right > container.right - 12 ? box.right - container.right + 12 : 0;
+    const y = box.top < top ? box.top - top : box.bottom > bottom ? box.bottom - bottom : 0;
+    if (x || y) map.panBy([x, y], { animate: false });
+  };
+  const schedule = () => { if (frame === null) frame = requestAnimationFrame(fit); };
+  marker.on("popupopen", () => {
+    observer?.disconnect();
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(schedule);
+      observer.observe(content);
+    }
+    schedule();
+  });
+  marker.on("popupclose", () => {
+    observer?.disconnect(); observer = null;
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+  });
+}
+
 function showNearbyConvenience(places, kind = "convenience", scope = "point") {
   places = PlaceIdentity.dedupe(places);
   if (scope !== "route") nearbyConvenienceMarkers.clearLayers();
@@ -1574,9 +1720,10 @@ function showNearbyConvenience(places, kind = "convenience", scope = "point") {
   pane.style.zIndex = "390";
   const icon = L.divIcon({
     className: "nearby-store-marker", iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -16],
-    html: ["cafe", "park", "viewpoint", "shrine"].includes(kind)
+    html: ["cafe", "restaurant", "park", "viewpoint", "shrine"].includes(kind)
       ? '<span class="nearby-store-symbol nearby-outing-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
         + ({ cafe: '<path d="M4 8h12v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8ZM16 9h2a3 3 0 0 1 0 6h-2M8 2v3M12 2v3"/>',
+          restaurant: '<path d="M3 3v4a3 3 0 0 0 6 0V3M6 3v18M19 3c-4 0-5 8-2 9h2M19 3v18"/>',
           park: '<path d="m12 2-7 10h3l-4 6h16l-4-6h3L12 2ZM12 18v4"/>',
           viewpoint: '<path d="m2 20 7-13 4 7 3-5 6 11H2Z"/><circle cx="17" cy="4" r="2"/>',
           shrine: '<path d="M3 5h18M4 9h16M7 5v17M17 5v17M10 9v5h4V9M2 3l10 2 10-2"/>',
@@ -1596,24 +1743,28 @@ function showNearbyConvenience(places, kind = "convenience", scope = "point") {
     popup.className = "nearby-place-popup";
     popup.append(textElement("strong", place.name));
     if (scope === "route") popup.append(textElement("p", `ルートから約${Math.round(place.distanceFromRoute)}m`));
+    const distanceNote = textElement("p", nearbyDistanceLabel(place, scope));
+    popup.append(distanceNote);
     if (place.address) popup.append(textElement("p", place.address));
-    if (place.openingHours) popup.append(textElement("p", place.openingHours, "popup-note"));
+    if (kind === "restaurant" && place.cuisine) popup.append(textElement("p", `料理：${nearbyCuisineLabel(place.cuisine)}`, "popup-note"));
+    if (place.openingHours) popup.append(textElement("p", kind === "restaurant" ? `営業時間：${place.openingHours === "24/7" ? "24時間" : place.openingHours}` : place.openingHours, "popup-note"));
     if (place.note) popup.append(textElement("p", place.note, "popup-note"));
     popup.append(typeof NearbyRouting !== "undefined" ? NearbyRouting.actions(place) : destinationButton(place));
     const marker = L.marker([place.lat, place.lng], { icon, pane: "nearbyStores", title: place.name, nearbyKey: key,
       alt: place.name, bubblingMouseEvents: false }).addTo(nearbyConvenienceMarkers)
       .bindTooltip(textElement("span", place.name)).bindPopup(popup, { autoPan: false,
         maxHeight: Math.max(140, Math.min(360, (map.getSize?.().y || 600) - 240)) });
-    marker.on("popupopen", () => { if (typeof NearbyRouting !== "undefined") NearbyRouting.popupOpened(popup); });
+    marker.on("popupopen", () => { distanceNote.textContent = nearbyDistanceLabel(place, scope); if (typeof NearbyRouting !== "undefined") NearbyRouting.popupOpened(popup); });
     marker.on("popupclose", () => { if (typeof NearbyRouting !== "undefined") NearbyRouting.popupClosed(); });
     if (typeof PlacePhotos !== "undefined") marker.on("popupopen", () => PlacePhotos.mount(popup, place));
+    if (kind === "restaurant") fitNearbyFoodPopup(marker, popup);
   }
   ui["convenience-legend"].hidden = places.length === 0;
   ui["nearby-legend-label"].textContent = nearbyKindLabel(kind);
   const legendDot = ui["convenience-legend"].querySelector(".legend-dot");
   legendDot.classList.toggle("toilet", kind === "toilet");
   legendDot.classList.toggle("bus-stop", kind === "bus_stop");
-  legendDot.classList.toggle("outing", ["cafe", "park", "viewpoint", "shrine"].includes(kind));
+  legendDot.classList.toggle("outing", ["cafe", "restaurant", "park", "viewpoint", "shrine"].includes(kind));
   if (places.some((place) => place.source === "mlit") && !stationAttributionAdded) {
     map.attributionControl.addAttribution('駅: <a href="https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2025.html" title="国土数値情報（鉄道データ・2025年度）（国土交通省）を加工して作成 / CC BY 4.0">国土数値情報（加工）</a>');
     stationAttributionAdded = true;
@@ -1648,9 +1799,7 @@ async function searchNearbyConvenience() {
   if (ui["nearby-scope"].value === "route") return searchRouteNearby();
   clearNearbyConvenience();
   const kind = ui["nearby-kind"].value;
-  const useCurrentLocation = Boolean(currentPosition);
-  const point = currentPosition || map.getCenter();
-  const origin = { lat: point.lat, lng: ((point.lng + 180) % 360 + 360) % 360 - 180 };
+  const { origin, source, useCurrentLocation } = nearbySearchOrigin();
   const request = { controller: new AbortController() };
   nearbyConvenienceRequest = request;
   ui["nearby-convenience"].disabled = true;
@@ -1674,9 +1823,8 @@ async function searchNearbyConvenience() {
       }).filter((place) => place.distance <= NEARBY_CONVENIENCE_RADIUS).sort((a, b) => a.distance - b.distance);
     }
     showNearbyConvenience(places, kind);
-    const source = useCurrentLocation ? "現在地" : "地図の中心";
     message(ui["nearby-convenience-status"], places.length
-      ? `${source}から1km以内：${places.length}件` : `${source}から1km以内の${nearbyKindLabel(kind)}は地図データにありませんでした。`);
+      ? `${source}から${NEARBY_CONVENIENCE_RADIUS / 1000}km以内：${places.length}件` : `${source}から${NEARBY_CONVENIENCE_RADIUS / 1000}km以内の${nearbyKindLabel(kind)}は地図データにありませんでした。`);
   } catch (error) {
     // A provider timeout also uses AbortError; only the user's cancellation is silent.
     if (nearbyConvenienceRequest === request && !request.controller.signal.aborted) {
@@ -2167,7 +2315,7 @@ function updateRouteChoiceNote(kind) {
   const longNote = choice?.route?.distance >= 20000 ? "長距離ルートです。所要時間に休憩は含みません。" : "";
   const splitNote = choice?.route?.segmented ? "徒歩で通れる中継地点をつないだルートです。" : "";
   const saved = choice?.route?.historyCompared ? `保存した道との重複 約${Math.round(choice.route.historyOverlap*100)}%（端末内での比較・目安）。${choice.route.historyAlternatives===1?"別の経路候補は取得できませんでした。":""}${choice.route.historySampleLimited?"長い経路・履歴は一部の区間だけで比較しています。":""}`
-    : typeof WalkingSession !== "undefined" && WalkingSession.hasHistory ? "保存した道との比較は、この経路では利用できません。" : "";
+    : typeof RegisteredRoutes !== "undefined" && RegisteredRoutes.hasHistory ? "保存した道との比較は、この経路では利用できません。" : "";
   ui["route-choice-note"].textContent = `${detail ? `${detail}。` : ""}${stores}${longNote}${splitNote}${saved}`;
 }
 
@@ -2289,7 +2437,7 @@ async function fetchRouteJson(url, request, timeoutMs = 18000) {
         routeCode:"ROUTING_RELAY_REQUIRED",userMessage:"徒歩検索には更新後のPythonサーバーが必要です。起動または再起動してください。"});
     } else response = await fetchMapProxy(url, controller.signal, timeoutMs);
     if (!response) response = await direct();
-    else if (mapQuery && [429, 502, 503, 504].includes(response.status)) {
+    else if (mapQuery && !request.skipMapDirectFallback && [429, 502, 503, 504].includes(response.status)) {
       // A Render-to-provider failure need not mean the browser cannot reach that provider.
       // Keep the original error if the direct attempt also fails; share the same timeout.
       try {
@@ -2380,7 +2528,7 @@ async function calculateWalkingRoute(start, end, kind, speed, request, via = nul
   const url = new URL(ROUTE_ENDPOINT);
   url.searchParams.set("json", JSON.stringify({
     locations, costing: "pedestrian", format: "osrm", shape_format: "geojson",
-    ...(typeof WalkingSession !== "undefined" && WalkingSession.hasHistory && !viaPoints.length && map.distance(start,end)<20000 ? {alternates:2} : {}),
+    ...(typeof RegisteredRoutes !== "undefined" && RegisteredRoutes.hasHistory && !viaPoints.length && map.distance(start,end)<20000 ? {alternates:2} : {}),
     exclude_polygons: [...access.areas.map((area) => area.ring), ...avoidPolygons],
     directions_options: { language: "ja-JP", units: "kilometers" },
     costing_options: { pedestrian: {
@@ -2392,7 +2540,7 @@ async function calculateWalkingRoute(start, end, kind, speed, request, via = nul
   const timeoutMs = request.routeTimeoutMs || (request.longDistance ? LongRoutes.timeoutMs(map.distance(start, end)) : 18000);
   const data = await fetchRouteJson(url, request, timeoutMs);
   let route;
-  if (typeof WalkingSession !== "undefined" && WalkingSession.hasHistory) {
+  if (typeof RegisteredRoutes !== "undefined" && RegisteredRoutes.hasHistory) {
     const candidates=[];
     for(const entry of (data.routes||[]).slice(0,3)){
       try {
@@ -2401,7 +2549,7 @@ async function calculateWalkingRoute(start, end, kind, speed, request, via = nul
           &&viaPoints.every(place=>distanceToRoute(place,candidate)<=45))candidates.push(candidate);
       } catch { /* An invalid alternative is not displayed. */ }
     }
-    route=candidates.length?WalkingSession.choose(candidates):parseWalkingRoute(data);
+    route=candidates.length?RegisteredRoutes.choose(candidates):parseWalkingRoute(data);
   } else route = parseWalkingRoute(data);
   if (map.distance([start.lat,start.lng],route.points[0])>100 || map.distance([end.lat,end.lng],route.points.at(-1))>(end.mapPoint?20:100)) {
     throw Object.assign(new Error("Route endpoints mismatch"), { userMessage: "ルートが指定地点につながっていません。別の地点を指定してください。", routeCode:"RouteResponse" });

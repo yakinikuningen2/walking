@@ -22,7 +22,7 @@ function setup({ fastDeadline = false } = {}) {
   const c = vm.createContext({ URL, Map, Set, AbortController, DOMException, setTimeout: (fn, ms) => setTimeout(fn, fastDeadline && ms === 30000 ? 15 : ms), clearTimeout,
     PlaceIdentity: require('./static/js/place-identity.js'),
     map: { distance }, validCoordinates: (lat,lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180,
-    NEARBY_CONVENIENCE_RADIUS: 1000, ui: fields, nearbyConvenienceRequest: null,
+    NEARBY_CONVENIENCE_RADIUS: 2000, ui: fields, nearbyConvenienceRequest: null,
     activeRouteKind: 'standard', routeChoices: new Map([['standard', { route }]]),
     busStopManifestCache: null, busStopPartsCache: new Map(), stationIndexCache: null, toiletIndexCache: null,
     BUS_STOP_INDEX_ENDPOINT: 'https://app.example/static/bus-stops-jp-2022-v1/index.json',

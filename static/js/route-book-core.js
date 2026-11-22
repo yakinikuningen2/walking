@@ -1,7 +1,21 @@
-// GPS measurements and the user's private route book. No network requests.
+// Saved-route storage and comparison. No live measurement or network requests.
 ((root) => {
   "use strict";
-  const Steps=typeof module==="object"&&module.exports?require("./walk-steps-core.js"):root.WalkStepsCore;
+  // Validate existing saved step totals for backward compatibility; no new counting.
+  const integer=n=>Number.isSafeInteger(n)&&n>=0&&n<=1e9;
+  function validLegacySteps(s) {
+    if(!s||s.version!==1||!integer(s.sensorSteps)||!integer(s.estimatedSteps)
+      ||!Number.isInteger(s.goal)||s.goal<1||s.goal>100000||!Number.isInteger(s.strideCm)||s.strideCm<30||s.strideCm>150
+      ||!Number.isFinite(s.remainderMeters)||s.remainderMeters<0||s.remainderMeters>=s.strideCm/100
+      ||!Array.isArray(s.buckets)||s.buckets.length>6000)return false;
+    let sensor=0,estimated=0;const seen=new Set();
+    for(const b of s.buckets){
+      if(!b||typeof b.hour!=="string"||!/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(b.hour)||!Number.isFinite(Date.parse(b.hour+":00:00"))
+        ||seen.has(b.hour)||!integer(b.sensorSteps)||!integer(b.estimatedSteps))return false;
+      seen.add(b.hour);sensor+=b.sensorSteps;estimated+=b.estimatedSteps;
+    }
+    return sensor===s.sensorSteps&&estimated===s.estimatedSteps;
+  }
   const MAX_RECORDS = 40, MAX_POINTS = 1500;
   const valid = p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180;
   const point = p => Array.isArray(p) ? { lat:p[0], lng:p[1] } : p;
@@ -33,54 +47,9 @@
       || record.segments.reduce((n,s)=>n+s.length,0)>MAX_POINTS
       || (record.gaps!==undefined&&(!Number.isSafeInteger(record.gaps)||record.gaps<0))
       || (record.geometryLimited!==undefined&&typeof record.geometryLimited!=="boolean")
-      || (record.steps!==undefined&&(!Steps.validSnapshot(record.steps)||record.source!=="gps"))
+      || (record.steps!==undefined&&(!validLegacySteps(record.steps)||record.source!=="gps"))
       || typeof record.note!=="string" || record.note.length>1000)throw Error("保存データの形式を確認できません。元のデータは上書きしません。");
     return record;
-  }
-  function calories(distanceMeters,weightKg) {
-    // Level-walking active energy, excluding resting energy (Yokohama Sports
-    // Medical Center): kcal = 0.5 * body mass kg * distance km. An estimate only.
-    return positive(distanceMeters)&&Number.isFinite(weightKg)&&weightKg>=20&&weightKg<=300
-      ? .5*weightKg*distanceMeters/1000 : null;
-  }
-  class Recorder {
-    constructor(saved=null) {
-      this.id=`walk-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-      this.startedAt=new Date().toISOString();this.distanceMeters=0;this.durationSeconds=0;this.movingSeconds=0;
-      this.segments=[];this.gaps=0;this.geometryLimited=false;this.anchor=null;this.running=false;this.since=null;
-      if(saved){validate(saved);if(saved.source!=="gps")throw Error("Invalid draft");
-        this.id=saved.id;this.startedAt=saved.date;this.distanceMeters=saved.distanceMeters;this.durationSeconds=saved.durationSeconds;
-        this.movingSeconds=saved.movingSeconds;this.segments=saved.segments.map(s=>s.map(p=>p.slice()));this.gaps=saved.gaps||0;this.geometryLimited=!!saved.geometryLimited;if(saved.steps)this.steps=JSON.parse(JSON.stringify(saved.steps));}
-    }
-    start(now=Date.now()) {if(!this.running){this.running=true;this.since=now;this.anchor=null;}}
-    elapsed(now=Date.now()) {return this.durationSeconds+(this.running?Math.max(0,now-this.since)/1000:0);}
-    pause(now=Date.now()) {this.durationSeconds=this.elapsed(now);this.running=false;this.since=null;this.anchor=null;}
-    breakSegment() {if(this.anchor)this.gaps++;this.anchor=null;}
-    fix(position,now=Date.now()) {
-      if(!this.running)return false;
-      const c=position?.coords,t=position?.timestamp,p=c&&[c.latitude,c.longitude];
-      if(!valid(p)||!Number.isFinite(c.accuracy)||c.accuracy<0||c.accuracy>30||!Number.isFinite(t)||now-t>15000||t>now+1000||t<this.since){this.breakSegment();return false;}
-      if(!this.anchor){if(this.segments.at(-1)?.length===1)this.segments.pop();this.segments.push([p]);
-        if(this.segments.length>100){this.segments=this.segments.slice(-100);this.geometryLimited=true;}
-        this.anchor={p,t,accuracy:c.accuracy};return true;}
-      const a=this.anchor,dt=(t-a.t)/1000;
-      if(dt<=0)return false;
-      if(dt>30){this.breakSegment();return this.fix(position,now);}
-      const distance=meters(a.p,p);
-      if(distance/dt>3.6){this.breakSegment();return false;}
-      const deadband=Math.max(5,Math.min(15,(a.accuracy+c.accuracy)*.6));
-      if(distance<deadband)return false;
-      this.distanceMeters+=distance;this.movingSeconds+=dt;
-      this.segments.at(-1).push(p);this.anchor={p,t,accuracy:c.accuracy};
-      if(this.segments.reduce((n,s)=>n+s.length,0)>6000)this.segments=compact(this.segments,3000);
-      return true;
-    }
-    speed() {return this.movingSeconds>=60&&this.distanceMeters>=100 ? this.distanceMeters/this.movingSeconds*3.6 : null;}
-    record({id,name="散歩の記録",weightKg=null,note=""}={},now=Date.now()) {
-      return validate({version:1,id:id||this.id,name,date:this.startedAt,source:"gps",distanceMeters:this.distanceMeters,
-        durationSeconds:this.elapsed(now),movingSeconds:Math.min(this.movingSeconds,this.elapsed(now)),weightKg,
-        note,segments:compact(this.segments),gaps:this.gaps,geometryLimited:this.geometryLimited,...(this.steps?{steps:JSON.parse(JSON.stringify(this.steps))}:{})});
-    }
   }
   class RouteBook {
     constructor(storage,key="walking.routes.v1") {
@@ -133,6 +102,6 @@
       return {...best.route,historyCompared:true,historyOverlap:best.ratio,historyAlternatives:routes.length,historySampleLimited:samples>60000||best.limited};
     }
   }
-  const api={Recorder,RouteBook,validate,compact,calories,meters,MAX_RECORDS,MAX_POINTS};
-  if(typeof module==="object"&&module.exports)module.exports=api;else root.WalkSessionCore=api;
+  const api={RouteBook,validate,compact,meters,MAX_RECORDS,MAX_POINTS};
+  if(typeof module==="object"&&module.exports)module.exports=api;else root.RouteBookCore=api;
 })(globalThis);

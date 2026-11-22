@@ -2,7 +2,7 @@
 (() => {
   const mobile = window.matchMedia("(max-width: 840px), (max-width: 1080px) and (max-height: 480px)");
   const navigation = [...document.querySelectorAll("[data-view]")];
-  const screens = { search: ui["discovery-screen"], saved: searchPanel, tour: document.getElementById("tour-screen"), settings: ui["setup-screen"], walk: document.getElementById("walk-screen") };
+  const screens = { search: ui["discovery-screen"], saved: searchPanel, tour: document.getElementById("tour-screen"), settings: ui["setup-screen"] };
   let currentView = ui["setup-screen"].hidden ? "map" : "settings";
   let layoutFrame = null;
   const attribution = map.attributionControl.getContainer();
@@ -71,7 +71,7 @@
   }
 
   function syncNavigation() {
-    const visible = { search: !screens.search.hidden, saved: panelIsOpen(), tour: !screens.tour.hidden, settings: !screens.settings.hidden, walk: !screens.walk.hidden };
+    const visible = { search: !screens.search.hidden, saved: panelIsOpen(), tour: !screens.tour.hidden, settings: !screens.settings.hidden };
     if (!visible[currentView]) currentView = Object.keys(visible).find((key) => visible[key]) || "map";
     document.body.dataset.view = currentView;
     document.body.classList.toggle("workspace-open", currentView !== "map");
@@ -88,7 +88,6 @@
     if (view !== "search" && !screens.search.hidden) setDiscoveryOpen(false, false);
     if (view !== "settings" && !screens.settings.hidden) closeWalkingSettings(false);
     if (view !== "tour" && !screens.tour.hidden) WalkingTour.close();
-    if (view !== "walk" && !screens.walk.hidden) WalkingSession.close();
   }
 
   function openView(view) {
@@ -98,7 +97,6 @@
     if (view === "saved" && !panelIsOpen()) setPanelOpen(true, false);
     if (view === "settings" && screens.settings.hidden) openWalkingSettings();
     if (view === "tour" && screens.tour.hidden) WalkingTour.open();
-    if (view === "walk" && screens.walk.hidden) WalkingSession.open();
     syncNavigation();
   }
 
@@ -121,7 +119,6 @@
       if (record.target === screens.search && !screens.search.hidden) opened = "search";
       if (record.target === screens.settings && !screens.settings.hidden) opened = "settings";
       if (record.target === screens.tour && !screens.tour.hidden) opened = "tour";
-      if (record.target === screens.walk && !screens.walk.hidden) opened = "walk";
       if (record.target === appShell && panelIsOpen() && !String(record.oldValue).includes("panel-open")) opened = "saved";
     }
     if (opened) { closePeers(opened); currentView = opened; }
@@ -308,12 +305,21 @@
     const below = viewport.height - target.bottom >= target.top;
     return { left: centeredLeft, top: clamp(below ? target.bottom + gap : target.top - gap - card.height, topEdge, viewport.height - card.height - bottomEdge), side: below ? "below" : "above" };
   }
+  function onboardingCardHeight(target, card, viewport) {
+    const edge = 12, gap = 16;
+    const left = edge + (viewport.leftInset || 0), right = viewport.width - edge - (viewport.rightInset || 0);
+    const top = edge + (viewport.topInset || 0), bottom = viewport.height - edge - (viewport.bottomInset || 0);
+    const horizontalRoom = Math.max(target.left - gap - left, right - target.right - gap);
+    const verticalRoom = Math.max(target.top - gap - top, bottom - target.bottom - gap);
+    return Math.max(180, Math.min(bottom - top, horizontalRoom >= card.width ? bottom - top : verticalRoom));
+  }
   function positionGuide() {
     guideFrame = null;
     if (guide.hidden || !guide.open) return;
     const page = guidePages[guidePage];
     let target = document.querySelector(page.dataset.guideTarget);
-    if (guidePage === 2 && !ui["route-map-actions"].hidden && ui["route-map-actions"].getBoundingClientRect().height > 0) target = ui["route-map-actions"];
+    const routeTarget = page.dataset.guideRouteTarget && document.querySelector(page.dataset.guideRouteTarget);
+    if (routeTarget && !routeTarget.hidden && routeTarget.getBoundingClientRect().height > 0) target = routeTarget;
     const width = guide.clientWidth, height = guide.clientHeight;
     const box = target.getBoundingClientRect();
     const focus = { left: Math.max(4, box.left - 6), right: Math.min(width - 4, box.right + 6),
@@ -326,9 +332,10 @@
     }
     for (const [name, value] of Object.entries({ x: focus.left, y: focus.top, width: Math.max(0, focus.right - focus.left), height: Math.max(0, focus.bottom - focus.top) })) guideWindow.setAttribute(name, value);
     const style = getComputedStyle(guide);
-    const placement = placeOnboardingCard(focus, guideCard.getBoundingClientRect(), { width, height,
-      topInset: parseFloat(style.paddingTop), bottomInset: parseFloat(style.paddingBottom),
-      leftInset: parseFloat(style.paddingLeft), rightInset: parseFloat(style.paddingRight) });
+    const viewport = { width, height, topInset: parseFloat(style.paddingTop), bottomInset: parseFloat(style.paddingBottom),
+      leftInset: parseFloat(style.paddingLeft), rightInset: parseFloat(style.paddingRight) };
+    guideCard.style.maxHeight = `${onboardingCardHeight(focus, guideCard.getBoundingClientRect(), viewport)}px`;
+    const placement = placeOnboardingCard(focus, guideCard.getBoundingClientRect(), viewport);
     guideCard.style.left = `${placement.left}px`;
     guideCard.style.top = `${placement.top}px`;
     guideCard.dataset.side = placement.side;

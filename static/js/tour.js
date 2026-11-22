@@ -150,7 +150,7 @@ const WalkingTour = (() => {
     if(unique.length<(config.autoCount?1:config.count)&&failures)throw new TourCore.TourError("SEARCH_API","一部の施設を検索できず、必要な候補を確認できませんでした。時間を置いて再試行してください。");
     return unique;
   }
-  const engine=TourCore.createEngine({search,historyKey:()=>typeof WalkingSession!=="undefined"?WalkingSession.historyKey():"",progress:text=>{if(active)tell(text);},route:async(a,b,speed,signal,options={})=>{
+  const engine=TourCore.createEngine({search,historyKey:()=>typeof RegisteredRoutes!=="undefined"?RegisteredRoutes.historyKey():"",progress:text=>{if(active)tell(text);},route:async(a,b,speed,signal,options={})=>{
     const controller=new AbortController(),abort=()=>controller.abort();signal.addEventListener("abort",abort,{once:true});
     if(signal.aborted)controller.abort();
     try{

@@ -1,47 +1,9 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const C=require('./static/js/walk-session-core.js');
+const C=require('./static/js/route-book-core.js');
 const origin=[35,139],at=(meters,east=0)=>[35+meters/111195,139+east/(111195*Math.cos(35*Math.PI/180))];
-const fix=(meters,time,accuracy=5,east=0)=>({coords:{latitude:at(meters,east)[0],longitude:at(meters,east)[1],accuracy},timestamp:time});
 const memory=()=>{const data=new Map();return {data,getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value)};};
 const record=(id='one',source='plan',segments=[[origin,at(1000)]])=>({version:1,id,name:'Route',source,date:'2026-11-16T01:00:00Z',distanceMeters:1000,durationSeconds:1000,movingSeconds:source==='gps'?900:0,weightKg:null,note:'',segments});
 
-test('GPS walking distance, moving time and calibrated speed come from accepted positions',()=>{
- const r=new C.Recorder();r.start(100000);r.fix(fix(0,100000),100000);
- for(let i=1;i<=20;i++)r.fix(fix(i*10,100000+i*10000),100000+i*10000);
- assert.ok(Math.abs(r.distanceMeters-200)<.1);assert.equal(r.movingSeconds,200);assert.ok(Math.abs(r.speed()-3.6)<.01);
- r.pause(310000);assert.equal(r.elapsed(999999),210);assert.equal(r.record({},999999).source,'gps');
- assert.equal(r.record({},999999).durationSeconds,210);
-});
-test('stationary jitter, invalid fixes, stale timestamps and jumps are not walking distance',()=>{
- const r=new C.Recorder();r.start(100000);r.fix(fix(0,100000),100000);
- for(let i=1;i<=20;i++)r.fix(fix(i%3,100000+i*1000),100000+i*1000);
- assert.equal(r.distanceMeters,0);assert.equal(r.speed(),null);
- for(const p of [fix(100,121000,100),fix(10000,122000),fix(100,100000),{coords:{latitude:NaN,longitude:139,accuracy:5},timestamp:123000}])r.fix(p,123000);
- assert.equal(r.distanceMeters,0);
-});
-test('pauses and missing GPS intervals create separate segments rather than straight bridges',()=>{
- const r=new C.Recorder();r.start(100000);r.fix(fix(0,100000),100000);r.fix(fix(10,110000),110000);
- r.pause(115000);r.start(200000);r.fix(fix(500,200000),200000);r.fix(fix(510,210000),210000);
- r.fix(fix(1000,300000),300000);r.fix(fix(1010,310000),310000);r.pause(311000);
- assert.ok(Math.abs(r.distanceMeters-30)<.1);assert.equal(r.movingSeconds,30);assert.equal(r.durationSeconds,126);
- assert.equal(r.segments.length,3);assert.equal(r.gaps,1);
- const recovered=new C.Recorder(r.record());assert.equal(recovered.running,false);assert.equal(recovered.record().id,r.record().id);
-});
-test('calories require a supplied body weight and remain an estimate separate from measurements',()=>{
- assert.equal(C.calories(2000,60),60);assert.equal(C.calories(0,60),0);
- for(const weight of [null,undefined,NaN,0,19,301])assert.equal(C.calories(2000,weight),null);
- assert.equal(C.calories(-1,60),null);
-});
-test('short recordings cannot calibrate speed',()=>{
- const r=new C.Recorder();r.start(0);r.fix(fix(0,0),0);r.fix(fix(50,20000),20000);assert.equal(r.speed(),null);
-});
-test('many disconnected GPS sections stay bounded without joining gaps or losing the measured totals',()=>{
- const r=new C.Recorder();r.start(0);
- for(let i=0;i<110;i++){r.fix(fix(i*100,i*60000),i*60000);r.fix(fix(i*100+10,i*60000+10000),i*60000+10000);}
- assert.equal(r.segments.length,100);assert.equal(r.geometryLimited,true);
- assert.ok(Math.abs(r.distanceMeters-1100)<1);assert.equal(r.movingSeconds,1100);
- const saved=r.record({},110*60000);assert.equal(saved.geometryLimited,true);assert.equal(new C.Recorder(saved).geometryLimited,true);
-});
 test('compaction is bounded, preserves disconnected tracks and handles singleton segments',()=>{
  const segments=[[origin],Array.from({length:4000},(_,i)=>at(i))];
  const saved=C.compact(segments);assert.ok(saved.flat().length<=C.MAX_POINTS);assert.equal(saved.length,2);
@@ -94,7 +56,7 @@ test('actual routing sends normal endpoints and at most two alternates, without 
  const source=fs.readFileSync(`${__dirname}/static/js/app.js`,'utf8'),calls=[],book=new C.RouteBook(memory());book.add(record());
  const old={points:[origin,at(1000)],distance:1000,steps:[]},alt={points:[origin,at(200,100),at(800,100),at(1000)],distance:1250,steps:[]};
  const c=vm.createContext({URL,ROUTE_ENDPOINT:'https://example.test/route',map:{distance:C.meters},
-  WalkingSession:{hasHistory:true,choose:routes=>book.choose(routes)},
+  RegisteredRoutes:{hasHistory:true,choose:routes=>book.choose(routes)},
   loadRouteAccess:async()=>({areas:[]}),waitForRouteTurn:async()=>{},parseWalkingRoute:data=>data.routes[0],
   fetchRouteJson:async url=>{calls.push(JSON.parse(url.searchParams.get('json')));return {routes:[old,alt]};},
   validCoordinates:(lat,lng)=>Number.isFinite(lat)&&Number.isFinite(lng),LongRoutes:{},
@@ -118,4 +80,20 @@ test('explicit start-point selection and registration do not become accidental d
  handler({latlng:{lat:35,lng:139}});assert.equal(starts,1);assert.equal(detours,0);
  handler({latlng:{lat:35,lng:139}});assert.equal(visits,1);
  picking=true;handler({latlng:{lat:35,lng:139}});assert.equal(detours,1);assert.equal(visits,1);
+});
+
+
+test('retired measurement data stays readable and unchanged when registering another route',()=>{
+ const store=memory(),legacy={...record('old-walk','gps'),weightKg:60,steps:{version:1,sensorSteps:8,estimatedSteps:2,goal:6000,strideCm:70,remainderMeters:0,buckets:[{hour:'2026-11-16T10',sensorSteps:8,estimatedSteps:2}]}};
+ store.setItem('walking.routes.v1',JSON.stringify({version:1,records:[legacy]}));
+ const book=new C.RouteBook(store);assert.equal(book.readable,true);assert.deepEqual(book.records[0],legacy);
+ book.add(record('new-plan'));assert.deepEqual(JSON.parse(store.getItem('walking.routes.v1')).records.find(r=>r.id==='old-walk'),legacy);
+ assert.equal(typeof C.Recorder,'undefined');assert.equal(typeof C.calories,'undefined');
+ assert.ok(book.choose([{points:[origin,at(1000)],distance:1000}]).historyCompared);
+});
+
+test('malformed legacy step totals protect the saved route book from accidental overwrites',()=>{
+ const store=memory(),old={...record('invalid-old','gps'),steps:{version:1,sensorSteps:8,estimatedSteps:2,goal:6000,strideCm:70,remainderMeters:0,buckets:[]}};
+ const raw=JSON.stringify({version:1,records:[old]});store.setItem('walking.routes.v1',raw);
+ const book=new C.RouteBook(store);assert.equal(book.readable,false);assert.throws(()=>book.add(record('new-plan')));assert.equal(store.getItem('walking.routes.v1'),raw);
 });

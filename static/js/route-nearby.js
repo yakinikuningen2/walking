@@ -265,6 +265,11 @@ function renderRouteNearbyResults(places, scope) {
     const item = document.createElement("li"), button = textElement("button", "", "nearby-result-button");
     button.type = "button"; button.dataset.nearbyKey = nearbyMarkerKey(place);
     button.append(textElement("span", place.name, "place-title"), textElement("span", `${nearbyKindLabel(ui["nearby-kind"].value)} · ルートから約${Math.round(place.distanceFromRoute)}m`, "place-detail"));
+    if (place.kindId === "restaurant") {
+      button.append(textElement("span", nearbyDistanceLabel(place, "route"), "place-detail"));
+      if (place.cuisine) button.append(textElement("span", `料理：${nearbyCuisineLabel(place.cuisine)}`, "place-detail"));
+      if (place.openingHours) button.append(textElement("span", `営業時間：${place.openingHours === "24/7" ? "24時間" : place.openingHours}`, "place-detail"));
+    }
     button.addEventListener("click", () => {
       focusPlace(place, { keepZoom: true });
       nearbyConvenienceMarkers.getLayers().find(m => m.options.nearbyKey === nearbyMarkerKey(place))?.openPopup();
