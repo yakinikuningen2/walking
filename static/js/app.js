@@ -4727,7 +4727,7 @@ function candidateDistanceElement(place) {
 function renderDiscoveryResults(results, request) {
   const list = ui["discovery-results"];
   const highElevation = discoveryPreferences(request.criteria).highElevation;
-  const ordered = sortDiscoveryPlaces(results, request.criteria);
+  const ordered = PlaceIdentity.prioritizeSameNames(sortDiscoveryPlaces(results, request.criteria), getStartPoint());
   if (typeof renderNaturalDiscoveryMarkers === "function") renderNaturalDiscoveryMarkers(ordered);
   request.places = ordered;
   request.visibleCount ||= DISCOVERY_PAGE_SIZE;
@@ -4973,7 +4973,7 @@ function beginDiscoverySearch(criteria) {
 }
 
 function renderSearch(places, context = placeSearch) {
-  places = PlaceIdentity.dedupe(places);
+  places = PlaceIdentity.prioritizeSameNames(PlaceIdentity.dedupe(places), getStartPoint());
   context.results.replaceChildren();
   for (const place of places) {
     const item = document.createElement("li");

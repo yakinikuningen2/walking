@@ -186,3 +186,26 @@ test('Takao actual OSM building/node records become one station, while its names
   const station=result.find(p=>p.kindId==='station');assert.equal(station.kindLabel,'駅');assert.equal(station.facilityIdentity.ids.length,2);
   assert.equal(result.find(p=>p.kindId==='bus_stop').kindLabel,'バス停');
 });
+
+
+test('same-name places stay distinct and use nearer-first slots without moving other search matches',()=>{
+  const far=place('中央公園',100000,{key:'far'}),near=place('中央 公園',500,{key:'near'}),other=place('中央公園駅',100,{key:'other'}),last=place('別の公園',10,{key:'last'});
+  const input=[far,other,near,last],deduped=id.dedupe(input);
+  assert.equal(deduped.length,4,'faraway namesakes must not merge');
+  assert.deepEqual(id.prioritizeSameNames(deduped,place('start')).map(p=>p.key),['near','other','far','last']);
+  assert.deepEqual(input.map(p=>p.key),['far','other','near','last'],'cached input order is not mutated');
+});
+
+test('namesake ordering recalculates from the selected start instead of stale distances or cached order',()=>{
+  const a=place('ABC・公園',100,{key:'a',distance:99999}),b=place('ＡＢＣ 公園',20000,{key:'b',distance:1});
+  assert.deepEqual(id.prioritizeSameNames([b,a],place('current')).map(p=>p.key),['a','b']);
+  assert.deepEqual(id.prioritizeSameNames([b,a],place('selected start',20010)).map(p=>p.key),['b','a']);
+  assert.deepEqual(id.prioritizeSameNames([b,a],null).map(p=>p.key),['b','a']);
+  assert.deepEqual(id.prioritizeSameNames([b,a],{lat:NaN,lng:139}).map(p=>p.key),['b','a']);
+});
+
+test('namesake ordering is stable at equal distances and handles invalid coordinates and unnamed places',()=>{
+  const a=place('同名',100,{key:'a'}),b=place('同名',100,{key:'b'}),invalid={...a,key:'invalid',lat:NaN},unnamed=place('',0,{key:'blank'});
+  assert.deepEqual(id.prioritizeSameNames([invalid,a,unnamed,b],place('start')).map(p=>p.key),['a','b','blank','invalid']);
+  assert.equal(id.prioritizeSameNames([a,b],place('start'))[0],a);
+});

@@ -186,6 +186,25 @@
     }
     return groups.map(g=>g.place);
   }
+  // Reorder only the slots occupied by the same normalized display name.
+  // A global "same name ? distance : relevance" comparator is not transitive.
+  function prioritizeSameNames(input, origin) {
+    const ordered = [...input];
+    if (!point(origin)) return ordered;
+    const groups = new Map();
+    ordered.forEach((place, index) => {
+      const name = normalize(place?.name);
+      if (!name) return;
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push({ place, index, distance: meters(origin, place) });
+    });
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const nearest = [...group].sort((a, b) => a.distance - b.distance || a.index - b.index);
+      group.forEach((slot, index) => { ordered[slot.index] = nearest[index].place; });
+    }
+    return ordered;
+  }
   function searchResults(input) {
     const places=dedupe(input),stations=places.filter(p=>identity(p).category === "station");
     // Boarding positions are not separate walking destinations when their
@@ -193,6 +212,6 @@
     return places.filter(p=>!["railway:stop","railway:platform"].includes(identity(p).category) || !stations.some(s=>meters(s,p)<180
       && identity(p).names.some(n=>identity(s).names.some(name=>name.length>=2 && n === name))));
   }
-  const api={normalize,meters,identity,attach,explain,same:(a,b)=>!!explain(a,b),merge,dedupe,searchResults};
+  const api={normalize,meters,identity,attach,explain,prioritizeSameNames,same:(a,b)=>!!explain(a,b),merge,dedupe,searchResults};
   if(typeof module==="object"&&module.exports)module.exports=api;else root.PlaceIdentity=api;
 })(typeof globalThis!=="undefined"?globalThis:this);
